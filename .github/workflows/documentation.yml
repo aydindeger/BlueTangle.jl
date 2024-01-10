@@ -15,11 +15,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Set up Julia
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1.9'
+
+      # Set up Python and install matplotlib
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install matplotlib
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install matplotlib
+
+      # Install Julia dependencies
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+
+      # Build and deploy documentation
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token

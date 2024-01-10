@@ -85,23 +85,7 @@ This example highlights the flexibility and power of the package in quantum circ
 
 ### Overview
 
-The [`plot_circuit`](@ref) function is designed to create visual representations of quantum circuits, while the [`plot_measurement`](@ref) function graphically displays the results of quantum measurements. Both of these functions are dependent on the `PyPlot` package. Their use is crucial for providing clear and insightful visualizations, aiding in the understanding and analysis of quantum simulations.
-
-### PyPlot Installation and Dependency
-Before using `plot_circuit` and `plot_measurement`, you must ensure that `PyPlot` is installed, as these functions rely on it for plotting capabilities.
-
-- **Install PyPlot in Julia**: Add `PyPlot` to your Julia environment:
-  ```julia
-  import Pkg
-  Pkg.add("PyPlot")
-  ```
-
-- **Install Python Matplotlib**: If not already installed, install Matplotlib in Python, which is necessary for `PyPlot`:
-  ```bash
-  pip3 install matplotlib
-  ```
-
-For further information, refer to the [PyPlot GitHub page](https://github.com/JuliaPy/PyPlot.jl).
+The [`plot_circuit`](@ref) function is designed to create visual representations of quantum circuits, while the [`plot_measurement`](@ref) function displays the results of quantum measurements. Both of these functions are dependent on the `PyPlot` package.
 
 ### Example
 
@@ -122,7 +106,7 @@ Use `plot_circuit` to visualize the circuit structure.
 
 ```julia
 using PyPlot
-plot_circuit(circuit) # Requires PyPlot for plotting
+plot_circuit(circuit)
 ```
 
 #### Step 3: Perform Measurements and Analyze Results
@@ -136,8 +120,27 @@ measurement = sample(circuit, 1000) # Sample the circuit 1000 times
 Visualize the measurement data using `plot_measurement`.
 
 ```julia
-plot_measurement(measurement) # Requires PyPlot for plotting
+plot_measurement(measurement)
 ```
+
+### Troubleshooting Plotting Issues
+
+If you encounter problems with plotting, please follow these steps:
+
+**Install PyPlot in Julia**: Add the `PyPlot` package to your Julia environment. This package provides an interface to the `matplotlib` library in Python. You can install it using the Julia package manager:
+
+```julia
+import Pkg
+Pkg.add("PyPlot")
+```
+
+**Install Python Matplotlib**: Ensure that `matplotlib` is installed in your Python environment. This is a prerequisite for `PyPlot` as it relies on Python's `matplotlib` for plotting. You can install `matplotlib` using `pip`:
+
+```bash
+pip3 install matplotlib
+```
+
+For detailed documentation and additional information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
 
 ## 4) Noise Models and Circuits
 

@@ -7,8 +7,6 @@ on:
   pull_request:
   workflow_dispatch:
 concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 jobs:
@@ -16,14 +14,14 @@ jobs:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+    permissions:
       actions: write
       contents: read
     strategy:
       fail-fast: false
       matrix:
         version:
-          - '1.0'
+          - '1.6'
           - '1.9'
           - 'nightly'
         os:
@@ -32,10 +30,30 @@ jobs:
           - x64
     steps:
       - uses: actions/checkout@v4
+
+      # Set up Julia
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+
+      # Set up Python and install matplotlib
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install matplotlib
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install matplotlib
+
       - uses: julia-actions/cache@v1
+
+      # You may need to configure PyCall to use this Python version here
+      - name: Configure PyCall
+        run: |
+          julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall")'
+
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1

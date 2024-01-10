@@ -1,96 +1,97 @@
+# # Troubleshooting Plotting Issues
 
-# ### PyPlot Installation and Dependency
-# Before using `plot_circuit` and `plot_measurement`, you must ensure that `PyPlot` is installed, as these functions rely on it for plotting capabilities.
+# If you encounter problems with plotting, please follow these steps:
 
-# - **Install PyPlot in Julia**: Add `PyPlot` to your Julia environment:
-#   ```julia
-#   import Pkg
-#   Pkg.add("PyPlot")
-#   ```
+# 1. **Install PyPlot in Julia**: Add the `PyPlot` package to your Julia environment. This package provides an interface to the `matplotlib` library in Python. You can install it using the Julia package manager:
+#    ```julia
+#    import Pkg
+#    Pkg.add("PyPlot")
+#    ```
 
-# - **Install Python Matplotlib**: If not already installed, install Matplotlib in Python, which is necessary for `PyPlot`:
-#   ```bash
-#   pip3 install matplotlib
-#   ```
+# 2. **Install Python Matplotlib**: Ensure that `matplotlib` is installed in your Python environment. This is a prerequisite for `PyPlot` as it relies on Python's `matplotlib` for plotting. You can install `matplotlib` using `pip`:
+#    ```bash
+#    pip3 install matplotlib
+#    ```
 
-# For further information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
+# For detailed documentation and additional information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
 
-"""
-`plot_measurement(mVector::Vector{Measurement}; top::Int=7, rep::Symbol=:int)`
 
-Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
+# """
+# `plot_measurement(mVector::Vector{Measurement}; top::Int=7, rep::Symbol=:int)`
 
-- `mVector`: Vector of Measurement objects.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
+# Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
 
-Creates a bar plot showing the probabilities of the most likely outcomes.
-"""
-function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:int)
+# - `mVector`: Vector of Measurement objects.
+# - `top`: (Optional) Number of top probabilities to display. Default is 7.
+# - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 
-    sample_prob=[]
-    basis_list=[]
-    for m = mVector
-        push!(sample_prob,(m.int_basis,m.sample,m.number_of_qubits))
-        push!(basis_list,m.basis)
-    end
+# Creates a bar plot showing the probabilities of the most likely outcomes.
+# """
+# function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:int)
 
-    plot_measurement(sample_prob;top=top,rep=rep,basis=join(basis_list,","))
+#     sample_prob=[]
+#     basis_list=[]
+#     for m = mVector
+#         push!(sample_prob,(m.int_basis,m.sample,m.number_of_qubits))
+#         push!(basis_list,m.basis)
+#     end
 
-end
+#     plot_measurement(sample_prob;top=top,rep=rep,basis=join(basis_list,","))
 
-"""
-`plot_measurement(sample_prob::Vector; top::Int=7, rep::Symbol=:int, basis::String="Z")`
+# end
 
-Plots the outcome probabilities for quantum measurements.
+# """
+# `plot_measurement(sample_prob::Vector; top::Int=7, rep::Symbol=:int, basis::String="Z")`
 
-- `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
-- `basis`: (Optional) Measurement basis. Default is "Z".
+# Plots the outcome probabilities for quantum measurements.
 
-Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
-"""
-function plot_measurement(sample_prob::Vector;top::Int=7,rep::Symbol=:int,basis::String="Z")
+# - `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
+# - `top`: (Optional) Number of top probabilities to display. Default is 7.
+# - `rep`: (Optional) Representation of outcomes. Default is `:int`.
+# - `basis`: (Optional) Measurement basis. Default is "Z".
 
-    fig, ax = subplots()
+# Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
+# """
+# function plot_measurement(sample_prob::Vector;top::Int=7,rep::Symbol=:int,basis::String="Z")
 
-    colors=["red","blue","green","orange","black"]
+#     fig, ax = subplots()
 
-    for (i,r) = enumerate(sample_prob)
+#     colors=["red","blue","green","orange","black"]
+
+#     for (i,r) = enumerate(sample_prob)
     
-        r=(bit_to(r[1],r[3],rep),r[2])
+#         r=(bit_to(r[1],r[3],rep),r[2])
 
-        if length(r[1])>top#todo wrong
-            top_pos=sortperm(r[2];rev=true)[1:10]
-            r=(r[1][top_pos],r[2][top_pos],N)
-        end
+#         if length(r[1])>top#todo wrong
+#             top_pos=sortperm(r[2];rev=true)[1:10]
+#             r=(r[1][top_pos],r[2][top_pos],N)
+#         end
 
-        width=.2i#rand()/2
-        bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
+#         width=.2i#rand()/2
+#         bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
 
-            # Add the probabilities on top of each bar
-        for bar in bars
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005, string(round(height, digits=3)), 
-                    ha="center", va="bottom", color=colors[i])
-        end
+#             # Add the probabilities on top of each bar
+#         for bar in bars
+#             height = bar.get_height()
+#             ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005, string(round(height, digits=3)), 
+#                     ha="center", va="bottom", color=colors[i])
+#         end
 
-    end
+#     end
 
-    if rep==:bstr
-        ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
-    else
-        ax.set_xlabel("Outcomes")
-    end
+#     if rep==:bstr
+#         ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
+#     else
+#         ax.set_xlabel("Outcomes")
+#     end
 
-    ax.set_ylabel("Probabilities")
-    ax.set_title("Outcome Probabilities of top $(top) at $(basis) basis")
-    ax.grid(true)
-    ax.legend()
-    display(fig)
+#     ax.set_ylabel("Probabilities")
+#     ax.set_title("Outcome Probabilities of top $(top) at $(basis) basis")
+#     ax.grid(true)
+#     ax.legend()
+#     display(fig)
 
-end
+# end
 
 """
 `plot_measurement(m::Measurement; top::Int=7, rep::Symbol=:int)`
@@ -120,7 +121,7 @@ Creates a bar plot showing the probabilities of the most likely outcomes.
 """
 function plot_measurement(sample_prob::Tuple,N::Int;top::Int=7,rep::Symbol=:int,basis::String="Z")
 
-    fig,ax=subplots(1,1,figsize=(7,4),dpi=100)
+    fig,ax=PyPlot.subplots(1,1,figsize=(7,4),dpi=100)
 
     sample_prob=(bit_to(sample_prob[1],N,rep),sample_prob[2])
     len=length(sample_prob[1])

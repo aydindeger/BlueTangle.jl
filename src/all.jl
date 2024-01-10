@@ -7,10 +7,7 @@ include("bit.jl")
 include("gates.jl")
 include("noise.jl")
 
-# using Pkg
-# ENV["PYTHON"]="" 
-# Pkg.build("PyCall")
-# using PyPlot
+using PyPlot
 
 include("plot.jl")
 include("trotter.jl")
