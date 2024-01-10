@@ -292,7 +292,7 @@ function _swap_control_target(matrix::Matrix)
 end
 
 """
-`__non_local_gates(op::QuantumOps; swap_error::Bool=false) -> Vector{QuantumOps}`
+`_non_local_gates(op::QuantumOps; swap_error::Bool=false) -> Vector{QuantumOps}`
 
 Generate a sequence of operations to implement a non-local gate.
 

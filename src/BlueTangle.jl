@@ -488,7 +488,7 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
             distance=abs(op_n.qubit - op_n.target_qubit)
             if distance > 1 #not local
                 println("Nonlocal operation warning! Swap will be inserted.")
-                append!(local_ops,__non_local_gates(op_n;swap_error=options.swap_error))
+                append!(local_ops,_non_local_gates(op_n;swap_error=options.swap_error))
             elseif distance==0
                 throw("control and target qubits cannot be same!")
             else

@@ -16,82 +16,83 @@
 # For detailed documentation and additional information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
 
 
-# """
-# `plot_measurement(mVector::Vector{Measurement}; top::Int=7, rep::Symbol=:int)`
+"""
+`plot_measurement(mVector::Vector{Measurement}; top::Int=7, rep::Symbol=:int)`
 
-# Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
+Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
 
-# - `mVector`: Vector of Measurement objects.
-# - `top`: (Optional) Number of top probabilities to display. Default is 7.
-# - `rep`: (Optional) Representation of outcomes. Default is `:int`.
+- `mVector`: Vector of Measurement objects.
+- `top`: (Optional) Number of top probabilities to display. Default is 7.
+- `rep`: (Optional) Representation of outcomes. Default is `:int`.
 
-# Creates a bar plot showing the probabilities of the most likely outcomes.
-# """
-# function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:int)
+Creates a bar plot showing the probabilities of the most likely outcomes.
+"""
+function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:int)
 
-#     sample_prob=[]
-#     basis_list=[]
-#     for m = mVector
-#         push!(sample_prob,(m.int_basis,m.sample,m.number_of_qubits))
-#         push!(basis_list,m.basis)
-#     end
+    sample_prob=[]
+    basis_list=[]
+    for m = mVector
+        push!(sample_prob,(m.int_basis,m.sample))
+    end
 
-#     plot_measurement(sample_prob;top=top,rep=rep,basis=join(basis_list,","))
+    plot_measurement(sample_prob,mVector[1].number_of_qubits;top=top,rep=rep)
 
-# end
+end
 
-# """
-# `plot_measurement(sample_prob::Vector; top::Int=7, rep::Symbol=:int, basis::String="Z")`
+"""
+`plot_measurement(sample_prob::Vector; top::Int=7, rep::Symbol=:int, basis::String="Z")`
 
-# Plots the outcome probabilities for quantum measurements.
+Plots the outcome probabilities for quantum measurements.
 
-# - `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
-# - `top`: (Optional) Number of top probabilities to display. Default is 7.
-# - `rep`: (Optional) Representation of outcomes. Default is `:int`.
-# - `basis`: (Optional) Measurement basis. Default is "Z".
+- `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
+- `top`: (Optional) Number of top probabilities to display. Default is 7.
+- `rep`: (Optional) Representation of outcomes. Default is `:int`.
+- `basis`: (Optional) Measurement basis. Default is "Z".
 
-# Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
-# """
-# function plot_measurement(sample_prob::Vector;top::Int=7,rep::Symbol=:int,basis::String="Z")
+Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
+"""
+function plot_measurement(sample_prob::Vector,N::Int;top::Int=7,rep::Symbol=:int)
 
-#     fig, ax = subplots()
+    fig, ax = subplots()
 
-#     colors=["red","blue","green","orange","black"]
+    colors=["red","blue","green","orange","black"]
 
-#     for (i,r) = enumerate(sample_prob)
+    for (i,r) = enumerate(sample_prob)
     
-#         r=(bit_to(r[1],r[3],rep),r[2])
+        r=(bit_to(r[1],N,rep),r[2])
 
-#         if length(r[1])>top#todo wrong
-#             top_pos=sortperm(r[2];rev=true)[1:10]
-#             r=(r[1][top_pos],r[2][top_pos],N)
-#         end
+        if length(r[1])>top#todo wrong
+            top_pos=sortperm(r[2];rev=true)[1:10]
+            r=(r[1][top_pos],r[2][top_pos],N)
+        end
 
-#         width=.2i#rand()/2
-#         bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
+        width=.2i#rand()/2
+        bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
 
-#             # Add the probabilities on top of each bar
-#         for bar in bars
-#             height = bar.get_height()
-#             ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005, string(round(height, digits=3)), 
-#                     ha="center", va="bottom", color=colors[i])
-#         end
+            # Add the probabilities on top of each bar
+        for bar in bars
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005, string(round(height, digits=3)), 
+                    ha="center", va="bottom", color=colors[i])
+        end
 
-#     end
+        ax.set_xticks(0:maximum(r[1]))
 
-#     if rep==:bstr
-#         ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
-#     else
-#         ax.set_xlabel("Outcomes")
-#     end
+    end
 
-#     ax.set_ylabel("Probabilities")
-#     ax.set_title("Outcome Probabilities of top $(top) at $(basis) basis")
-#     ax.grid(true)
-#     ax.legend()
-#     display(fig)
+    if rep==:bstr
+        ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
+    else
+        ax.set_xlabel("Outcomes")
+    end
 
-# end
+    ax.set_ylabel("Probabilities")
+    ax.set_title("Outcome Probabilities")
+    ax.grid(true)
+    ax.legend()
+    display(fig)
+
+end
 
 """
 `plot_measurement(m::Measurement; top::Int=7, rep::Symbol=:int)`
@@ -142,6 +143,8 @@ function plot_measurement(sample_prob::Tuple,N::Int;top::Int=7,rep::Symbol=:int,
                 ha="center", va="bottom")
     end
 
+    ax.set_xticks(0:maximum(sample_prob[1]))
+
     if rep==:bstr
         ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
     else
@@ -149,7 +152,7 @@ function plot_measurement(sample_prob::Tuple,N::Int;top::Int=7,rep::Symbol=:int,
     end
 
     ax.set_ylabel("Probabilities")
-    ax.set_title("Outcome Probabilities of top $(top_label) at $(basis) basis")
+    ax.set_title("Outcome Probabilities at $(basis) basis")
     ax.grid(true)
     # ax.legend()
     display(fig)
