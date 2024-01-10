@@ -105,7 +105,6 @@ circuit = compile([hadamard, cnot])
 Use `plot_circuit` to visualize the circuit structure.
 
 ```julia
-using PyPlot
 plot_circuit(circuit)
 ```
 
