@@ -80,7 +80,7 @@ measurement = sample(circuit, shots)
 
 # Output measurement details
 println("Expectation values:", measurement.expect)
-println("Total magnetization moments:", measurement.moments)
+println("Total magnetization moments:", measurement.mag_moments)
 
 # Calculate and print correlations (e.g., ⟨Z₁Z₂⟩)
 correlations = get_corr_from_measurement(measurement, [1, 2])

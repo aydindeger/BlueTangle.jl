@@ -625,16 +625,7 @@ function circuit_to_rho(circuit::Circuit)
 
 end
 
-# """
-# exact rho
-# """
-# get_density_matrix(circuit::Circuit)=circuit_to_rho(circuit)
+
 
 end
 
-##
-
-
-#todo
-# measurement.(mean(list),std(list)/sqrt(1000))
-# 0.2475 ± 0.0098

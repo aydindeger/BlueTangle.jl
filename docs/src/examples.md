@@ -257,12 +257,11 @@ Let's break down the example to understand it better:
 
 
 
-
 ### Workout Example
 
 1. **Starting State**: The initial state is |000⟩.
 2. **Application of X Gate**: Applying the X gate to the first qubit changes the state to |100⟩.
-3. **Conditional Mid-Measurement**: Measuring the first qubit in the X basis, the result will be 1 (since the state is -|100⟩). Based on the measurement:
+3. **Conditional Mid-Measurement**: When the first qubit is measured in the X basis, the outcome is determined by the Born rule from a superposition state of -|100⟩ and |000⟩. Based on the measurement:
    - If the result is 0, apply a Hadamard gate (H). This would create a superposition.
    - If the result is 1 (which is the case here), apply a Z gate. The state becomes |100⟩.
 4. **Subsequent CNOT Operations**: Applying the first CNOT gate entangles the first and second qubits, and the second CNOT gate entangles the second and third qubits. This results in either the state |111⟩ or the GHZ state (|000⟩ + |111⟩)/√2, each with a 50% probability due to the superposition created by the mid-measurement.
