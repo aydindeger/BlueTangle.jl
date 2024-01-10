@@ -1,8 +1,8 @@
-# MyPackage Documentation
+# Functions
 
 Detailed explanations or additional notes about all functions.
 
-# Measurement functions
+## Measurement functions
 
 ```@docs
 sample_outcomes
@@ -13,7 +13,7 @@ get_corr
 get_corr_from_measurement
 ```
 
-# Circuit functions
+## Circuit functions
 
 ```@docs
 compile
@@ -23,21 +23,21 @@ circuit_to_state
 circuit_to_rho
 ```
 
-# Plot
+## Plot
 
 ```@docs
 plot_measurement
 plot_circuit
 ```
 
-# Quantum Toolkit
+## Quantum Toolkit
 
 ```@docs
 entanglement_entropy
 classical_shadow
 ```
 
-# Other
+## Other
 
 ```@docs
 get_N
@@ -48,7 +48,7 @@ apply_op!
 apply_op_rho!
 ```
 
-# Object types
+## Object types
 
 ```@docs
 QuantumOps
@@ -60,7 +60,7 @@ Circuit
 Options
 ```
 
-# Gates and Noise
+## Gates and Noise
 
 ```@docs
 gate
@@ -78,13 +78,13 @@ apply_noise
 apply_twirl
 ```
 
-# Hamiltonian
+## Hamiltonian
 
 ```@docs
 trotter_ising
 ```
 
-# Index
+## Index
 
 ```@index
 ```
