@@ -519,14 +519,14 @@ This example demonstrates the simulation of the time evolution of the Ising Hami
 ## 11) Error Mitigation and Pauli Twirling
 
 ### Overview
-In the era of NISQ quantum simulations implementing effective error mitigation strategies is essential. Pauli Twirling is a common technique that converts coherent errors into stochastic ones. However, it's important to note that while Pauli Twirling is effective in addressing coherent errors, it does not completely remove existing biases in the simulation. Moreover, the process of twirling itself can be noisy, reflecting a more realistic scenario of quantum operations but also complicating the error landscape.
+In the era of NISQ quantum simulations implementing effective error mitigation strategies is essential. Pauli Twirling is a common technique that converts coherent errors into stochastic ones. However, it's important to note that while Pauli Twirling is effective in addressing certain errors, it does not completely remove existing biases in the simulation. Moreover, the process of twirling itself can be noisy, reflecting a more realistic scenario of quantum operations but also complicating the error landscape.
 
-### Setting Up the Circuit with Coherent Control Errors
+### Setting Up the Circuit with Rotation Errors
 We start by creating a quantum circuit with a coherent noise model.
 
-#### Example - Creating a Circuit with Coherent Control Errors
+#### Example
 ```julia
-# Creating a coherent control error model
+# Creating a rotation control error model
 p_error=0.1
 noise_model1 = Noise1("rot_err", 0.1*p_error)
 noise_model2 = Noise2("rot_err", p_error)
