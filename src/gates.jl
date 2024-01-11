@@ -133,8 +133,6 @@ function random_ops(N,len;measure_prob::Float64=0.0,measure_basis::Vector{String
     return ops
 end
 
-
-
 """
 `random_clifford(N::Int, len::Int; measure_prob::Float64=0.0, measure_basis::Vector{String}=["MX","MY","MZ"]) -> Vector{QuantumOps}`
 

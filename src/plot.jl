@@ -122,7 +122,9 @@ function plot_measurement(sample_prob::Tuple,N::Int;rep::Symbol=:int,basis::Stri
 
     sample_prob=(bit_to(sample_prob[1],N,rep),sample_prob[2])
 
-    fig,ax=subplots(1,1,figsize=(round(Int,maximum(sample_prob[1])/3),4),dpi=100)
+    xsize=round(Int,maximum(sample_prob[1])/3)
+
+    fig,ax=subplots(1,1,figsize=(xsize<6 ? 6 : xsize,4),dpi=100)
 
     bars = ax.bar(sample_prob..., color="red", alpha=0.5)
 

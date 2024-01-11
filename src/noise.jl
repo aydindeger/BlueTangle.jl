@@ -62,7 +62,7 @@ Generates a quantum noise model based on the specified type and parameters.
   - `bit_phase_flip`: Combines bit flip and phase flip errors, effectively applying a Y error with probability `p`.
   - `depolarizing`: A general error model where any of the Pauli operations (X, Y, Z) can be applied with equal probability. The parameter `p` represents the overall error probability.
   - `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Represent coherent errors (incorrect rotations) around the X, Y, Z, and phase axes, respectively. The parameter `p` specifies the rotation error magnitude. Note that `p` is multiplied by π.
-  - `rot_err`: Rotation error in X,Y,Z with equal probability.
+  - `rot_xyz`: Rotation error in X,Y,Z with equal probability.
 - `p`: Parameter for the noise model, representing probabilities or magnitudes of errors.
 - `two_qubit`: Boolean flag to indicate if the noise model is for two qubits. When set to `true`, the model is extended to two-qubit operations.
 
@@ -138,8 +138,17 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
     elseif model == "rot_p" #coherent error (incorrect rotation)
         ops=[Ph(pi*p)]
 
-    elseif model == "rot_err"
+    elseif model == "rot_xyz"
         ops=[rx(pi*p),ry(pi*p),rz(pi*p)]/sqrt(3)
+
+    elseif model == "rand_rot_x"
+        ops=[rx(pi*p*randn()) for _=1:4]/sqrt(4)
+
+    elseif model == "rand_rot_y"
+        ops=[ry(pi*p*randn()) for _=1:4]/sqrt(4)
+
+    elseif model == "rand_rot_z"
+        ops=[rz(pi*p*randn()) for _=1:4]/sqrt(4)
 
     #measurements as a quantum channel for classical_shadow
     elseif _is_it_measurement(model)

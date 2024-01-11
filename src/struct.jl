@@ -359,7 +359,7 @@ struct Options
 
     # Constructor with default values
     Options(;
-        circuit_name="blue", 
+        circuit_name="circuit", 
         measurement_basis="Z",
         measurement_error=false,
         noise1=false, 
