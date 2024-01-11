@@ -17,17 +17,16 @@
 
 
 """
-`plot_measurement(mVector::Vector{Measurement}; top::Int=7, rep::Symbol=:int)`
+`plot_measurement(mVector::Vector{Measurement}; rep::Symbol=:int)`
 
 Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
 
 - `mVector`: Vector of Measurement objects.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
 - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 
 Creates a bar plot showing the probabilities of the most likely outcomes.
 """
-function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:int)
+function plot_measurement(mVector::Vector{Measurement};rep::Symbol=:int)
 
     sample_prob=[]
     basis_list=[]
@@ -35,23 +34,22 @@ function plot_measurement(mVector::Vector{Measurement};top::Int=7,rep::Symbol=:i
         push!(sample_prob,(m.int_basis,m.sample))
     end
 
-    plot_measurement(sample_prob,mVector[1].number_of_qubits;top=top,rep=rep)
+    plot_measurement(sample_prob,mVector[1].number_of_qubits;rep=rep)
 
 end
 
 """
-`plot_measurement(sample_prob::Vector; top::Int=7, rep::Symbol=:int, basis::String="Z")`
+`plot_measurement(sample_prob::Vector; rep::Symbol=:int, basis::String="Z")`
 
 Plots the outcome probabilities for quantum measurements.
 
 - `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
 - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 - `basis`: (Optional) Measurement basis. Default is "Z".
 
 Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
 """
-function plot_measurement(sample_prob::Vector,N::Int;top::Int=7,rep::Symbol=:int)
+function plot_measurement(sample_prob::Vector,N::Int;rep::Symbol=:int)
 
     fig, ax = subplots()
 
@@ -60,11 +58,6 @@ function plot_measurement(sample_prob::Vector,N::Int;top::Int=7,rep::Symbol=:int
     for (i,r) = enumerate(sample_prob)
     
         r=(bit_to(r[1],N,rep),r[2])
-
-        if length(r[1])>top#todo wrong
-            top_pos=sortperm(r[2];rev=true)[1:10]
-            r=(r[1][top_pos],r[2][top_pos],N)
-        end
 
         width=.2i#rand()/2
         bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
@@ -95,44 +88,34 @@ function plot_measurement(sample_prob::Vector,N::Int;top::Int=7,rep::Symbol=:int
 end
 
 """
-`plot_measurement(m::Measurement; top::Int=7, rep::Symbol=:int)`
+`plot_measurement(m::Measurement; rep::Symbol=:int)`
 
 Plots the outcome probabilities for a single quantum measurement.
 
 - `m`: A Measurement object.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
 - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 
 Creates a bar plot showing the probabilities of the most likely outcomes from the measurement.
 """
-plot_measurement(m::Measurement;top::Int=7,rep::Symbol=:int)=plot_measurement((m.int_basis,m.sample),m.number_of_qubits;top=top,rep=rep,basis=m.measurement_basis)
+plot_measurement(m::Measurement;rep::Symbol=:int)=plot_measurement((m.int_basis,m.sample),m.number_of_qubits;rep=rep,basis=m.measurement_basis)
 
 """
-`plot_measurement(sample_prob::Tuple, N::Int; top::Int=7, rep::Symbol=:int, basis::String="Z")`
+`plot_measurement(sample_prob::Tuple, N::Int; rep::Symbol=:int, basis::String="Z")`
 
 Plots the outcome probabilities for quantum measurements based on a tuple of sample probabilities and number of qubits.
 
 - `sample_prob`: A tuple containing outcome probabilities and corresponding states.
 - `N`: Number of qubits.
-- `top`: (Optional) Number of top probabilities to display. Default is 7.
 - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 - `basis`: (Optional) Measurement basis. Default is "Z".
 
 Creates a bar plot showing the probabilities of the most likely outcomes.
 """
-function plot_measurement(sample_prob::Tuple,N::Int;top::Int=7,rep::Symbol=:int,basis::String="Z")
+function plot_measurement(sample_prob::Tuple,N::Int;rep::Symbol=:int,basis::String="Z")
 
-    fig,ax=PyPlot.subplots(1,1,figsize=(7,4),dpi=100)
+    fig,ax=subplots(1,1,figsize=(7,4),dpi=100)
 
     sample_prob=(bit_to(sample_prob[1],N,rep),sample_prob[2])
-    len=length(sample_prob[1])
-    top_label=len
-
-    if len>top #todo fix this
-        top_pos=sortperm(sample_prob[2];rev=true)[1:10]
-        sample_prob=(sample_prob[1][top_pos],sample_prob[2][top_pos],N)
-        top_label=top
-    end
 
     bars = ax.bar(sample_prob..., color="red", alpha=0.5)
 

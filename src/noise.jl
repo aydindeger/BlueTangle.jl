@@ -164,7 +164,7 @@ end
 ##========== Twirl ==========
 
 """
-`apply_twirl(op::Op) -> Vector{QuantumOps}`
+`apply_twirl(op::QuantumOps) -> Vector{QuantumOps}`
 
 Applies twirling to a single quantum operation. This is used to randomize errors in quantum operations.
 
@@ -172,10 +172,10 @@ Applies twirling to a single quantum operation. This is used to randomize errors
 
 Returns a vector of QuantumOps representing the twirled operation.
 """
-apply_twirl(op::Op)=apply_twirl(op,false)
+apply_twirl(op::QuantumOps)=apply_twirl(op,false)
 
 """
-`apply_twirl(op::Op, twirling_noise::Union{QuantumChannel,Bool}) -> Vector{QuantumOps}`
+`apply_twirl(op::QuantumOps, twirling_noise::Union{QuantumChannel,Bool}) -> Vector{QuantumOps}`
 
 Applies twirling with specified noise to a single quantum operation.
 
@@ -184,30 +184,25 @@ Applies twirling with specified noise to a single quantum operation.
 
 Returns a vector of QuantumOps representing the twirled operation with noise.
 """
-function apply_twirl(op::Op,twirling_noise::Union{QuantumChannel,Bool})
+function apply_twirl(op::QuantumOps,twirling_noise::Union{QuantumChannel,Bool})
 
     if op.q==1
+        # println("twirling works only for two qubit gates")
         return [op]
-        # throw("error! works only for two qubit gates")
     end
 
     if op.noise==false
-        println("no error in op why twirling? -- $(op.name)[$(op.qubit),$(op.target_qubit)]!")
+        println("no noise in $(op.name)[$(op.qubit),$(op.target_qubit)] why twirling?")
         return [op]
     end
 
     qubit=op.qubit
     target_qubit=op.target_qubit
     least=min(qubit,target_qubit)
-    gate=op.gate
-
-    id = [1 0; 0 1]  # Identity
-    X = [0 1; 1 0]  # Pauli-X gate
-    Y = [0 -im; im 0]  # Pauli-Y gate
-    Z = [1 0; 0 -1]  # Pauli-Z gate
+    opgate=op.gate
 
     # Map from symbols to matrices
-    pauli_dict = Dict("I" => id, "X" => X, "Y" => Y, "Z" => Z)
+    pauli_dict = Dict("I" => gate.I, "X" => gate.X, "Y" => gate.Y, "Z" => gate.Z)
 
     list_of_two_qubits = []
     for op1 in keys(pauli_dict), op2 in keys(pauli_dict)
@@ -220,7 +215,7 @@ function apply_twirl(op::Op,twirling_noise::Union{QuantumChannel,Bool})
     for (p1_k,p1_s) in list_of_two_qubits
         for (p2_k,p2_s) in list_of_two_qubits
 
-            if p1_k*gate*p2_k==gate ||  p1_k*gate*p2_k==-1*gate ||  p1_k*gate*p2_k==1im*gate ||  p1_k*gate*p2_k==-1im*gate
+            if p1_k*opgate*p2_k==opgate ||  p1_k*opgate*p2_k==-1*opgate ||  p1_k*opgate*p2_k==1im*opgate ||  p1_k*opgate*p2_k==-1im*opgate
 
                 before=[Op(p1_s[1],least,twirling_noise),Op(p1_s[2],least+1,twirling_noise)]
                 after=[Op(p2_s[1],least,twirling_noise),Op(p2_s[2],least+1,twirling_noise)]
@@ -240,11 +235,11 @@ end
 Applies twirling with specified noise to a vector of quantum operations.
 
 - `ops`: Vector of QuantumOps representing the operations.
-- `twirling_noise`: Noise model to be applied during twirling.
+- `twirling_noise`: Noise model to be applied to the twirling operator.
 
 Returns a vector of QuantumOps with each operation twirled with the specified noise.
 """
-function apply_twirl(ops::Vector{QuantumOps},twirling_noise::Union{QuantumChannel,Bool})
+function apply_twirl(ops::Vector{T},twirling_noise::Union{QuantumChannel,Bool}) where T <: QuantumOps
     list_of_all_twirl=Vector{QuantumOps}()
     for op in ops
         append!(list_of_all_twirl,apply_twirl(op,twirling_noise))

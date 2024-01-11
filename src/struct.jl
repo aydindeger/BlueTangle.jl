@@ -209,7 +209,7 @@ function Op(name::String,qubit::Int)
 
 end
 
-function Op(name::String,qubit::Int,noise::QuantumChannel)
+function Op(name::String,qubit::Int,noise::Union{QuantumChannel,Bool})
     if _is_it_measurement(name)
         println("you can't define error with mid-measurements")
         println("we fixed it no worries!")

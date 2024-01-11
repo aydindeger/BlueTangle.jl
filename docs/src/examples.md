@@ -521,25 +521,18 @@ This example demonstrates the simulation of the time evolution of the Ising Hami
 ### Overview
 In the era of NISQ quantum simulations implementing effective error mitigation strategies is essential. Pauli Twirling is a common technique that converts coherent errors into stochastic ones. However, it's important to note that while Pauli Twirling is effective in addressing coherent errors, it does not completely remove existing biases in the simulation. Moreover, the process of twirling itself can be noisy, reflecting a more realistic scenario of quantum operations but also complicating the error landscape.
 
-### Setting Up the Ising Hamiltonian with Coherent Control Errors
-We start by defining parameters for the Ising Hamiltonian and create a quantum circuit with a noise model that represents coherent control errors.
+### Setting Up the Circuit with Coherent Control Errors
+We start by creating a quantum circuit with a coherent noise model.
 
 #### Example - Creating a Circuit with Coherent Control Errors
 ```julia
-# Parameters for the Ising Hamiltonian
-total_time = 1.0
-num_qubits = 4
-J = 1.0
-h = 1.0
-p_error = 0.05  # Probability for the coherent control error model
-
 # Creating a coherent control error model
+p_error=0.1
 noise_model1 = Noise1("rot_err", 0.1*p_error)
 noise_model2 = Noise2("rot_err", p_error)
 
-# Creating the Ising Hamiltonian circuit with coherent control errors
-ising_ops = trotter_ising(total_time, num_qubits, J, h)
-coherent_error_ops = apply_noise(ising_ops, (noise_model1, noise_model2))
+ops = [Op("H", 1), Op("CNOT", 1, 2), Op("CNOT", 2, 3)] # Collect operators
+coherent_error_ops = apply_noise(ops, (noise_model1, noise_model2))
 ```
 
 ### Applying Pauli Twirling for Error Mitigation
@@ -547,16 +540,17 @@ coherent_error_ops = apply_noise(ising_ops, (noise_model1, noise_model2))
 Pauli Twirling is applied to transform coherent errors into stochastic ones. This can be achieved in two ways: using the `apply_twirl` function or incorporating twirling directly into the circuit compilation via `Options()`.
 
 #### First method: Twirling with `apply_twirl` Function
-In this example, we apply Pauli Twirling manually to each operation in the circuit using the `apply_twirl` function.
+In this example, we apply Pauli Twirling manually to each operation in the circuit using the `apply_twirl` function. Note that with this method, we can also introduce additional noise to the extra twirling operation using the `twirling_noise` setting. This can be set to either `false` or a `Noise1` object.
 
 ```julia
 # Applying Pauli twirling to mitigate coherent control errors
-twirled_ops = apply_twirl(coherent_error_ops, noise_model)
+twirling_noise = false
+twirled_ops = apply_twirl(coherent_error_ops, twirling_noise)
 twirled_circuit = compile(twirled_ops)
 
 # Conducting measurements and analyzing the results
+num_samples=1000
 measurement_results_twirl = sample(twirled_circuit, num_samples)
-println("Measurement results with manual twirling:", measurement_results_twirl)
 ```
 
 This method provides fine-grained control over the twirling process, allowing for customization and detailed manipulation of the quantum operations.
@@ -570,8 +564,8 @@ opt=Options(twirl=true)
 twirled_circuit_options = compile(coherent_error_ops, opt)
 
 # Conducting measurements on the circuit compiled with twirling options
+num_samples=1000
 measurement_results_twirl_options = sample(twirled_circuit_options, num_samples)
-println("Measurement results with twirling via Options:", measurement_results_twirl_options)
 ```
 
 This approach is more streamlined and is particularly useful when working with complex circuits or when seeking to reduce the manual overhead of applying twirling to each operation.
