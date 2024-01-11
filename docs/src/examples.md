@@ -278,8 +278,6 @@ Let's break down the example to understand it better:
    - The outcome of `mid_measurement` directly influences the state of the circuit after the measurement.
    - Depending on the measurement result, the circuit will have either undergone a Hadamard transformation (if the result was `0`) or a Z transformation (if the result was `1`) on the first qubit before proceeding to the subsequent CNOT gates.
 
-
-
 ### Workout Example
 
 1. **Starting State**: The initial state is |000⟩.
@@ -353,18 +351,20 @@ The `random_clifford` function can also incorporate mid-circuit measurements. Th
 For instance, to create a random sequence of Clifford gates with a 20% chance of measurement in either the "MX" or "MZ" basis after each gate in a 5-qubit system:
 
 ```julia
-ops = random_clifford(5, 10; measure_prob=0.2, measure_basis=["MX","MZ"])
+ops = random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX","MZ"])
+random_circuit = compile(ops)
 ```
 
-This function will randomly select operations from a set of Clifford gates or measurements, applying them to either single or adjacent qubits.
+This function will randomly select operations from a set of Clifford gates or measurements, applying them to either single or adjacent qubits. 
 
 ### Visualizing the Random Circuit
 
 After generating the random operations, you can visualize the circuit to better understand its structure:
 ```julia
-println("Random Quantum Circuit Operations: ", random_operations)
-plot_circuit(random_operations)
+plot_circuit(random_circuit)
 ```
+
+![](assets/figs/random_circuit.png)
 
 This approach to creating and visualizing random quantum circuits showcases the versatility and capabilities of the package in simulating various quantum computing scenarios.
 

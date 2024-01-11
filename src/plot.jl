@@ -172,7 +172,8 @@ Draws the specified quantum gate on the given plot axis.
 """
 function _draw_gate(ax, op::QuantumOps, pos, gate_width)
     qubit = op.qubit
-    target_qubit = op.target_qubit
+    
+    target_qubit = _target_find(op)
 
     c="black"
     if op.noise!=false && !_is_it_measurement(op.name)
@@ -225,6 +226,9 @@ Creates a visual representation of the quantum circuit.
 """
 plot_circuit(circuit::Circuit)=plot_circuit(circuit.ops)
 
+
+_target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
+
 """
 `plot_circuit(ops::Vector{QuantumOps}; list_of_initial_qubits::Vector{Int}=Int[])`
 
@@ -238,7 +242,7 @@ Creates a visual representation of the quantum circuit based on the specified op
 function plot_circuit(ops::Vector{QuantumOps};list_of_initial_qubits::Vector{Int}=Int[])
 
     if isempty(list_of_initial_qubits)
-        qubit_lines = maximum([max(op.qubit, op.target_qubit) for op in ops])
+        qubit_lines = maximum([max(op.qubit, _target_find(op)) for op in ops])
     else
         qubit_lines = length(list_of_initial_qubits)
     end
