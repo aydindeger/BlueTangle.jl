@@ -12,7 +12,7 @@ noise_model1(model::String, p::Float64)=noise_model(model, p; two_qubit=false)
 noise_model2(model::String, p::Float64)=noise_model(model, p; two_qubit=true)
 
 """
-`apply_noise(ops::Vector{QuantumOps}, noise12::Tuple) -> Vector{QuantumOps}`
+`apply_noise(ops::Vector{T},noise12::Tuple) where T <: QuantumOps -> Vector{QuantumOps}`
 
 Applies specified noise models to a vector of quantum operations.
 
@@ -21,11 +21,11 @@ Applies specified noise models to a vector of quantum operations.
 
 Returns a new vector of QuantumOps with noise models applied.
 """
-function apply_noise(ops::Vector{QuantumOps},noise12::Tuple)
+function apply_noise(ops::Vector{T},noise12::Tuple{QuantumChannel, QuantumChannel}) where T <: QuantumOps
 
     noise1,noise2=noise12
 
-    if size(noise1[1],1)==2 && size(noise2[1],1)==4
+    if noise1.q==1 && noise2.q==2
         new_ops=Vector{QuantumOps}()
         for op in ops
             
