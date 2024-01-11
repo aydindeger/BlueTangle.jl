@@ -43,30 +43,28 @@ function plot_measurement(mVector::Vector{Measurement};rep::Symbol=:int)
 end
 
 """
-`plot_measurement(sample_prob::Vector; rep::Symbol=:int, basis::String="Z")`
+`plot_measurement(sample_probs::Vector; rep::Symbol=:int, basis::String="Z")`
 
 Plots the outcome probabilities for quantum measurements.
 
-- `sample_prob`: Vector of tuples, each containing outcome probabilities and number of qubits.
+- `sample_probs`: Vector of tuples, each containing outcome probabilities and number of qubits.
 - `rep`: (Optional) Representation of outcomes. Default is `:int`.
 - `basis`: (Optional) Measurement basis. Default is "Z".
 
 Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
 """
-function plot_measurement(sample_prob::Vector,N::Int;rep::Symbol=:int)
+function plot_measurement(sample_probs::Vector,N::Int;rep::Symbol=:int)
 
     fig, ax = subplots()
 
     colors=["red","blue","green","orange","black"]
 
-    s_count=0
-    for (i,r) = enumerate(sample_prob)
-        s_count+=1
+    for (i,r) = enumerate(sample_probs)
 
         r=(bit_to(r[1],N,rep),r[2])
 
         # width=.2i
-        if s_count==1
+        if i==1
             bars=ax.bar(r..., alpha=0.7, label="$(i)", color=colors[i])
         else
             bars=ax.bar(r..., 0.4, alpha=0.7, label="$(i)", color=colors[i])
@@ -79,8 +77,7 @@ function plot_measurement(sample_prob::Vector,N::Int;rep::Symbol=:int)
                     ha="center", va="bottom", color=colors[i])
         end
 
-        ax.set_xticks(0:maximum(r[1]))
-
+        ax.set_xticks(0:2:maximum(r[1]))
     end
 
     if rep==:bstr
@@ -123,9 +120,9 @@ Creates a bar plot showing the probabilities of the most likely outcomes.
 """
 function plot_measurement(sample_prob::Tuple,N::Int;rep::Symbol=:int,basis::String="Z")
 
-    fig,ax=subplots(1,1,figsize=(7,4),dpi=100)
-
     sample_prob=(bit_to(sample_prob[1],N,rep),sample_prob[2])
+
+    fig,ax=subplots(1,1,figsize=(round(Int,maximum(sample_prob[1])/3),4),dpi=100)
 
     bars = ax.bar(sample_prob..., color="red", alpha=0.5)
 
@@ -136,7 +133,7 @@ function plot_measurement(sample_prob::Tuple,N::Int;rep::Symbol=:int,basis::Stri
                 ha="center", va="bottom")
     end
 
-    ax.set_xticks(0:maximum(sample_prob[1]))
+    ax.set_xticks(0:2:maximum(sample_prob[1]))
 
     if rep==:bstr
         ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
@@ -194,7 +191,7 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width)
         # Draw the control dot
         ax.plot(pos, qubit - 1, "s", color=c)
 
-        if op.name=="CX"
+        if uppercase(op.name)=="CX" || uppercase(op.name)=="CNOT"
             ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width*20)
         else
             ax.plot(pos, target_qubit - 1, "s", color=c, markersize=gate_width*20)

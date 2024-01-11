@@ -532,7 +532,7 @@ noise_model1 = Noise1("rot_err", 0.1*p_error)
 noise_model2 = Noise2("rot_err", p_error)
 
 ops = [Op("H", 1), Op("CNOT", 1, 2), Op("CNOT", 2, 3)] # Collect operators
-coherent_error_ops = apply_noise(ops, (noise_model1, noise_model2))
+ops_err = apply_noise(ops, (noise_model1, noise_model2))
 ```
 
 ### Applying Pauli Twirling for Error Mitigation
@@ -543,9 +543,9 @@ Pauli Twirling is applied to transform coherent errors into stochastic ones. Thi
 In this example, we apply Pauli Twirling manually to each operation in the circuit using the `apply_twirl` function. Note that with this method, we can also introduce additional noise to the extra twirling operation using the `twirling_noise` setting. This can be set to either `false` or a `Noise1` object.
 
 ```julia
-# Applying Pauli twirling to mitigate coherent control errors
+# Applying Pauli twirling to mitigate errors
 twirling_noise = false
-twirled_ops = apply_twirl(coherent_error_ops, twirling_noise)
+twirled_ops = apply_twirl(ops_err, twirling_noise)
 twirled_circuit = compile(twirled_ops)
 
 # Conducting measurements and analyzing the results
@@ -561,7 +561,7 @@ Alternatively, Pauli Twirling can be integrated into the circuit compilation pro
 ```julia
 # Using Options() to apply twirling during circuit compilation
 opt=Options(twirl=true)
-twirled_circuit_options = compile(coherent_error_ops, opt)
+twirled_circuit_options = compile(ops_err, opt)
 
 # Conducting measurements on the circuit compiled with twirling options
 num_samples=1000
