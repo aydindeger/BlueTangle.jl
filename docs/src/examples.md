@@ -281,7 +281,7 @@ To test the operations, we first compile the circuit and then sample it to obtai
 
 ```julia
 circuit = compile(ops)
-measurement = sample(circuit)
+measurement = sample(circuit,1000)
 ```
 
 After obtaining the measurement object, we can visualise the results:
@@ -289,6 +289,10 @@ After obtaining the measurement object, we can visualise the results:
 ```julia
 plot_measurement(measurement)
 ```
+
+![](assets/figs/measure_mid.png)
+
+The measurement results show that half of the time, the state is on `7=|111⟩`, and the other half, it is on the GHZ state (`7=|111⟩` and `0=|000⟩`).
 
 ### Method 2 - Manual Simulation with a Quantum Simulator
 
