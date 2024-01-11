@@ -285,4 +285,6 @@ function plot_circuit(ops::Vector{QuantumOps};list_of_initial_qubits::Vector{Int
 
     # Show the plot
     display(fig)
+
+    # return fig
 end

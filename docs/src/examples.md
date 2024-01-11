@@ -95,10 +95,11 @@ Create a simple quantum circuit for demonstration.
 ```julia
 # Quantum gates for a basic circuit
 hadamard = Op("H", 1)
-cnot = Op("CNOT", 1, 2)
+cnot12 = Op("CNOT", 1, 2)
+cnot23 = Op("CNOT", 2, 3)
 
 # Compile the circuit
-circuit = compile([hadamard, cnot])
+circuit = compile([hadamard, cnot12, cnot23])
 ```
 
 #### Step 2: Visualize the Circuit
@@ -107,6 +108,8 @@ Use `plot_circuit` to visualize the circuit structure.
 ```julia
 plot_circuit(circuit)
 ```
+
+![](assets/figs/circuit.png)
 
 #### Step 3: Perform Measurements and Analyze Results
 Conduct measurements on the circuit and examine the outcomes.
@@ -121,6 +124,8 @@ Visualize the measurement data using `plot_measurement`.
 ```julia
 plot_measurement(measurement)
 ```
+
+![](assets/figs/measure.png)
 
 ### Troubleshooting Plotting Issues
 
