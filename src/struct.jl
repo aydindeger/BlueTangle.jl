@@ -306,7 +306,6 @@ function _non_local_gates(op::QuantumOps;swap_error=false)
     direction = op.qubit < op.target_qubit ? -1 : 1
     ops_swap=Vector{QuantumOps}()
 
-
     if direction==-1
         
         for i=op.target_qubit:direction:op.qubit+2

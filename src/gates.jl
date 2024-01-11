@@ -15,8 +15,9 @@ This includes:
 - Projectors (`proj0` for |0><0|, `proj1` for |1><1|)
 - Controlled gates such as `CX` (CNOT), `CNOT` (an alias for CX), and `CZ`
 - The `SWAP` gate
+- The `ECR` gate
 
-Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CX`, `CNOT`, `CZ`, and `SWAP` are represented as 4x4 matrices.
+Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `CZ`, and `SWAP` are represented as 4x4 matrices.
 """
 const gate = (
     I = [1 0; 0 1],
@@ -33,7 +34,8 @@ const gate = (
     CX = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CNOT = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CZ = [1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
-    SWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1]
+    SWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1],
+    ECR = (1/sqrt(2)) * [0 + 0im 1 + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2)
     )
 
 """
@@ -71,7 +73,7 @@ Returns an `Op` object representing the randomly generated two-qubit gate.
 function random_gate_2(N)## N is total qubit number
     
     lambda=round(rand(),digits=2)
-    name=rand(["CX","CZ","CP"])
+    name=rand(["CX","CZ","CP","SWAP","ECR"])
 
     if name=="CP"
         name_return="$(name)($(lambda)π)"
@@ -326,7 +328,9 @@ function gates2(op_name::String, param...)
     elseif uppercase_name == "CZ"
         return gate.CZ # Control-Z gate
     elseif uppercase_name == "SWAP"
-        return gate.SWAP # Control-Z gate
+        return gate.SWAP
+    elseif uppercase_name == "ECR"
+        return gate.ECR
     elseif uppercase_name == "CP" && length(param)==1
        return cp(param[1])
     else
