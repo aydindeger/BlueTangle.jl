@@ -61,7 +61,8 @@ Generates a quantum noise model based on the specified type and parameters.
   - `bit_flip`: Causes a flip in the qubit's state (X error) with probability `p`.
   - `bit_phase_flip`: Combines bit flip and phase flip errors, effectively applying a Y error with probability `p`.
   - `depolarizing`: A general error model where any of the Pauli operations (X, Y, Z) can be applied with equal probability. The parameter `p` represents the overall error probability.
-  - `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Represent coherent errors (incorrect rotations) around the X, Y, Z, and phase axes, respectively. The parameter `p` specifies the rotation error magnitude.
+  - `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Represent coherent errors (incorrect rotations) around the X, Y, Z, and phase axes, respectively. The parameter `p` specifies the rotation error magnitude. Note that `p` is multiplied by π.
+  - `rot_err`: Rotation error in X,Y,Z with equal probability.
 - `p`: Parameter for the noise model, representing probabilities or magnitudes of errors.
 - `two_qubit`: Boolean flag to indicate if the noise model is for two qubits. When set to `true`, the model is extended to two-qubit operations.
 
@@ -126,19 +127,19 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
         ops=[E₀, E₁, E₂, E₃]
 
     elseif model == "rot_z" #coherent error (incorrect rotation)
-        ops=[gate.I,rz(pi*p)]/sqrt(2)
+        ops=[rz(pi*p)]
         
     elseif model == "rot_y" #coherent error (incorrect rotation)
-        ops=[gate.I,ry(pi*p)]/sqrt(2)
+        ops=[ry(pi*p)]
 
     elseif model == "rot_x" #coherent error (incorrect rotation)
-        ops=[gate.I,rx(pi*p)]/sqrt(2)
+        ops=[rx(pi*p)]
         
     elseif model == "rot_p" #coherent error (incorrect rotation)
-        ops=[gate.I,Ph(pi*p)]/sqrt(2)
+        ops=[Ph(pi*p)]
 
     elseif model == "rot_err"
-        ops=[gate.I,rx(pi*p),ry(pi*p),rz(pi*p)]/sqrt(4)
+        ops=[rx(pi*p),ry(pi*p),rz(pi*p)]/sqrt(3)
 
     #measurements as a quantum channel for classical_shadow
     elseif _is_it_measurement(model)

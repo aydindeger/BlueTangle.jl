@@ -28,6 +28,10 @@ Creates a bar plot showing the probabilities of the most likely outcomes.
 """
 function plot_measurement(mVector::Vector{Measurement};rep::Symbol=:int)
 
+    if length(mVector)>2
+        throw("You can plot only two measurements!")
+    end
+
     sample_prob=[]
     basis_list=[]
     for m = mVector
@@ -55,12 +59,18 @@ function plot_measurement(sample_prob::Vector,N::Int;rep::Symbol=:int)
 
     colors=["red","blue","green","orange","black"]
 
+    s_count=0
     for (i,r) = enumerate(sample_prob)
-    
+        s_count+=1
+
         r=(bit_to(r[1],N,rep),r[2])
 
-        width=.2i#rand()/2
-        bars=ax.bar(r..., width, alpha=0.6, label="$(i)", color=colors[i])
+        # width=.2i
+        if s_count==1
+            bars=ax.bar(r..., alpha=0.7, label="$(i)", color=colors[i])
+        else
+            bars=ax.bar(r..., 0.4, alpha=0.7, label="$(i)", color=colors[i])
+        end
 
             # Add the probabilities on top of each bar
         for bar in bars
