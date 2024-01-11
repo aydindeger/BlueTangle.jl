@@ -173,7 +173,7 @@ In this instance, [`Noise1`](@ref) constructs a noise model for single qubit ope
 Similarly, a noise model for two-qubit operations can be created:
 
 ```julia
-noise_model2 = Noise2("depolarizing_channel", 0.01)
+noise_model2 = Noise2("depolarizing", 0.01)
 ```
 
 Here, [`Noise2`](@ref) is applied to create a depolarizing channel noise model for two-qubit gates, with an error probability of 0.01 (or 1%).
@@ -212,6 +212,22 @@ noisy_circuit = compile(ops, options)
 ```
 
 In each method, if `ops` already contain noisy operations, `apply_noise` or `options` won't override the original operator, maintaining control over specific gates with certain noise levels.
+
+### Plotting a Noisy Circuit
+
+Let's assume noise is defined only on two-qubit gates. When we plot such a circuit, the names of the gates with applied noise will be highlighted in red. Here's a demonstration:
+
+```julia
+hadamard = Op("H", 1)
+cnot1 = Op("CNOT", 1, 2, noise_model2)
+cnot2 = Op("CNOT", 2, 3, noise_model2)
+
+noisy_ops = [hadamard, cnot1, cnot2]
+noisy_circuit = compile(noisy_ops)
+plot_circuit(noisy_circuit)
+```
+
+![](assets/figs/noisy_circuit.png)
 
 ## 5) Custom Noise Models and Gates
 
