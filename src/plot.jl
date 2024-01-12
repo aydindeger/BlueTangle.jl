@@ -15,60 +15,39 @@
 
 # For detailed documentation and additional information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
 
-
-"""
-`plot_measurement(mVector::Vector{Measurement}; rep::Symbol=:int)`
-
-Plots the outcome probabilities of quantum measurements from a vector of Measurement objects.
-
-- `mVector`: Vector of Measurement objects.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
-
-Creates a bar plot showing the probabilities of the most likely outcomes.
-"""
-function plot_measurement(mVector::Vector{Measurement};rep::Symbol=:int)
-
-    if length(mVector)>2
-        throw("You can plot only two measurements!")
-    end
-
-    sample_prob=[]
-    basis_list=[]
-    for m = mVector
-        push!(sample_prob,(m.int_basis,m.sample))
-    end
-
-    plot_measurement(sample_prob,mVector[1].number_of_qubits;rep=rep)
-
-end
-
 """
 `plot_measurement(sample_probs::Vector; rep::Symbol=:int, basis::String="Z")`
 
 Plots the outcome probabilities for quantum measurements.
 
 - `sample_probs`: Vector of tuples, each containing outcome probabilities and number of qubits.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
-- `basis`: (Optional) Measurement basis. Default is "Z".
 
 Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
 """
-function plot_measurement(sample_probs::Vector,N::Int;rep::Symbol=:int)
+function plot_measurement(mVector::Vector{Measurement})
 
-    fig, ax = subplots()
+    if length(mVector)>3
+        throw("You can only plot three measurements.")
+    end
+
+    base_fig_width, base_fig_height = (7, 5)
+    x_range = maximum([maximum(m.int_basis) for m=mVector])
+    scale_factor = 0.5
+    fig_width = base_fig_width + (x_range * scale_factor)
+    fig_width = max(min(fig_width, 16), 5)
+
+    fig, ax = subplots(figsize=(fig_width, base_fig_height),dpi=100)
 
     colors=["red","blue","green","orange","black"]
 
-    for (i,r) = enumerate(sample_probs)
+    for (i,r) = enumerate(mVector)
 
-        r=(bit_to(r[1],N,rep),r[2])
+        N=r.number_of_qubits
+        x_outcome=r.int_basis
+        y_sample=r.sample
 
-        # width=.2i
-        if i==1
-            bars=ax.bar(r..., alpha=0.7, label="$(i)", color=colors[i])
-        else
-            bars=ax.bar(r..., 0.4, alpha=0.7, label="$(i)", color=colors[i])
-        end
+        wid=.8/i
+        bars=ax.bar(x_outcome,y_sample, wid, alpha=0.6, color=colors[i], label="($(i)) $(r.circuit_name)")
 
             # Add the probabilities on top of each bar
         for bar in bars
@@ -77,14 +56,14 @@ function plot_measurement(sample_probs::Vector,N::Int;rep::Symbol=:int)
                     ha="center", va="bottom", color=colors[i])
         end
 
-        ax.set_xticks(0:2:maximum(r[1]))
+        ax.set_xticks(0:2:x_range)
     end
 
-    if rep==:bstr
-        ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
-    else
+    # if rep==:bstr
+        # ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
+    # else
         ax.set_xlabel("Outcomes")
-    end
+    # end
 
     ax.set_ylabel("Probabilities")
     ax.set_title("Outcome Probabilities")
@@ -100,55 +79,14 @@ end
 Plots the outcome probabilities for a single quantum measurement.
 
 - `m`: A Measurement object.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
 
 Creates a bar plot showing the probabilities of the most likely outcomes from the measurement.
 """
-plot_measurement(m::Measurement;rep::Symbol=:int)=plot_measurement((m.int_basis,m.sample),m.number_of_qubits;rep=rep,basis=m.measurement_basis)
+plot_measurement(m::Measurement;rep::Symbol=:int)=plot_measurement([m])
 
-"""
-`plot_measurement(sample_prob::Tuple, N::Int; rep::Symbol=:int, basis::String="Z")`
 
-Plots the outcome probabilities for quantum measurements based on a tuple of sample probabilities and number of qubits.
+## circuit drawing
 
-- `sample_prob`: A tuple containing outcome probabilities and corresponding states.
-- `N`: Number of qubits.
-- `rep`: (Optional) Representation of outcomes. Default is `:int`.
-- `basis`: (Optional) Measurement basis. Default is "Z".
-
-Creates a bar plot showing the probabilities of the most likely outcomes.
-"""
-function plot_measurement(sample_prob::Tuple,N::Int;rep::Symbol=:int,basis::String="Z")
-
-    sample_prob=(bit_to(sample_prob[1],N,rep),sample_prob[2])
-
-    xsize=round(Int,maximum(sample_prob[1])/3)
-
-    fig,ax=subplots(1,1,figsize=(xsize<6 ? 6 : xsize,4),dpi=100)
-
-    bars = ax.bar(sample_prob..., color="red", alpha=0.5)
-
-    # Add the probabilities on top of each bar
-    for bar in bars
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2., height, string(round(height, digits=3)), 
-                ha="center", va="bottom")
-    end
-
-    ax.set_xticks(0:2:maximum(sample_prob[1]))
-
-    if rep==:bstr
-        ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
-    else
-        ax.set_xlabel("Outcomes")
-    end
-
-    ax.set_ylabel("Probabilities")
-    ax.set_title("Outcome Probabilities at $(basis) basis")
-    ax.grid(true)
-    # ax.legend()
-    display(fig)
-end
 
 """
 `_draw_gate(ax, op::QuantumOps, pos, gate_width)`

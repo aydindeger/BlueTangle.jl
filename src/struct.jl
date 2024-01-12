@@ -390,7 +390,7 @@ struct Circuit
 end
 
 """
-`Measurement(int_basis::Union{Vector, UnitRange}, fock_basis::Vector{Vector{Int}}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, name_of_circuit::String, number_of_qubits::Int, density_matrix::SparseMatrixCSC)`
+`Measurement(int_basis::Union{Vector, UnitRange}, fock_basis::Vector{Vector{Int}}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::SparseMatrixCSC)`
 
 Represents the result of quantum measurements.
 
@@ -401,7 +401,7 @@ Represents the result of quantum measurements.
 - `mag_moments`: Magnetic moments obtained from the measurement.
 - `measurement_basis`: Measurement basis used.
 - `number_of_experiment`: Number of experiments performed.
-- `name_of_circuit`: Name of the circuit used.
+- `circuit_name`: Name of the circuit used.
 - `number_of_qubits`: Number of qubits involved.
 - `density_matrix`: Density matrix obtained from the measurement.
 
@@ -415,7 +415,7 @@ struct Measurement
     mag_moments::Vector
     measurement_basis::String
     number_of_experiment::Int
-    name_of_circuit::String
+    circuit_name::String
     number_of_qubits::Int
     density_matrix::SparseMatrixCSC
 end
