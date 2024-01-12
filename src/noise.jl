@@ -37,6 +37,8 @@ function apply_noise(ops::Vector{T},noise12::Tuple{QuantumChannel, QuantumChanne
                 else
                     throw("only works for 1 or 2 qubit operators")
                 end
+            else #if there is noise
+                push!(new_ops,op)
             end
 
         end
@@ -196,7 +198,7 @@ Returns a vector of QuantumOps representing the twirled operation with noise.
 """
 function apply_twirl(op::QuantumOps,twirling_noise::Union{QuantumChannel,Bool})
 
-    if op.q==1
+    if op.q==1 #deleting this will break the code!
         # println("twirling works only for two qubit gates")
         return [op]
     end
@@ -206,10 +208,8 @@ function apply_twirl(op::QuantumOps,twirling_noise::Union{QuantumChannel,Bool})
         return [op]
     end
 
-    qubit=op.qubit
-    target_qubit=op.target_qubit
-    least=min(qubit,target_qubit)
-    opgate=op.gate
+    least=min(op.qubit,op.target_qubit)
+    opgate=op.qubit > op.target_qubit ? _swap_control_target(op.gate) : op.gate #this swaps if qubit>target_qubit
 
     # Map from symbols to matrices
     pauli_dict = Dict("I" => gate.I, "X" => gate.X, "Y" => gate.Y, "Z" => gate.Z)

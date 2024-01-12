@@ -38,16 +38,17 @@ function plot_measurement(mVector::Vector{Measurement})
 
     fig, ax = subplots(figsize=(fig_width, base_fig_height),dpi=100)
 
-    colors=["red","blue","green","orange","black"]
+    colors=["tab:blue","tab:orange","tab:green","tab:red","tab:purple","tab:brown"]
 
     for (i,r) = enumerate(mVector)
 
         N=r.number_of_qubits
+        # x_outcome=x_range<8 ? bit_to(r.int_basis,N,:bstr) : r.int_basis
         x_outcome=r.int_basis
         y_sample=r.sample
 
         wid=.8/i
-        bars=ax.bar(x_outcome,y_sample, wid, alpha=0.6, color=colors[i], label="($(i)) $(r.circuit_name)")
+        bars=ax.bar(x_outcome, y_sample, wid, alpha=0.7, color=colors[i], label="($(i)) $(r.circuit_name)")
 
             # Add the probabilities on top of each bar
         for bar in bars
@@ -56,7 +57,7 @@ function plot_measurement(mVector::Vector{Measurement})
                     ha="center", va="bottom", color=colors[i])
         end
 
-        ax.set_xticks(0:2:x_range)
+        ax.set_xticks(0:x_range)
     end
 
     # if rep==:bstr
@@ -217,6 +218,7 @@ function plot_circuit(ops::Vector{QuantumOps};list_of_initial_qubits::Vector{Int
         _draw_gate(ax, op, pos-1, gate_width)  # Position gates with some offset
     end
 
+    fig.tight_layout()
     # Show the plot
     display(fig)
 

@@ -547,10 +547,6 @@ In this example, we apply Pauli Twirling manually to each operation in the circu
 twirling_noise = false
 twirled_ops = apply_twirl(ops_err, twirling_noise)
 twirled_circuit = compile(twirled_ops)
-
-# Conducting measurements and analyzing the results
-num_samples=1000
-measurement_results_twirl = sample(twirled_circuit, num_samples)
 ```
 
 This method provides fine-grained control over the twirling process, allowing for customization and detailed manipulation of the quantum operations.
@@ -562,15 +558,87 @@ Alternatively, Pauli Twirling can be integrated into the circuit compilation pro
 # Using Options() to apply twirling during circuit compilation
 opt=Options(twirl=true)
 twirled_circuit_options = compile(ops_err, opt)
-
-# Conducting measurements on the circuit compiled with twirling options
-num_samples=1000
-measurement_results_twirl_options = sample(twirled_circuit_options, num_samples)
 ```
 
 This approach is more streamlined and is particularly useful when working with complex circuits or when seeking to reduce the manual overhead of applying twirling to each operation.
 
 Both methods offer effective means of incorporating Pauli Twirling into quantum simulations for error mitigation, each with its own advantages in terms of control and convenience.
+
+### Complete Example
+
+This section provides a comprehensive example demonstrating the implementation of error mitigation using Pauli Twirling in a quantum simulation.
+
+#### Setting Up the Circuit with Rotation Errors
+
+First, we define a coherent noise model, specifically rotation errors, and apply this noise to a series of quantum operations.
+
+```julia
+# Defining the error probability
+p_error = 0.2
+
+# Creating two noise models for rotation errors
+noise_model1 = Noise1("rot_z", 0.1 * p_error)
+noise_model2 = Noise2("rot_z", p_error)
+
+# Defining a series of quantum operations
+ops = [Op("H", 1), Op("H", 2), Op("CNOT", 1, 2), Op("CNOT", 2, 1), Op("H", 1), Op("H", 2)]
+
+# Applying the noise model to the operations
+ops_noisy = apply_noise(ops, (noise_model1, noise_model2))
+```
+
+#### Creating and Comparing Circuits
+
+We construct three quantum circuits: an exact circuit without noise, a noisy circuit, and a circuit with Pauli Twirling applied. Each circuit is then visualized for comparison.
+
+- **Exact Circuit**: A noise-free version of the circuit.
+- **Noisy Circuit**: The same circuit with rotation errors applied.
+- **Noisy Twirl Circuit**: The circuit with both rotation errors and Pauli Twirling applied.
+
+```julia
+# Creating the exact circuit
+opt_exact = Options(circuit_name="exact")
+circuit_exact = compile(ops, opt_exact)
+
+# Creating the noisy circuit
+opt_noisy = Options(circuit_name="noisy")
+circuit_noisy = compile(ops_noisy, opt_noisy)
+plot_circuit(circuit_noisy)
+```
+
+![](assets/figs/circuit_noisy.png)
+
+```julia
+# Creating the noisy circuit with Pauli Twirling
+opt_twirl = Options(circuit_name="twirl", twirl=true)
+circuit_twirl = compile(ops_noisy, opt_twirl)
+plot_circuit(circuit_twirl)
+```
+
+![](assets/figs/circuit_twirl.png)
+
+The visualizations help to compare the effect of twirling.
+
+#### Measurement and Analysis
+
+Finally, let's measure each circuit and plot the results to analyze the effects of noise and error mitigation method.
+
+```julia
+# Setting the number of samples for measurement
+num_samples = 1000
+
+# Conducting measurements on the circuits
+measurement_exact = sample(circuit_exact, num_samples)
+measurement_noisy = sample(circuit_noisy, num_samples)
+measurement_twirl = sample(circuit_twirl, num_samples)
+
+# Plotting the measurement results
+plot_measurement([measurement_exact, measurement_noisy, measurement_twirl])
+```
+
+![](assets/figs/twirl_measure.png)
+
+The resulting plots provide a visual comparison of the measurement outcomes across the three scenarios: exact, noisy, and noisy with Pauli Twirling. This helps to evaluate the effectiveness of error mitigation strategies in NISQ quantum simulations.
 
 ### Conclusion
 This example illustrates the use of Pauli Twirling for mitigating coherent control errors in quantum simulations of the Ising Hamiltonian. It's important to recognize the trade-offs involved: while twirling can reduce the impact of coherent errors, it may introduce new noise sources and biases, which must be carefully considered in the analysis of the simulation results. The effectiveness of error mitigation strategies like Pauli Twirling should be evaluated in the context of the specific quantum simulation and the nature of the errors involved.

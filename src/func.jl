@@ -15,12 +15,14 @@ function _extend_op(op::QuantumOps,N::Int)
         throw("qubit cannot be larger than total system size")
     end
 
-    e_ops=[x==op.qubit ? sparse(op.gate) : sparse(id) for x=1:N]
-
-    if op.q==2
+    if op.q==1
+        e_ops=[x==op.qubit ? sparse(op.gate) : sparse(id) for x=1:N]
+    elseif op.q==2
+        final_gate=op.qubit > op.target_qubit ? sparse(_swap_control_target(op.gate)) : op.gate
+        e_ops=[x==op.qubit ? final_gate : sparse(id) for x=1:N]
         deleteat!(e_ops,op.target_qubit)#target qubit
     end
-    
+
     return foldl(kron,e_ops)
 end
 

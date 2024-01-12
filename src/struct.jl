@@ -224,32 +224,27 @@ name_with_phase_bool(name::String)=name ∈ ["P","RX","RY","RZ","CP"]
 Op(namePhase::Vector,qubit::Int)=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,false) : throw("$(namePhase[1]) does not need a parameter")
 Op(namePhase::Vector,qubit::Int,noise::QuantumChannel)=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,noise) : throw("$(namePhase[1]) does not need a parameter")
 
+
 function Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})
 
     if size(gate,1)!=4 #two qubit operation
         throw("gate size and selected qubits do not match!")
-    end
-
-    # Initialize final_gate with a default value
-    if qubit > target_qubit
-        final_gate = _swap_control_target(gate)
     elseif qubit==target_qubit
         throw("control and target qubits cannot be same!")
-    else
-        final_gate = gate
-    end
-
-    if noise==false
-        return Op(2,name,final_gate,qubit,target_qubit, false)
     elseif noise==true
         throw("provide valid noise model")
     else
-        if noise.q==2
-            return Op(2,name,final_gate,qubit,target_qubit,noise)
-        else
-            throw("gate or noise matrix size error!")
-        end
+        return Op(2,name,gate,qubit,target_qubit,noise)
     end
+
+    # # Initialize final_gate with a default value
+    # if qubit > target_qubit
+    #     final_gate = _swap_control_target(gate)
+    # elseif qubit==target_qubit
+    #     throw("control and target qubits cannot be same!")
+    # else
+    #     final_gate = gate
+    # end
 
 end
 
