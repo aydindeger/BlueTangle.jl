@@ -638,7 +638,4 @@ plot_measurement([measurement_exact, measurement_noisy, measurement_twirl])
 
 ![](assets/figs/twirl_measure.png)
 
-The resulting plots provide a visual comparison of the measurement outcomes across the three scenarios: exact, noisy, and noisy with Pauli Twirling. This helps to evaluate the effectiveness of error mitigation strategies in NISQ quantum simulations.
-
-### Conclusion
-This example illustrates the use of Pauli Twirling for mitigating coherent control errors in quantum simulations of the Ising Hamiltonian. It's important to recognize the trade-offs involved: while twirling can reduce the impact of coherent errors, it may introduce new noise sources and biases, which must be carefully considered in the analysis of the simulation results. The effectiveness of error mitigation strategies like Pauli Twirling should be evaluated in the context of the specific quantum simulation and the nature of the errors involved.
+The resulting plots provide a visual comparison of the measurement outcomes across the three scenarios: exact, noisy, and noisy with Pauli Twirling. This helps to evaluate the effectiveness of error mitigation strategies in NISQ quantum simulations. It's important to recognize the trade-offs involved: while twirling can reduce the impact of coherent errors, it may introduce new noise sources and biases, which must be carefully considered in the analysis of the simulation results.
