@@ -143,15 +143,6 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
     elseif model == "rot_xyz"
         ops=[rx(pi*p),ry(pi*p),rz(pi*p)]/sqrt(3)
 
-    elseif model == "rand_rot_x"
-        ops=[rx(pi*p*randn()) for _=1:4]/sqrt(4)
-
-    elseif model == "rand_rot_y"
-        ops=[ry(pi*p*randn()) for _=1:4]/sqrt(4)
-
-    elseif model == "rand_rot_z"
-        ops=[rz(pi*p*randn()) for _=1:4]/sqrt(4)
-
     #measurements as a quantum channel for classical_shadow
     elseif _is_it_measurement(model)
         ops=[gate.proj0, gate.proj1]#these are projectors

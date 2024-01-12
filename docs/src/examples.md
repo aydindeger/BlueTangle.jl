@@ -528,8 +528,8 @@ We start by creating a quantum circuit with a coherent noise model.
 ```julia
 # Creating a rotation control error model
 p_error=0.1
-noise_model1 = Noise1("rot_err", 0.1*p_error)
-noise_model2 = Noise2("rot_err", p_error)
+noise_model1 = Noise1("rot_xyz", 0.1*p_error)
+noise_model2 = Noise2("rot_xyz", p_error)
 
 ops = [Op("H", 1), Op("CNOT", 1, 2), Op("CNOT", 2, 3)] # Collect operators
 ops_err = apply_noise(ops, (noise_model1, noise_model2))
