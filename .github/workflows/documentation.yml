@@ -21,11 +21,11 @@ jobs:
         with:
           version: '1.9'
 
-      # Set up Python and install matplotlib
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
+      # # Set up Python and install matplotlib
+      # - name: Set up Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.x'
 
       - name: Install matplotlib
         run: |

@@ -500,9 +500,9 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
 
     end
 
-    if options.twirl==true
-        local_ops = apply_twirl(local_ops,options.noise1)
-    end
+    # if options.twirl==true
+    #     local_ops = apply_twirl(local_ops)
+    # end
 
     number_of_qubits=maximum([max(op.qubit, typeof(op)==Op ? op.target_qubit : op.qubit) for op in local_ops])
 
@@ -593,7 +593,17 @@ function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]))
     end
 
     for gate in circuit.ops
-        apply_op!(state,gate)
+
+        if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
+            # println("twirl applied on $(gate.name) on $(gate.q)")
+            t_ops = apply_twirl(gate)
+            for t_op in t_ops
+                apply_op!(state,t_op)
+            end
+        else #no twirling
+            apply_op!(state,gate)
+        end
+
     end
 
     return state
@@ -618,7 +628,15 @@ function circuit_to_rho(circuit::Circuit)
     rho=state*state'
 
     for gate in circuit.ops
-        apply_op_rho!(rho,gate)
+        if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
+            # println("twirl applied on $(gate.name) on $(gate.q)")
+            t_ops = apply_twirl(gate)
+            for t_op in t_ops
+                apply_op_rho!(rho,t_op)
+            end
+        else #no twirling
+            apply_op_rho!(rho,gate)
+        end
     end
 
     return rho
