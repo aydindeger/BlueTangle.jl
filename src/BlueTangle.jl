@@ -595,7 +595,6 @@ function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]))
     for gate in circuit.ops
 
         if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
-            # println("twirl applied on $(gate.name) on $(gate.q)")
             t_ops = apply_twirl(gate)
             for t_op in t_ops
                 apply_op!(state,t_op)
@@ -629,7 +628,6 @@ function circuit_to_rho(circuit::Circuit)
 
     for gate in circuit.ops
         if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
-            # println("twirl applied on $(gate.name) on $(gate.q)")
             t_ops = apply_twirl(gate)
             for t_op in t_ops
                 apply_op_rho!(rho,t_op)
