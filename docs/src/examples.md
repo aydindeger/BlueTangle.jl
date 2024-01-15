@@ -612,12 +612,7 @@ plot_circuit(circuit_noisy)
 # Creating the noisy circuit with Pauli Twirling
 opt_twirl = Options(circuit_name="twirl", twirl=true)
 circuit_twirl = compile(ops_noisy, opt_twirl)
-plot_circuit(circuit_twirl)
 ```
-
-![](assets/figs/circuit_twirl.png)
-
-The visualizations help to compare the effect of twirling.
 
 #### Measurement and Analysis
 
