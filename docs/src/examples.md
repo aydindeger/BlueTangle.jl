@@ -241,7 +241,7 @@ plot_circuit(noisy_circuit)
 
 - To create a custom noise model, define your own Kraus operators for a single qubit model using `QuantumChannel(1, "name_of_model", 0, vector_of_kraus_matrices)` or for a two-qubit model with `QuantumChannel(2, "name_of_model", 0, vector_of_kraus_matrices)`. It's important to first check if your Kraus operators satisfy the trace-preserving condition using the [`is_kraus_valid`](@ref) function. Alternatively, you can use the simpler constructor `custom_noise(q, name_of_model, vector_of_kraus_matrices)`, where `q` is either 1 or 2 for single and two qubit gates, respectively.
 
-## 6) Mid-measurements and peculiarities
+## 6) Mid-measurements
 
 ### Overview
 

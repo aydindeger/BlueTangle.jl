@@ -76,6 +76,8 @@ Noise1
 Noise2
 apply_noise
 apply_twirl
+cnot_amplifier!
+op_amplifier!
 ```
 
 ## Hamiltonian
