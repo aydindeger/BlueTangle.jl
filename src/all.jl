@@ -1,5 +1,5 @@
 using SparseArrays, LinearAlgebra, Pkg
-import StatsBase
+import StatsBase, LsqFit
 
 include("struct.jl")
 include("func.jl")

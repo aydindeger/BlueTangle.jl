@@ -516,7 +516,7 @@ This example demonstrates the simulation of the time evolution of the Ising Hami
 - The choice of the number of qubits (`num_qubits`) and samples (`num_samples`) can be tailored to computational resources and desired precision.
 - Circuit visualization aids in understanding the Trotterization process and the layout of the quantum operations.
 
-## 11) Error Mitigation and Pauli Twirling
+## 11) Error Mitigation: Pauli Twirling
 
 ### Overview
 In the era of NISQ quantum simulations implementing effective error mitigation strategies is essential. Pauli Twirling is a common technique that converts coherent errors into stochastic ones. However, it's important to note that while Pauli Twirling is effective in addressing certain errors, it does not completely remove existing biases in the simulation. Moreover, the process of twirling itself can be noisy, reflecting a more realistic scenario of quantum operations but also complicating the error landscape.
@@ -634,3 +634,109 @@ plot_measurement([measurement_exact, measurement_noisy, measurement_twirl])
 ![](assets/figs/twirl_measure.png)
 
 The resulting plots provide a visual comparison of the measurement outcomes across the three scenarios: exact, noisy, and noisy with Pauli Twirling. This helps to evaluate the effectiveness of error mitigation strategies in NISQ quantum simulations. It's important to recognize the trade-offs involved: while twirling can reduce the impact of coherent errors, it may introduce new noise sources and biases, which must be carefully considered in the analysis of the simulation results.
+
+## 12) Error mitigation: Zero-Noise Extrapolation
+
+### Overview
+Zero-Noise Extrapolation (ZNE) is a powerful technique for error mitigation in quantum simulations. This method strategically scales the noise in a quantum circuit upwards and then extrapolates back to a theoretical zero-noise scenario, thereby enhancing the precision of quantum computations. In this package, implementing ZNE is straightforward and can be activated with a simple option in the circuit compilation process, such as Options(zne=true). When this option is enabled, the compiler automatically introduces additional noise by inserting pairs of CNOT gates. Consequently, the sample function yields four distinct measurement objects, each corresponding to a different level of noise amplification.
+
+### Example 1: Setting Up the Circuit with Rotation Errors
+We start by creating a quantum circuit with a basic noise model.
+
+```julia
+# Defining the error probability
+p_error = 0.05
+
+# Creating two noise models for rotation errors
+n1 = Noise1("rot_z", 0.1 * p_error)
+n2 = Noise2("rot_z", p_error)
+
+# Defining a series of quantum operations
+ops = [Op("H", 1), Op("H", 2), Op("CNOT", 1, 2), Op("CNOT", 2, 1), Op("H", 1), Op("H", 2)]
+```
+
+### Creating and Analyzing Different Circuits
+
+We construct multiple quantum circuits: an exact circuit without noise, a noisy circuit, a circuit with twirling, one with ZNE, and another combining twirling and ZNE.
+
+```julia
+# Creating the exact, noisy, and various error-mitigated circuits
+opt_exact = Options(circuit_name="exact")
+circuit_exact = compile(ops, opt_exact)
+
+opt_noisy = Options(circuit_name="noisy", noise1=n1, noise2=n2)
+circuit_noisy = compile(ops, opt_noisy)
+
+opt_zne = Options(circuit_name="zne", noise1=n1, noise2=n2, zne=true)
+circuit_zne = compile(ops, opt_zne)
+
+opt_twirl = Options(circuit_name="twirl", noise1=n1, noise2=n2, twirl=true)
+circuit_twirl = compile(ops, opt_twirl)
+
+opt_twirl_zne = Options(circuit_name="twirl&zne", noise1=n1, noise2=n2, twirl=true, zne=true)
+circuit_twirl_zne = compile(ops, opt_twirl_zne)
+```
+
+#### Measurement and Analysis
+
+We measure each circuit and analyze the results to evaluate the effectiveness of Zero-Noise Extrapolation and its combination with Pauli Twirling.
+
+```julia
+# Conducting measurements on the circuits
+measurement_exact = sample(circuit_exact, 1000)
+measurement_noisy = sample(circuit_noisy, 1000)
+measurement_twirl = sample(circuit_twirl, 1000)
+measurements_zne = sample(circuit_zne, 1000) # Multiple measurements for different noise levels
+measurements_twirl_zne = sample(circuit_twirl_zne, 1000) # Multiple measurements for different noise levels
+```
+
+Now we plot and compare these results together with error mitigated result.
+
+```julia
+# Analysis of results using magnetization moments
+using PyPlot
+
+m_order = 1 #first magnetization moment
+fig = figure()
+
+ydata = [m.mag_moments[m_order] for m in measurements_twirl_zne]
+xdata = collect(1:2:2length(ydata))
+
+plot(xdata, ydata, "ro", label="Twirl and ZNE")
+est, se, fit_plot = error_mitigate_data(xdata, ydata)
+
+plot(fit_plot..., alpha=.5, color="red", "--")
+plot(est, "rx", label="Error mitigated")
+axhline(est + se, color="red", lw=1)
+axhline(est - se, color="red", lw=1)
+fill_between(-.1:1, est + se, est - se, color="red", alpha=0.1)
+
+plot(measurement_exact.mag_moments[m_order], color="blue", "x", label="Exact")
+plot(measurement_noisy.mag_moments[m_order], color="green", "s", label="Noisy")
+plot(measurement_twirl.mag_moments[m_order], color="black", "d", label="Twirl")
+legend()
+
+xlabel("Noise Level")
+ylabel("Magnetization (Z)")
+fig
+```
+![](assets/figs/zne_twirl.png)
+
+This example demonstrates how Zero-Noise Extrapolation, both independently and in conjunction with Pauli Twirling, can be implemented in quantum simulations to mitigate errors. The resulting analysis provides insights into the comparative effectiveness of these techniques in improving the accuracy of quantum computations in NISQ environments.
+
+### Example 2: Implementing Manual Noise Amplification
+
+In this approach, we manually increase the noise in the circuit by adding pairs of CNOT gates. This is achieved using the functions cnot_amplifier or op_amplifier, as referenced in the documentation. This manual amplification provides us with precise control over the noise levels, a critical aspect for implementing ZNE effectively. The ability to control the level of noise added makes this approach particularly advantageous for advanced users who require fine-tuned noise scaling in their quantum simulations.
+
+```julia
+# Applying manual noise amplification
+for i = 0:3
+    measurement_twirl_zne_manual = Vector{Measurement}()
+    ops = [Op("H", 1), Op("H", 2), Op("CNOT", 1, 2), Op("CNOT", 2, 1), Op("H", 1), Op("H", 2)] # Initial operators
+    cnot_amplifier!(ops, i)
+    circuit=compile(ops, Options(noise1=n1, noise2=n2, twirl=true)
+    push!(measurement_twirl_zne_manual, sample(circuit), 1000))
+end
+```
+
+We can then conduct a similar analysis for the measurement results obtained from the manually noise-amplified circuits.

@@ -349,6 +349,7 @@ struct Options
     noise1::Union{QuantumChannel,Bool}
     noise2::Union{QuantumChannel,Bool}
     twirl::Bool
+    zne::Bool
     swap_error::Bool
     density_matrix::Bool
 
@@ -360,9 +361,10 @@ struct Options
         noise1=false, 
         noise2=false,
         twirl=false, 
+        zne=false,
         swap_error=false,
         density_matrix=false
-    ) = new(circuit_name, uppercase(measurement_basis), measurement_error, noise1, noise2, twirl, swap_error, density_matrix)
+    ) = new(circuit_name, uppercase(measurement_basis), measurement_error, noise1, noise2, twirl, zne, swap_error, density_matrix)
 
     Options()
 end

@@ -2,9 +2,9 @@ module BlueTangle
 
 include("all.jl")
 
-export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, execute, circuit_to_state, circuit_to_rho
+export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho
 export QuantumOps,Op,ifOp,Measurement,QuantumChannel,Circuit,Options
-export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise
+export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,error_mitigate_data
 export plot_measurement, plot_circuit
 export entanglement_entropy,clasical_shadow
 export trotter_ising
@@ -513,18 +513,16 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
     return Circuit(stats,options,local_ops)
 end
 
-"""
-`execute(circuit::Circuit, number_of_experiment::Int) -> Measurement`
+# """
+# `execute(circuit::Circuit, number_of_experiment::Int) -> Measurement`
 
-This is alias for [`sample`](@ref)
-"""
-execute(circuit::Circuit,number_of_experiment::Int)=sample(circuit,number_of_experiment)
+# This is alias for [`sample`](@ref)
+# """
+# execute(circuit::Circuit,number_of_experiment::Int)=sample(circuit,number_of_experiment)
+
 
 """
-Alias:
 `sample(circuit::Circuit, number_of_experiment::Int) -> Measurement`
-
-`execute(circuit::Circuit, number_of_experiment::Int) -> Measurement`
 
 Execute or measure a quantum circuit multiple times.
 
@@ -535,6 +533,21 @@ Returns a `Measurement` object with the results.
 """
 function sample(circuit::Circuit,number_of_experiment::Int)
 
+    if circuit.options.zne==true
+        measurements=Vector{Measurement}()
+        for id=0:3 #id=0 means no ZNE
+            # println("*** ZNE measurements - extra $(id) CNOT pair applied ***")
+            push!(measurements,sample(circuit::Circuit,number_of_experiment,id))
+        end
+        return measurements
+    else
+        return sample(circuit::Circuit,number_of_experiment::Int,0)
+    end
+
+end
+
+function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
+
     all_sample=[]
     N=circuit.stats.number_of_qubits
 
@@ -543,7 +556,7 @@ function sample(circuit::Circuit,number_of_experiment::Int)
     rho_construct=spzeros(ComplexF64,2^N,2^N)
     
     for _ =1:number_of_experiment
-        state=circuit_to_state(circuit)
+        state=circuit_to_state(circuit;id=id)
         _final_measurement!(state,circuit.options)#notice how state is changed
 
         classical_state=sample_outcomes(state,1)#shot=1 #this should stay as 1 for noisy experiments
@@ -569,6 +582,58 @@ function sample(circuit::Circuit,number_of_experiment::Int)
     
 end
 
+
+"""
+`cnot_amplifier!(ops::Vector{T}, CNOT_pair=0) where T <: QuantumOps`
+
+Amplify the presence of CNOT (or CX) operations in a vector of quantum operations.
+
+This function adds extra pair of CNOT operation in the `ops` vector a specific number of times in place. This is useful for amplifying the effect of noise via CNOT operations in a sequence of quantum operations.
+
+# Arguments
+- `ops::Vector{T}`: A vector of quantum operations, where `T` is a subtype of `QuantumOps`.
+- `CNOT_pair::Int` (optional): The number of additional pairs of CNOT operations to insert for each original CNOT operation in `ops`. The default value is 0, which means no additional operations are inserted.
+
+# Examples
+```julia
+ops = [Op("H",1), Op("CNOT",1,2), Op("X",2)]
+cnot_amplifier!(ops, 1)
+# `ops` will be modified to: [Op("H",1), Op("CNOT",1,2), Op("CNOT",1,2), Op("CNOT",1,2), Op("X",2)]
+```
+"""
+function cnot_amplifier!(ops::Vector{T},CNOT_pair=0) where T <: QuantumOps
+
+    i = length(ops)
+    while i > 0
+        if ops[i].name=="CNOT" || ops[i].name=="CX"
+            for _ = 1:2CNOT_pair
+                insert!(ops, i, ops[i])
+            end
+        end
+        i -= 1
+    end
+
+end
+
+"""
+`op_amplifier!(ops::Vector{T},op_pair=0) where T <: QuantumOps`
+
+same as `cnot_amplifier!` but for all operations
+"""
+function op_amplifier!(ops::Vector{T},op_pair=0) where T <: QuantumOps
+
+    i = length(ops)
+    while i > 0
+        for _ = 1:2op_pair
+            insert!(ops, i, ops[i])
+        end
+        i -= 1
+    end
+
+end
+
+
+
 """
 `circuit_to_state(circuit::Circuit; init_state::SparseVector=sparse([])) -> SparseVector`
 
@@ -579,7 +644,7 @@ Convert a quantum circuit to a state vector.
 
 Returns a state vector representing the circuit.
 """
-function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]))
+function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]),id::Int=0)
 
     N=circuit.stats.number_of_qubits
 
@@ -594,14 +659,31 @@ function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]))
 
     for gate in circuit.ops
 
-        if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
-            t_ops = apply_twirl(gate)
-            for t_op in t_ops
-                apply_op!(state,t_op)
+            if gate.q==2 && circuit.options.zne==true && (gate.name=="CNOT" || gate.name=="CX") && id>0 #apply ZNE
+            
+                for cnot_pair=1:2id+1 #number of id = extra CNOT pair
+
+                    if circuit.options.twirl==true #for each CNOT, twirl applies
+                        t_ops = apply_twirl(gate)
+                        for t_op in t_ops
+                            apply_op!(state,t_op)
+                        end
+                    else #twirl false but ZNE still applies
+                        apply_op!(state,gate)
+                    end
+
+                end
+    
+            elseif gate.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
+    
+                t_ops = apply_twirl(gate)
+                for t_op in t_ops
+                    apply_op!(state,t_op)
+                end
+
+            else #no twirling or ZNE
+                apply_op!(state,gate)
             end
-        else #no twirling
-            apply_op!(state,gate)
-        end
 
     end
 
@@ -639,6 +721,40 @@ function circuit_to_rho(circuit::Circuit)
 
     return rho
 
+end
+
+
+"""
+`error_mitigate_data(xdata::Vector, ydata::Vector)`
+
+Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+
+This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
+
+# Arguments
+- `xdata::Vector`: The independent variable data points.
+- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
+
+# Returns
+- `est`: The estimated intercept from the linear fit.
+- `se`: The standard error of the estimated intercept.
+- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
+
+# Example
+```julia
+xdata = collect(1:2:20)
+ydata = 0.5 .+ 1.0 .* xdata + randn(length(xdata))
+estimate, std_error, plot_data = error_mitigate_data(xdata, ydata)
+```
+"""
+function error_mitigate_data(xdata::Vector,ydata::Vector)
+    # xdata=collect(1:2:2length(ydata))
+    LsqFit.model(x, p) = p[1] .+ p[2] .* x
+    rfit = LsqFit.curve_fit(model, xdata, ydata, [.5, 1.0])
+    est=rfit.param[1]
+    se=LsqFit.standard_errors(rfit)[1]
+    fit_plot=(0:xdata[end],[model(x,rfit.param) for x=0:xdata[end]])
+    est,se,fit_plot
 end
 
 

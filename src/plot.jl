@@ -24,10 +24,10 @@ Plots the outcome probabilities for quantum measurements.
 
 Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
 """
-function plot_measurement(mVector::Vector{Measurement})
+function plot_measurement(mVector::Vector{Measurement},labels=Vector{String}=[""])
 
-    if length(mVector)>3
-        throw("You can only plot three measurements.")
+    if length(mVector)>5
+        throw("You can only plot five measurements.")
     end
 
     base_fig_width, base_fig_height = (7, 5)
@@ -48,7 +48,9 @@ function plot_measurement(mVector::Vector{Measurement})
         y_sample=r.sample
 
         wid=.8/i
-        bars=ax.bar(x_outcome, y_sample, wid, alpha=0.7, color=colors[i], label="($(i)) $(r.circuit_name)")
+
+        lab=labels==[""] ? "($(i-1)) $(r.circuit_name)" : labels[i]
+        bars=ax.bar(x_outcome, y_sample, wid, alpha=0.7, color=colors[i], label=lab)
 
             # Add the probabilities on top of each bar
         for bar in bars
@@ -83,7 +85,7 @@ Plots the outcome probabilities for a single quantum measurement.
 
 Creates a bar plot showing the probabilities of the most likely outcomes from the measurement.
 """
-plot_measurement(m::Measurement;rep::Symbol=:int)=plot_measurement([m])
+plot_measurement(m::Measurement)=plot_measurement([m])
 
 
 ## circuit drawing
