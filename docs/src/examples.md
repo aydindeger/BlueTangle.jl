@@ -241,7 +241,7 @@ plot_circuit(noisy_circuit)
 
 - To create a custom noise model, define your own Kraus operators for a single qubit model using `QuantumChannel(1, "name_of_model", 0, vector_of_kraus_matrices)` or for a two-qubit model with `QuantumChannel(2, "name_of_model", 0, vector_of_kraus_matrices)`. It's important to first check if your Kraus operators satisfy the trace-preserving condition using the [`is_kraus_valid`](@ref) function. Alternatively, you can use the simpler constructor `custom_noise(q, name_of_model, vector_of_kraus_matrices)`, where `q` is either 1 or 2 for single and two qubit gates, respectively.
 
-## 6) Mid-measurements
+## 6) Conditional Mid-Measurements
 
 ### Overview
 
@@ -726,7 +726,7 @@ This example demonstrates how Zero-Noise Extrapolation, both independently and i
 
 ### Example 2: Implementing Manual Noise Amplification
 
-In this approach, we manually increase the noise in the circuit by adding pairs of CNOT gates. This is achieved using the functions cnot_amplifier or op_amplifier, as referenced in the documentation. This manual amplification provides us with precise control over the noise levels, a critical aspect for implementing ZNE effectively. The ability to control the level of noise added makes this approach particularly advantageous for advanced users who require fine-tuned noise scaling in their quantum simulations.
+In this approach, we manually increase the noise in the circuit by adding pairs of CNOT gates. This is achieved using the functions [`cnot_amplifier`](@ref) or [`op_amplifier`](@ref), as referenced in the documentation. This manual amplification provides us with precise control over the noise levels, a critical aspect for implementing ZNE effectively. The ability to control the level of noise added makes this approach particularly advantageous for advanced users who require fine-tuned noise scaling in their quantum simulations.
 
 ```julia
 # Applying manual noise amplification

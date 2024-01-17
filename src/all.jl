@@ -1,6 +1,6 @@
 using SparseArrays, LinearAlgebra, Pkg
 import StatsBase
-# using LsqFit
+import LsqFit
 
 include("struct.jl")
 include("func.jl")

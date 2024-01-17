@@ -404,3 +404,28 @@ function entanglement_entropy(rho::SparseMatrixCSC)
     return sum(-spec.*log.(spec)),-log.(spec) 
 end
 
+"""
+`error_mitigate_data(xdata::Vector, ydata::Vector)`
+
+Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+
+This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
+
+# Arguments
+- `xdata::Vector`: The independent variable data points.
+- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
+
+# Returns
+- `est`: The estimated intercept from the linear fit.
+- `se`: The standard error of the estimated intercept.
+- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
+"""
+function error_mitigate_data(xdata::Vector,ydata::Vector)
+    # xdata=collect(1:2:2length(ydata))
+    model(x, p) = p[1] .+ p[2] .* x
+    rfit = LsqFit.curve_fit(model, xdata, ydata, [.5, 1.0])
+    est=rfit.param[1]
+    se=LsqFit.standard_errors(rfit)[1]
+    fit_plot=(0:xdata[end],[model(x,rfit.param) for x=0:xdata[end]])
+    est,se,fit_plot
+end
