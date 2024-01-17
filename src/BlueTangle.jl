@@ -500,10 +500,6 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
 
     end
 
-    # if options.twirl==true
-    #     local_ops = apply_twirl(local_ops)
-    # end
-
     number_of_qubits=maximum([max(op.qubit, typeof(op)==Op ? op.target_qubit : op.qubit) for op in local_ops])
 
     len=length(local_ops)
@@ -513,18 +509,10 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
     return Circuit(stats,options,local_ops)
 end
 
-# """
-# `execute(circuit::Circuit, number_of_experiment::Int) -> Measurement`
-
-# This is alias for [`sample`](@ref)
-# """
-# execute(circuit::Circuit,number_of_experiment::Int)=sample(circuit,number_of_experiment)
-
-
 """
 `sample(circuit::Circuit, number_of_experiment::Int) -> Measurement`
 
-Execute or measure a quantum circuit multiple times.
+Measure a quantum circuit multiple times.
 
 - `circuit`: A `Circuit` object.
 - `number_of_experiment`: Number of times to execute the circuit.
@@ -702,21 +690,40 @@ Convert a quantum circuit to a density matrix (rho).
 
 Returns a density matrix representing the circuit.
 """
-function circuit_to_rho(circuit::Circuit)
+function circuit_to_rho(circuit::Circuit;id::Int=0)
 
     N=circuit.stats.number_of_qubits
     state=state_vector_create(zeros(N))
     rho=state*state'
 
     for gate in circuit.ops
-        if circuit.options.twirl==true && gate.q==2 #apply twirling each circuit
+
+        if gate.q==2 && circuit.options.zne==true && (gate.name=="CNOT" || gate.name=="CX") && id>0 #apply ZNE
+            
+            for cnot_pair=1:2id+1 #number of id = extra CNOT pair
+
+                if circuit.options.twirl==true #for each CNOT, twirl applies
+                    t_ops = apply_twirl(gate)
+                    for t_op in t_ops
+                        apply_op_rho!(rho,t_op)
+                    end
+                else #twirl false but ZNE still applies
+                    apply_op_rho!(rho,gate)
+                end
+
+            end
+
+        elseif gate.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
+
             t_ops = apply_twirl(gate)
             for t_op in t_ops
                 apply_op_rho!(rho,t_op)
             end
-        else #no twirling
+
+        else #no twirling or ZNE
             apply_op_rho!(rho,gate)
         end
+
     end
 
     return rho

@@ -60,7 +60,7 @@ Circuit
 Options
 ```
 
-## Gates and Noise
+## Gates 
 
 ```@docs
 gate
@@ -71,6 +71,11 @@ U2
 U3
 random_ops
 random_clifford
+```
+
+## Noise
+
+```@docs
 is_kraus_valid
 Noise1
 Noise2
@@ -78,6 +83,7 @@ apply_noise
 apply_twirl
 cnot_amplifier!
 op_amplifier!
+error_mitigate_data
 ```
 
 ## Hamiltonian
