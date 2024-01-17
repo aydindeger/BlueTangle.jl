@@ -726,7 +726,7 @@ This example demonstrates how Zero-Noise Extrapolation, both independently and i
 
 ### Example 2: Implementing Manual Noise Amplification
 
-In this approach, we manually increase the noise in the circuit by adding pairs of CNOT gates. This is achieved using the functions [`cnot_amplifier`](@ref) or [`op_amplifier`](@ref), as referenced in the documentation. This manual amplification provides us with precise control over the noise levels, a critical aspect for implementing ZNE effectively. The ability to control the level of noise added makes this approach particularly advantageous for advanced users who require fine-tuned noise scaling in their quantum simulations.
+In this approach, we manually increase the noise in the circuit by adding pairs of CNOT gates. This is achieved using the functions [`cnot_amplifier!`](@ref) or [`op_amplifier!`](@ref), as referenced in the documentation. This manual amplification provides us with precise control over the noise levels, a critical aspect for implementing ZNE effectively. The ability to control the level of noise added makes this approach particularly advantageous for advanced users who require fine-tuned noise scaling in their quantum simulations.
 
 ```julia
 # Applying manual noise amplification
