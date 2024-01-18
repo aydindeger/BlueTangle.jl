@@ -14,10 +14,10 @@ This includes:
 - Special gates like `sqrt(X)` (equal to RX(pi/2)*exp(1im*pi/4))
 - Projectors (`proj0` for |0><0|, `proj1` for |1><1|)
 - Controlled gates such as `CX` (CNOT), `CNOT` (an alias for CX), and `CZ`
-- The `SWAP` gate
+- The `SWAP`, `iSWAP`, `fSWAP` gate
 - The `ECR` gate
 
-Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `CZ`, and `SWAP` are represented as 4x4 matrices.
+Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `SYC`, `CZ`, and `SWAP`, `iSWAP`, `fSWAP` are represented as 4x4 matrices.
 """
 const gate = (
     I = [1 0; 0 1],
@@ -35,6 +35,9 @@ const gate = (
     CNOT = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CZ = [1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
     SWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1],
+    iSWAP =[1 0 0 0; 0 0 im 0; 0 im 0 0; 0 0 0 1],
+    fSWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 -1],
+    SYC =[1 0 0 0; 0 0 -im 0; 0 -im 0 0; 0 0 0 exp(-im*pi/6)],#Sycamore
     ECR = (1/sqrt(2)) * [0 + 0im 1 + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2)
     )
 
@@ -73,9 +76,13 @@ Returns an `Op` object representing the randomly generated two-qubit gate.
 function random_gate_2(N)## N is total qubit number
     
     lambda=round(rand(),digits=2)
-    name=rand(["CX","CZ","CP","SWAP","ECR"])
+    name=rand(["CX","CZ","CP","GIVENS","FSIM","SWAP","iSWAP","fSWAP","SYC","ECR"])
 
     if name=="CP"
+        name_return="$(name)($(lambda)π)"
+    elseif name=="GIVENS"
+        name_return="$(name)($(lambda)π)"
+    elseif name=="FSIM"
         name_return="$(name)($(lambda)π)"
     else
         name_return=name
@@ -111,16 +118,16 @@ Create a sequence of random quantum gate operations, with optional mid-circuit m
 - `measure_basis::Vector{String}`: The basis in which measurements are performed.
 
 # Returns
-- `Vector{QuantumOps}`: A vector of randomly chosen quantum operations (`QuantumOps`), each representing a Clifford gate or a measurement operation.
+- `Vector{QuantumOps}`: A vector of randomly chosen quantum operations (`QuantumOps`), each representing a gate or a measurement operation.
 
 # Description
-This function creates a vector of quantum operations, where each operation is either a randomly chosen Clifford gate from the set {"X", "Y", "Z", "H", "S", "CNOT", "SWAP", "CZ"} or a measurement operation, based on `measure_prob`. For two-qubit gates ("CNOT", "SWAP", "CZ"), adjacent qubits (qubit `r` and qubit `r+1`) are selected. For single-qubit gates and measurements, a random qubit `r` is chosen.
+This function creates a vector of quantum operations, where each operation is either a randomly chosen gate from the set {"X", "Y", "Z", "H", "S", "CX","CZ","CP","GIVENS","FSIM","SWAP","iSWAP","fSWAP","SYC","ECR"} or a measurement operation, based on `measure_prob`. 
 
 # Example
 ```julia
 ops = random_ops(5, 10; measure_prob=0.2, measure_basis=["MX","MZ"])
 ```
-This example generates a sequence of 10 random Clifford gates and measurements (with a 20% chance of a measurement after each gate) for a 5-qubit system.
+This example generates a sequence of 10 random gates and measurements (with a 20% chance of a measurement after each gate) for a 5-qubit system.
 """
 function random_ops(N,len;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
     ops=Vector{QuantumOps}()
@@ -324,6 +331,8 @@ function gates2(op_name::String, param...)
     # cx=[1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0] # CNOT
     # cz=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1]
     cp(lambda)=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(1im*lambda)]
+    GIVENS(theta) = [1 0 0 0; 0 cos(theta) -sin(theta) 0;0 sin(theta) cos(theta) 0;0 0 0 1]
+    FSIM(theta) = [1 0 0 0; 0 cos(theta) -im*sin(theta) 0;0 -im*sin(theta) cos(theta) 0;0 0 0 1]
     # swap=[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1]
 
     if uppercase_name == "CX" || uppercase_name == "CNOT"
@@ -332,10 +341,20 @@ function gates2(op_name::String, param...)
         return gate.CZ # Control-Z gate
     elseif uppercase_name == "SWAP"
         return gate.SWAP
+    elseif uppercase_name == "ISWAP"
+        return gate.iSWAP
+    elseif uppercase_name == "FSWAP"
+        return gate.fSWAP
     elseif uppercase_name == "ECR"
         return gate.ECR
+    elseif uppercase_name == "SYC"#Sycamore
+        return gate.SYC
     elseif uppercase_name == "CP" && length(param)==1
        return cp(param[1])
+    elseif uppercase_name == "GIVENS" && length(param)==1
+        return GIVENS(param[1])
+    elseif uppercase_name == "FSIM" && length(param)==1
+        return FSIM(param[1])
     else
         throw("Two-qubit gate $(op_name) not found")
     end

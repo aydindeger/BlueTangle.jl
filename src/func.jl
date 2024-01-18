@@ -423,10 +423,10 @@ function error_mitigate_data(xdata::Vector,ydata::Vector)
     # xdata=collect(1:2:2length(ydata))
     model(x, p) = p[1] .+ p[2] .* x
     rfit = LsqFit.curve_fit(model, xdata, ydata, [.5, 1.0])
-    est=rfit.param[1]
+    est=round(rfit.param[1],sigdigits=3)
     se=LsqFit.standard_errors(rfit)[1]
 
-    dx=(xdata[2]-xdata[1])/10
+    dx=(xdata[2]-xdata[1])/4
     fit_plot=(0:dx:xdata[end],[model(x,rfit.param) for x=0:dx:xdata[end]])
     est,se,fit_plot
 end

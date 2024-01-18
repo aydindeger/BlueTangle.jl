@@ -564,10 +564,10 @@ function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
 
     fock=int2bit.(int_basis,N)
 
-    expectation=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moment_list=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:10]
+    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
+    mag_moments=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:10]
 
-    return Measurement(int_basis,fock,avg_prob,expectation,mag_moment_list,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
+    return Measurement(int_basis,fock,avg_prob,expect,mag_moments,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
     
 end
 
