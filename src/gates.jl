@@ -219,16 +219,21 @@ function _parse_and_call_safe(name::String)
 
     if endswith(uppercase(param_str), "*PI")
         multiplier_str = chop(param_str,tail=3)
-        param = parse(Float64, multiplier_str) * pi
+        param = parse(ComplexF64, multiplier_str) * pi
     elseif endswith(param_str, "*π")
         multiplier_str = chop(param_str,tail=2)
-        param = parse(Float64, multiplier_str) * pi
-    elseif endswith(param_str, "π") || endswith(uppercase(param_str), "PI")
-        multiplier_str = chop(param_str)
+        param = parse(ComplexF64, multiplier_str) * pi
+    elseif (startswith(param_str, "π") && endswith(param_str, "π")) || (startswith(uppercase(param_str), "PI") && endswith(uppercase(param_str), "PI")) #dont change the order
         param = 1.0 * pi
+    elseif endswith(param_str, "π")#dont change the order
+        multiplier_str = chop(param_str,tail=1)
+        param = parse(ComplexF64, multiplier_str) * pi
+    elseif endswith(uppercase(param_str), "PI")#dont change the order
+        multiplier_str = chop(param_str,tail=2)
+        param = parse(ComplexF64, multiplier_str) * pi
     else
         # If there's no "PI" and no "*", parse the number directly
-        param = parse(Float64, param_str)
+        param = parse(ComplexF64, param_str)
     end
 
     # Call gates1 function with the parsed function name and parameter

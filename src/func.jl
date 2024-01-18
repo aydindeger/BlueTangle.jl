@@ -26,21 +26,20 @@ function _extend_op(op::QuantumOps,N::Int)
     return foldl(kron,e_ops)
 end
 
-## todo make this inplace function
+# """
+# `_extend_apply(state::SparseVector, op::QuantumOps) -> SparseVector`
+
+# Applies an extended quantum operation to a given quantum state.
+
+# - `state`: The quantum state vector (SparseVector) to which the operation is applied.
+# - `op`: The quantum operation (QuantumOps object) to be applied.
+
+# Returns the new state vector after applying the extended operation.
+# """
+# _extend_apply(state::SparseVector,op::QuantumOps)=_extend_op(op,get_N(state))*state
+
 """
-`_extend_apply(state::SparseVector, op::QuantumOps) -> SparseVector`
-
-Applies an extended quantum operation to a given quantum state.
-
-- `state`: The quantum state vector (SparseVector) to which the operation is applied.
-- `op`: The quantum operation (QuantumOps object) to be applied.
-
-Returns the new state vector after applying the extended operation.
-"""
-_extend_apply(state::SparseVector,op::QuantumOps)=_extend_op(op,get_N(state))*state
-
-"""
-`_extend_kraus(N::Int, op::QuantumOps) -> Vector`
+`_extend_kraus(op::QuantumOps, N::Int) -> Vector`
 
 Generates extended Kraus operators for a given quantum operation.
 
@@ -49,7 +48,7 @@ Generates extended Kraus operators for a given quantum operation.
 
 Returns a vector of Kraus operators extended to the full Hilbert space.
 """
-function _extend_kraus(N::Int,op::QuantumOps)
+function _extend_kraus(op::QuantumOps,N::Int)
 
     id = [1 0; 0 1]  # Identity
     
@@ -106,7 +105,7 @@ Modifies the state vector by applying a randomly selected Kraus operator based o
 function _apply_kraus!(state::SparseVector,op::QuantumOps)
 
     N=get_N(state)
-    ek_ops=_extend_kraus(N,op)
+    ek_ops=_extend_kraus(op,N)
 
     probs=[abs(state'*ek_op'ek_op*state) for ek_op=ek_ops]
     # println("probs=",probs)
@@ -149,7 +148,7 @@ Modifies the density matrix by applying the Kraus operators, accounting for quan
 function _apply_kraus_rho!(rho::SparseMatrixCSC,op::QuantumOps)
 
     N=get_N(rho)
-    ek_ops=_extend_kraus(N,op)
+    ek_ops=_extend_kraus(op,N)
 
     if typeof(op)==ifOp #follow-up gate applied after mid-measurement
         # println("$(op.name) measurement on qubit $(op.qubit) performed\n")
@@ -426,6 +425,8 @@ function error_mitigate_data(xdata::Vector,ydata::Vector)
     rfit = LsqFit.curve_fit(model, xdata, ydata, [.5, 1.0])
     est=rfit.param[1]
     se=LsqFit.standard_errors(rfit)[1]
-    fit_plot=(0:xdata[end],[model(x,rfit.param) for x=0:xdata[end]])
+
+    dx=(xdata[2]-xdata[1])/10
+    fit_plot=(0:dx:xdata[end],[model(x,rfit.param) for x=0:dx:xdata[end]])
     est,se,fit_plot
 end

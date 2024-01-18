@@ -219,10 +219,10 @@ function Op(name::String,qubit::Int,noise::Union{QuantumChannel,Bool})
     end
 end
 
-name_with_phase_bool(name::String)=name ∈ ["P","RX","RY","RZ","CP"]
+_name_with_phase_bool(name::String)=name ∈ ["P","RX","RY","RZ","CP"]
 
-Op(namePhase::Vector,qubit::Int)=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,false) : throw("$(namePhase[1]) does not need a parameter")
-Op(namePhase::Vector,qubit::Int,noise::QuantumChannel)=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,noise) : throw("$(namePhase[1]) does not need a parameter")
+# Op(namePhase::Vector,qubit::Int)=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,false) : throw("$(namePhase[1]) does not need a parameter")
+# Op(namePhase::Vector,qubit::Int,noise::QuantumChannel)=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,noise) : throw("$(namePhase[1]) does not need a parameter")
 
 
 function Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})
@@ -252,8 +252,8 @@ Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int)=Op(name,gate,qubit,ta
 Op(name::String,qubit::Int,target_qubit::Int)=Op(name,gates2(name),qubit,target_qubit,false)
 Op(name::String,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})=Op(name,gates2(name),qubit,target_qubit,noise)
 
-Op(namePhase::Vector,qubit::Int,target_qubit::Int)=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates2(namePhase[1],namePhase[2]),qubit,target_qubit,false) : throw("gate does not need a parameter")
-Op(namePhase::Vector,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})=name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates2(namePhase[1],namePhase[2]),qubit,target_qubit,noise) : throw("gate does not need a parameter")
+# Op(namePhase::Vector,qubit::Int,target_qubit::Int)=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates2(namePhase[1],namePhase[2]),qubit,target_qubit,false) : throw("gate does not need a parameter")
+# Op(namePhase::Vector,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates2(namePhase[1],namePhase[2]),qubit,target_qubit,noise) : throw("gate does not need a parameter")
 
 ##========== Struct ==========
 

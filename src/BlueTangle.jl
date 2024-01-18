@@ -226,7 +226,7 @@ Calculate the expectation value for quantum states or density matrices given an 
 # Returns
 - The expectation value as a `Float64` or a vector of `Float64` for multiple qubits.
 """
-get_expect(state::SparseVector,op::QuantumOps)=real(state'*_extend_apply(state,op))
+get_expect(state::SparseVector,op::QuantumOps)=real(state'*_extend_op(op,get_N(state))*state)
 get_expect(rho::SparseMatrixCSC,op::QuantumOps)=real(tr(rho*_extend_op(op,get_N(rho))))
 
 get_expect(state::SparseVector,op_str::String,qubit::Int)=real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state)
@@ -320,7 +320,8 @@ function apply_op!(state::SparseVector,op::QuantumOps)
 
     end
 
-    state[:]=_extend_apply(state,op)
+    # state[:]=_extend_apply(state,op)
+    state[:]=_extend_op(op,get_N(state))*state
 
     if op.noise!=false #if measurement then it applies measurement `channel`
         _apply_kraus!(state,op)
@@ -734,3 +735,5 @@ end
 
 end
 
+
+#todo parse following ops = ["H 1", "CNOT 1 2"]
