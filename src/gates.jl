@@ -15,7 +15,7 @@ This includes:
 - Projectors (`proj0` for |0><0|, `proj1` for |1><1|)
 - Controlled gates such as `CX` (CNOT), `CNOT` (an alias for CX), and `CZ`
 - The `SWAP`, `iSWAP`, `fSWAP` gate
-- The `ECR` gate
+- The `ECR`, `SYC` gate
 
 Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `SYC`, `CZ`, and `SWAP`, `iSWAP`, `fSWAP` are represented as 4x4 matrices.
 """
@@ -67,7 +67,7 @@ end
 """
 `random_gate_2(N::Int) -> Op`
 
-Generates a random two-qubit gate operation.
+Generates a random two-qubit gate operation from ["CX","CZ","CP","GIVENS","FSIM1","SWAP","iSWAP","fSWAP","SYC","ECR"]
 
 - `N`: Total number of qubits in the system.
 
@@ -319,6 +319,8 @@ Constructs a matrix representation of a two-qubit gate based on the gate name an
 - `param`: Parameters for the gate, if applicable.
 
 Returns a 4x4 matrix representing the specified two-qubit gate.
+
+Example gates: ["CX","CZ","CP","GIVENS","FSIM1","SWAP","iSWAP","fSWAP","SYC","ECR"]
 """
 function gates2(op_name::String, param...)
 
