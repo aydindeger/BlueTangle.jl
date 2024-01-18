@@ -76,13 +76,13 @@ Returns an `Op` object representing the randomly generated two-qubit gate.
 function random_gate_2(N)## N is total qubit number
     
     lambda=round(rand(),digits=2)
-    name=rand(["CX","CZ","CP","GIVENS","FSIM","SWAP","iSWAP","fSWAP","SYC","ECR"])
+    name=rand(["CX","CZ","CP","GIVENS","FSIM1","SWAP","iSWAP","fSWAP","SYC","ECR"])
 
     if name=="CP"
         name_return="$(name)($(lambda)π)"
     elseif name=="GIVENS"
         name_return="$(name)($(lambda)π)"
-    elseif name=="FSIM"
+    elseif name=="FSIM1"
         name_return="$(name)($(lambda)π)"
     else
         name_return=name
@@ -121,7 +121,7 @@ Create a sequence of random quantum gate operations, with optional mid-circuit m
 - `Vector{QuantumOps}`: A vector of randomly chosen quantum operations (`QuantumOps`), each representing a gate or a measurement operation.
 
 # Description
-This function creates a vector of quantum operations, where each operation is either a randomly chosen gate from the set {"X", "Y", "Z", "H", "S", "CX","CZ","CP","GIVENS","FSIM","SWAP","iSWAP","fSWAP","SYC","ECR"} or a measurement operation, based on `measure_prob`. 
+This function creates a vector of quantum operations, where each operation is either a randomly chosen gate from the set {"X", "Y", "Z", "H", "S", "CX","CZ","CP","GIVENS","FSIM1","SWAP","iSWAP","fSWAP","SYC","ECR"} or a measurement operation, based on `measure_prob`. 
 
 # Example
 ```julia
@@ -332,7 +332,7 @@ function gates2(op_name::String, param...)
     # cz=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1]
     cp(lambda)=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(1im*lambda)]
     GIVENS(theta) = [1 0 0 0; 0 cos(theta) -sin(theta) 0;0 sin(theta) cos(theta) 0;0 0 0 1]
-    FSIM(theta) = [1 0 0 0; 0 cos(theta) -im*sin(theta) 0;0 -im*sin(theta) cos(theta) 0;0 0 0 1]
+    FSIM1(theta) = [1 0 0 0; 0 cos(theta) -im*sin(theta) 0;0 -im*sin(theta) cos(theta) 0;0 0 0 1]
     # swap=[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1]
 
     if uppercase_name == "CX" || uppercase_name == "CNOT"
@@ -353,8 +353,8 @@ function gates2(op_name::String, param...)
        return cp(param[1])
     elseif uppercase_name == "GIVENS" && length(param)==1
         return GIVENS(param[1])
-    elseif uppercase_name == "FSIM" && length(param)==1
-        return FSIM(param[1])
+    elseif uppercase_name == "FSIM1" && length(param)==1 #one parameter fsim gate.
+        return FSIM1(param[1])
     else
         throw("Two-qubit gate $(op_name) not found")
     end
