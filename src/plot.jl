@@ -24,7 +24,7 @@ Plots the outcome probabilities for quantum measurements.
 
 Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
 """
-function plot_measurement(mVector::Vector{Measurement},labels=Vector{String}=[""])
+function plot_measurement(mVector::Vector{Measurement},labels::Vector{String}=[""])
 
     if length(mVector)>5
         throw("You can only plot five measurements.")

@@ -252,7 +252,7 @@ This section introduces the concept and implementation of conditional mid-measur
 The [`ifOp`](@ref) function enables conditional mid-measurements. For instance, consider a mid-measurement in the X basis for the first qubit, followed by conditional operations:
 
 ```julia
-mid_measurement = ifOp("MX", 1, gate.H, gate.Z)
+mid_measurement = ifOp("MX", 1, "H", "Z")
 ops = [Op("X", 1), mid_measurement, Op("CNOT", 1, 2), Op("CNOT", 2, 3)]
 ```
 
@@ -262,11 +262,11 @@ Let's break down the example to understand it better:
    - The `ifOp` function is used to apply different quantum operations conditionally, depending on the outcome of a mid-circuit measurement.
 
 **Setting Up a Conditional Operation:**
-   - In the example, `mid_measurement = ifOp("MX", 1, gate.H, gate.Z)` defines a conditional operation.
+   - In the example, `mid_measurement = ifOp("MX", 1, "H", "Z")` defines a conditional operation.
    - `"MX"` specifies the measurement basis (here, the X basis).
    - The number `1` indicates that the measurement is performed on the first qubit.
-   - `gate.H` (Hadamard gate) and `gate.Z` (Z gate) are the conditional operations.
-   - The function is set up so that if the measurement result of the first qubit in the X basis is `0`, the Hadamard gate (`gate.H`) is applied. If the result is `1`, the Z gate (`gate.Z`) is applied.
+   - `H` (Hadamard gate) and `Z` (Z gate) are the conditional operations.
+   - The function is set up so that if the measurement result of the first qubit in the X basis is `0`, the Hadamard gate (`H`) is applied. If the result is `1`, the Z gate (`Z`) is applied.
 
 **Sequence of Operations:**
    - The operations sequence is given by `ops = [Op("X", 1), mid_measurement, Op("CNOT", 1, 2), Op("CNOT", 2, 3)]`.
@@ -315,7 +315,7 @@ Alternatively, we can manually simulate the same process using a quantum simulat
 ```julia
 state = state_vector_create([0, 0, 0]) # Initial state for N=3
 apply_op!(state, Op("X", 1)) # Apply X on qubit 1
-apply_op!(state, ifOp("MX", 1, gate.H, gate.Z)) # Measure qubit 1 in X basis. Apply H if result is 0, Z if 1.
+apply_op!(state, ifOp("MX", 1, "H", "Z")) # Measure qubit 1 in X basis. Apply H if result is 0, Z if 1.
 apply_op!(state, Op("CNOT", 1, 2)) # Apply CNOT on qubit 1 and 2
 apply_op!(state, Op("CNOT", 2, 3)) # Apply CNOT on qubit 2 and 3
 state # Final result: either GHZ state or |111> state.

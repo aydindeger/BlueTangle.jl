@@ -163,13 +163,18 @@ struct ifOp <: QuantumOps
     name::String
     gate::Matrix
     qubit::Int
-    if01::Tuple{Matrix,Matrix}
+    if01::Tuple{Vector{Op},Vector{Op}}
     noise::QuantumChannel
 
-    ifOp(name::String,qubit::Int,if01::Tuple{Matrix,Matrix}) = new(1, name, gates1(name), qubit, if01, _is_it_measurement(name) ?  Noise1(name,0.0) : throw("select MX or MY or MZ or MR basis."))
+    ifOp(name::String,qubit::Int,if01::Tuple{Vector{Op},Vector{Op}}) = new(1, name, gates1(name), qubit, if01, _is_it_measurement(name) ?  Noise1(name,0.0) : throw("select MX or MY or MZ or MR basis."))
     ifOp(name::String,qubit::Int) = ifOp(name,qubit,(gate.I,gate.I))
-    ifOp(name::String,qubit::Int,if0::Matrix,if1::Matrix)=ifOp(name,qubit,(if0,if1))
+    ifOp(name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op}) = ifOp(name,qubit,(if0,if1))
+    ifOp(name::String,qubit::Int,if0::Op,if1::Op) = ifOp(name,qubit,([if0],[if1]))
 
+    ifOp(name::String,qubit::Int,if0::Op,if1::Vector{Op}) = ifOp(name,qubit,([if0],if1))
+    ifOp(name::String,qubit::Int,if0::Vector{Op},if1::Op) = ifOp(name,qubit,(if0,[if1]))
+
+    ifOp(name::String,qubit::Int,if0::String,if1::String) = ifOp(name,qubit,([Op(if0,qubit)],[Op(if1,qubit)]))
 end
 
 function Op(name::String,gate::Matrix,qubit::Int,noise::Union{QuantumChannel, Bool})

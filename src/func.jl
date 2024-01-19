@@ -119,20 +119,20 @@ function _apply_kraus!(state::SparseVector,op::QuantumOps)
         state[:]=kraus*state/normalization
 
         if typeof(op)==ifOp #follow-up gate applied
-            ifgate=op.if01[bit]
+            ifgates=op.if01[bit]
             # println("$(op.name) measurement on qubit $(op.qubit) resulted in |$(bit-1)>\n$(ifgate) applied)\n")
-            state[:]=foldl(kron,[x==op.qubit ? sparse(ifgate) : sparse(gate.I) for x=1:N])*state ##extend apply
+            # state[:]=foldl(kron,
+            
+            for ifop=ifgates
+                apply_op!(state,ifop)#[x==op.qubit ? sparse(ifgate) : sparse(gate.I) for x=1:N])*state ##extend apply
+            end
+        
         end
-
-        # if !(state ≈ state_n)
-        #     throw("error with kraus normalization")
-        # end
 
     else
         throw("kraus operator probability error")
     end
     
-    # return ek_ops
 end
 
 """
