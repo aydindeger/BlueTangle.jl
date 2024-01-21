@@ -819,8 +819,7 @@ end
 
 We can then conduct a similar analysis for the measurement results obtained from the manually noise-amplified circuits.
 
-
-### 14) Error Mitigation: Measurement Errors
+## 14) Error Mitigation: Measurement Errors
 
 ### Overview
 Measurement errors are a significant source of inaccuracies in quantum simulations, especially in NISQ devices. Mitigating these errors is crucial for obtaining reliable results. The technique described in the [Qiskit documentation](https://qiskit.org/documentation/stable/0.26/tutorials/noise/3_measurement_error_mitigation.html) involves creating a calibration matrix from a set of calibration circuits and then using this matrix to adjust the results of quantum measurements. The following example demonstrates how to implement this technique with BlueTangle.jl package.
