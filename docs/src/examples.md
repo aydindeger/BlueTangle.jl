@@ -323,7 +323,85 @@ state # Final result: either GHZ state or |111> state.
 
 This manual simulation helps illustrate the probabilistic nature of quantum circuits involving mid-measurements and demonstrates the creation of complex quantum states, such as the GHZ state.
 
-## 7) Random Quantum Circuits
+
+## 7) Reset Operation on a Qubit
+
+### Overview
+
+In this example, we demonstrate how to implement a reset operation on a qubit. This operation involves measuring a qubit and, depending on the outcome, applying a corrective operation. Specifically, if the qubit is measured and found to be in the |1⟩ state, an X gate is applied to bring it back to the |0⟩ state. We'll illustrate this concept by creating a Bell state and then resetting the first qubit.
+
+### Example 1: Reset via measurement
+
+First, we start by preparing a Bell state. A Bell state is a maximally entangled quantum state of two qubits. It represents a perfect example of quantum entanglement and is foundational in quantum computing and quantum information theory.
+
+```julia
+# Number of qubits
+N = 2
+
+# Initialising the state vector
+state = state_vector_create(zeros(N))
+
+# Applying Hadamard gate to the first qubit
+apply_op!(state, Op("H", 1))
+
+# Applying CNOT gate with the first qubit as control and the second as target
+apply_op!(state, Op("CX", 1, 2))
+
+# Show the state of the qubits
+display(state)
+```
+
+At this point, the system is in a Bell state, which is an equal superposition of |00⟩ and |11⟩ states.
+
+Now, we'll implement the reset operation on the first qubit. This operation involves measuring the first qubit. If the measurement result is |1⟩, we apply the X gate to flip it back to |0⟩. 
+
+```julia
+# Reset operation on the first qubit
+op = Op("RES", 1)
+apply_op!(state, op)
+```
+
+### Understanding the Outcome
+
+After the reset operation, the state of the qubits can be either |00⟩ or |01⟩. The outcome depends on the state of the first qubit at the time of measurement. If the first qubit was in the |0⟩ state (which happens with a 50% probability due to the Bell state's nature), the reset operation does nothing. However, if the first qubit was in the |1⟩ state (again, a 50% chance), the X gate flips it to |0⟩. 
+
+Since the second qubit is entangled with the first, its state is correlated. Therefore, measuring the first qubit and applying the reset operation affects the overall state of the two-qubit system. 
+
+### Example 2: Reset via noise
+
+In quantum computing, noise is an unavoidable aspect of physical systems. Amplitude damping noise, in particular, is a type of quantum noise that models energy dissipation in a qubit, the process of a qubit transitioning from the excited state (|1⟩) to the ground state (|0⟩). This kind of noise can be used to simulate the process of a qubit losing its energy and settling into its ground state (|0⟩). In the context of our example, we can use amplitude damping noise to achieve a reset operation.
+
+Here's how it is done in code:
+
+```julia
+# Number of qubits
+N = 2
+
+# Initialising the state vector
+state = state_vector_create(zeros(N))
+
+# Applying Hadamard gate to the first qubit
+apply_op!(state, Op("H", 1))
+
+# Applying CNOT gate with the first qubit as control and the second as target
+apply_op!(state, Op("CX", 1, 2))
+
+# Show the state of the qubits
+display(state)
+
+# Create amplitude damping noise with a damping factor of 1.0 (complete damping)
+n1 = Noise1("amplitude_damping", 1.0)
+
+# Apply the identity operation with amplitude damping noise
+op = Op("I", 1, n1)
+apply_op!(state, op)
+
+display(state)
+```
+
+After applying the amplitude damping noise, you should observe that the state vector shows the first qubit in the |0⟩ state, successfully simulating a reset. This approach illustrates an alternative way of resetting a qubit in a quantum computing simulation, leveraging the effects of quantum noise.
+
+## 8) Random Quantum Circuits
 
 ### Overview
 In this section, we explore the generation of random quantum circuits, a powerful tool for various quantum computing simulations. The circuits can consist of Clifford gates, a mix of Clifford and non-Clifford gates, and optional mid-circuit measurements in specified bases.
@@ -368,7 +446,7 @@ plot_circuit(random_circuit)
 
 This approach to creating and visualizing random quantum circuits showcases the versatility and capabilities of the package in simulating various quantum computing scenarios.
 
-## 8) Classical Shadow Experiment
+## 9) Classical Shadow Experiment
 
 ### Overview
 Classical shadow is a novel technique in quantum computing for efficiently estimating properties of quantum states. In this example, we demonstrate how to use the [`classical_shadow`](@ref) function to construct a density matrix from the classical shadow representation of a quantum circuit. The technique involves running a series of quantum measurements and using the outcomes to reconstruct an approximation of the quantum state.
@@ -465,7 +543,7 @@ println("Entanglement Spectrum from Classical Shadow:", ent_spectrum_shadow)
 ### Conclusion
 This section demonstrates practical ways to calculate entanglement entropy and spectrum, whether from direct state vector manipulation, standard quantum circuit density matrices, or density matrices derived from classical shadows. When working with noisy or imperfect quantum systems, the calculated entanglement entropy and spectrum should be interpreted with care.
 
-## 10) Time Evolution of the Ising Hamiltonian
+## 11) Time Evolution of the Ising Hamiltonian
 
 ### Overview
 In this section, we will explore how to simulate the time evolution of the Ising Hamiltonian model using the Trotterization technique. This process involves creating a quantum circuit that approximates the dynamics of the Ising model over time, followed by performing measurements to analyze the resulting quantum state.
@@ -516,7 +594,7 @@ This example demonstrates the simulation of the time evolution of the Ising Hami
 - The choice of the number of qubits (`num_qubits`) and samples (`num_samples`) can be tailored to computational resources and desired precision.
 - Circuit visualization aids in understanding the Trotterization process and the layout of the quantum operations.
 
-## 11) Error Mitigation: Pauli Twirling
+## 12) Error Mitigation: Pauli Twirling
 
 ### Overview
 In the era of NISQ quantum simulations implementing effective error mitigation strategies is essential. Pauli Twirling is a common technique that converts coherent errors into stochastic ones. However, it's important to note that while Pauli Twirling is effective in addressing certain errors, it does not completely remove existing biases in the simulation. Moreover, the process of twirling itself can be noisy, reflecting a more realistic scenario of quantum operations but also complicating the error landscape.
@@ -635,7 +713,7 @@ plot_measurement([measurement_exact, measurement_noisy, measurement_twirl])
 
 The resulting plots provide a visual comparison of the measurement outcomes across the three scenarios: exact, noisy, and noisy with Pauli Twirling. This helps to evaluate the effectiveness of error mitigation strategies in NISQ quantum simulations. It's important to recognize the trade-offs involved: while twirling can reduce the impact of coherent errors, it may introduce new noise sources and biases, which must be carefully considered in the analysis of the simulation results.
 
-## 12) Error mitigation: Zero-Noise Extrapolation
+## 13) Error mitigation: Zero-Noise Extrapolation
 
 ### Overview
 Zero-Noise Extrapolation (ZNE) is a powerful technique for error mitigation in quantum simulations. This method strategically scales the noise in a quantum circuit upwards and then extrapolates back to a theoretical zero-noise scenario, thereby enhancing the precision of quantum computations. In this package, implementing ZNE is straightforward and can be activated with a simple option in the circuit compilation process, such as Options(zne=true). When this option is enabled, the compiler automatically introduces additional noise by inserting pairs of CNOT gates. Consequently, the sample function yields four distinct measurement objects, each corresponding to a different level of noise amplification.
