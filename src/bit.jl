@@ -7,9 +7,9 @@ These functions are utilities for bit manipulation and conversion in quantum com
 int2bit(a::Int,N::Int)=reverse(digits(a,base=2,pad=N))
 
 """
-`find_basis(N::Int)=int2bit.(0:2^N-1,N)`
+`show_basis(N::Int)=int2bit.(0:2^N-1,N)`
 """
-find_basis(N::Int)=int2bit.(0:2^N-1,N)
+show_basis(N::Int)=int2bit.(0:2^N-1,N)
 
 """
 `bit2label(bit_rep::Array) -> Int`
@@ -29,6 +29,8 @@ Converts a binary representation (string) to an integer.
 """
 str2label(str_rep)=[parse(Int, b, base=2) for b in str_rep]
 
+
+#todo make this more efficient
 """
 `bit_to(bit_basis::Vector, N::Int, sym::Symbol) -> Any`
 
@@ -73,6 +75,7 @@ function _b2v(x)
     end
 end
 
+#todo make this more efficient
 """
 `state_vector_create(list_of_qubits::Vector) -> SparseVector`
 

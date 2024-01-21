@@ -2,10 +2,10 @@ module BlueTangle
 
 include("all.jl")
 
-export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, find_basis
+export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, show_basis
 export QuantumOps,Op,ifOp,Measurement,QuantumChannel,Circuit,Options
 export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,error_mitigate_data
-export plot_measurement, plot_circuit
+export plot_measurement, plot_circuit, savefigure
 export entanglement_entropy,clasical_shadow
 export trotter_ising
 
@@ -325,7 +325,6 @@ function apply_op!(state::SparseVector,op::QuantumOps)
         _apply_kraus!(state,op)
     end
 
-
 end
 
 """
@@ -452,6 +451,7 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
 
     for op in ops
 
+        ## stats
         if op.name=="CX" || op.name=="CNOT"
             cx_count+=1
         end
@@ -463,8 +463,10 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
         if _is_it_measurement(op.name)
             mid_measurement_count+=1
         end
+        ##
 
-        if (op.q==1 && options.noise1==false) || (op.q==2 && options.noise2==false) #overall circuit noise
+        #overall circuit noise
+        if (op.q==1 && options.noise1==false) || (op.q==2 && options.noise2==false)
 
             op_n=op #new_operator
 
@@ -484,7 +486,8 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
 
         end
 
-        if op_n.q==2 #two qubit - check locality
+        #two qubit - check locality add swaps
+        if op_n.q==2 
             distance=abs(op_n.qubit - op_n.target_qubit)
             if distance > 1 #not local
                 println("Nonlocal operation warning! Swap will be inserted.")
@@ -534,6 +537,24 @@ function sample(circuit::Circuit,number_of_experiment::Int)
 
 end
 
+function _measurement_mitigate_inv_matrix(N::Int,final_measurement_error::QuantumChannel)
+    mat=[]
+    for a=0:2^N-1
+        # state=state_vector_create(int2bit(a,N))
+
+        state=spzeros(2^N)
+        state[a+1]=1
+
+        rho0=state*state'
+        for i=1:N
+            op=Op("MZ",gate.I,i,final_measurement_error)
+            apply_op_rho!(rho0,op)
+        end
+        push!(mat,Vector(diag(rho0)))
+    end
+    return inv(hcat(mat...))
+end
+
 function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
 
     all_sample=[]
@@ -561,8 +582,12 @@ function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
     int_basis=int_basis_unsorted[sorted_pos]
     avg_prob=avg_prob_unsorted[sorted_pos]
 
-    fock=int2bit.(int_basis,N)
+    if circuit.options.measurement_mitigate==true && circuit.options.final_measurement_error != false
+        println("measurement error mitigation applied")
+        avg_prob=_measurement_mitigate_inv_matrix(N,circuit.options.final_measurement_error)*avg_prob
+    end
 
+    fock=int2bit.(int_basis,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
     mag_moments=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:10]
 

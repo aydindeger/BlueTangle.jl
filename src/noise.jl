@@ -111,7 +111,7 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
         
     elseif model == "phase_flip" || model == "bit_flip" || model == "bit_phase_flip"
         E₀ = sqrt(1 - p) * id
-        E₁ = sqrt(p) * (model == :phase_flip ? Z : (model == :bit_flip ? X : Y))
+        E₁ = sqrt(p) * (model == :phase_flip ? Z : (model == "bit_flip" ? X : Y))
         ops=[E₀, E₁]
         
     elseif model == "depolarizing_amp"#|| model == "depolarizing_qiskit"

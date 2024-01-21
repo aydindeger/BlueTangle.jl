@@ -330,24 +330,24 @@ function _final_measurement!(state::SparseVector,options::Options)
 
     number_of_qubits=get_N(state)
 
-    # measurement_error or random measurement
+    # final measurement_error or random measurement
     if options.measurement_basis=="Z"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(Z)",gate.I,qubit,options.measurement_error))
+            apply_op!(state,Op("M(Z)",gate.I,qubit,options.final_measurement_error))#this construction reserved for internal use only!
         end
     elseif options.measurement_basis=="X"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(X)",gate.H,qubit,options.measurement_error)) #no measurement error
+            apply_op!(state,Op("M(X)",gate.H,qubit,options.final_measurement_error)) #no measurement error
         end
     elseif options.measurement_basis=="Y"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(Y)",gate.HSp,qubit,options.measurement_error)) #no measurement error
+            apply_op!(state,Op("M(Y)",gate.HSp,qubit,options.final_measurement_error)) #no measurement error
         end
     elseif options.measurement_basis=="R"
             # random measurement basis
         for qubit=1:number_of_qubits
             rOp=rand(1:3)
-            apply_op!(state,Op(["MX","MY","MZ"][rOp],qubit)) #random measurement
+            apply_op!(state,Op(["MX","MY","MZ"][rOp],qubit,options.final_measurement_error)) #random measurement
         end
     else
         throw("measurement_basis error!")

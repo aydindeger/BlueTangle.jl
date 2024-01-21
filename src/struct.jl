@@ -201,9 +201,8 @@ function Op(name::String,gate::Matrix,qubit::Int)
     return Op(name,gate,qubit,false)
 end
 
-"""
-todo define function for namer
-"""
+
+#here is the function handling measurement and reset operation
 function Op(name::String,qubit::Int)
     if _is_it_measurement(name)
         born=Noise1(name,0.0) #note that this is a born measurement `channel`
@@ -219,7 +218,7 @@ end
 function Op(name::String,qubit::Int,noise::Union{QuantumChannel,Bool})
     if _is_it_measurement(name)
         println("you can't define error with mid-measurements")
-        println("we fixed it no worries!")
+        println("it is fixed, no worries")
         Op(name,qubit)
     else
         Op(name,gates1(name),qubit,noise) #if measurement then ignore error
@@ -334,13 +333,13 @@ end
 ##========== Circuit ==========
 
 """
-`Options(circuit_name::String, measurement_basis::String, measurement_error::QuantumChannel, noise1::QuantumChannel, noise2::QuantumChannel, twirl::Bool, swap_error::Bool, density_matrix::Bool)`
+`Options(circuit_name::String, measurement_basis::String, final_measurement_error::QuantumChannel, noise1::QuantumChannel, noise2::QuantumChannel, twirl::Bool, swap_error::Bool, density_matrix::Bool)`
 
 Represents configuration options for a quantum circuit.
 
 - `circuit_name`: Name of the circuit.
 - `measurement_basis`: Measurement basis used in the circuit.
-- `measurement_error`: Noise model for measurement error.
+- `final_measurement_error`: Noise model for final measurement error.
 - `noise1`: Noise model for single-qubit operations.
 - `noise2`: Noise model for two-qubit operations.
 - `twirl`: Boolean flag for twirling operations.
@@ -352,11 +351,12 @@ Constructs an Options object with specified settings for a quantum circuit.
 struct Options
     circuit_name::String
     measurement_basis::String
-    measurement_error::Union{QuantumChannel, Bool}
+    final_measurement_error::Union{QuantumChannel, Bool}
     noise1::Union{QuantumChannel,Bool}
     noise2::Union{QuantumChannel,Bool}
     twirl::Bool
     zne::Bool
+    measurement_mitigate::Bool
     swap_error::Bool
     density_matrix::Bool
 
@@ -364,14 +364,15 @@ struct Options
     Options(;
         circuit_name="circuit", 
         measurement_basis="Z",
-        measurement_error=false,
+        final_measurement_error=false,
         noise1=false, 
         noise2=false,
         twirl=false, 
         zne=false,
+        measurement_mitigate=false,
         swap_error=false,
         density_matrix=false
-    ) = new(circuit_name, uppercase(measurement_basis), measurement_error, noise1, noise2, twirl, zne, swap_error, density_matrix)
+    ) = new(circuit_name, uppercase(measurement_basis), final_measurement_error, noise1, noise2, twirl, zne, measurement_mitigate, swap_error, density_matrix)
 
     Options()
 end

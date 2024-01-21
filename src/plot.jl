@@ -226,3 +226,10 @@ function plot_circuit(ops::Vector{QuantumOps};list_of_initial_qubits::Vector{Int
 
     # return fig
 end
+
+
+"""
+`savefigure(name::String)`
+saves figure
+"""
+savefigure(name::String)=savefig(name)

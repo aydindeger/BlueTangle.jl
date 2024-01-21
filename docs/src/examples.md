@@ -818,3 +818,41 @@ end
 ```
 
 We can then conduct a similar analysis for the measurement results obtained from the manually noise-amplified circuits.
+
+
+### 14) Error Mitigation: Measurement Errors
+
+### Overview
+Measurement errors are a significant source of inaccuracies in quantum simulations, especially in NISQ devices. Mitigating these errors is crucial for obtaining reliable results. The technique described in the [Qiskit documentation](https://qiskit.org/documentation/stable/0.26/tutorials/noise/3_measurement_error_mitigation.html) involves creating a calibration matrix from a set of calibration circuits and then using this matrix to adjust the results of quantum measurements. The following example demonstrates how to implement this technique with BlueTangle.jl package.
+
+### Example: Mitigating Measurement Errors
+We will create a quantum circuit with measurement errors, apply a mitigation strategy, and then compare the results with and without mitigation.
+
+```julia
+# Defining the operations and the measurement error
+ops = [Op("H", 1), Op("CNOT", 1, 2)]
+measurement_err = Noise1("bit_flip", 0.1) #this can be any other noise model as well.
+
+# Setting up options for circuits with and without error mitigation
+opt = Options(final_measurement_error=measurement_err)
+
+opt_m = Options(final_measurement_error=measurement_err, measurement_mitigate=true)
+
+# Compiling the circuits
+ce = compile(ops) # Exact circuit with no measurement error
+cn = compile(ops, opt) # Circuit with measurement errors
+cm = compile(ops, opt_m) # Circuit with measurement errors and mitigation
+
+# Performing measurements
+shots = 1000
+me = sample(ce, shots)
+mn = sample(cn, shots)
+mm = sample(cm, shots)
+
+# Plotting the measurement results
+plot_measurement([me,mn,mm],["no error","measurement error","error mitigated measurement"])
+```
+
+![](assets/figs/measurement_mitigate.png)
+
+This example illustrates how measurement error mitigation can be incorporated into quantum simulations to improve the accuracy of the results.
