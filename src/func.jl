@@ -151,9 +151,27 @@ function _apply_kraus_rho!(rho::SparseMatrixCSC,op::QuantumOps)
     ek_ops=_extend_kraus(op,N)
 
     if typeof(op)==ifOp #follow-up gate applied after mid-measurement
+
         # println("$(op.name) measurement on qubit $(op.qubit) performed\n")
-        after_ops=[foldl(kron,[x==op.qubit ? sparse(op.if01[i]) : sparse(gate.I) for x=1:N]) for i=1:2]
-        rho[:]=sum(after_ops[i] * ek_ops[i] * rho * ek_ops[i]' * after_ops[i]' for i=1:2)
+
+        # the following code only works for the first conditional operation.
+        # after_ops=[foldl(kron,[x==op.qubit ? sparse(op.if01[i][1].gate) : sparse(gate.I) for x=1:N]) for i=1:2]
+        # rho[:]=sum(after_ops[i] * ek_ops[i] * rho * ek_ops[i]' * after_ops[i]' for i=1:2)
+
+        #if result is 0
+        rho0 = ek_ops[1] * rho * ek_ops[1]'
+        for ifop=op.if01[1]
+            apply_op_rho!(rho0,ifop)
+        end
+
+        #if result is 2
+        rho[:] = ek_ops[2] * rho * ek_ops[2]'
+        for ifop=op.if01[2]
+            apply_op_rho!(rho,ifop)
+        end
+
+        rho[:] = rho+rho0
+
     else
         rho[:]=sum(ek * rho * ek' for ek=ek_ops)
     end
@@ -403,26 +421,24 @@ function entanglement_entropy(rho::SparseMatrixCSC)
     return sum(-spec.*log.(spec)),-log.(spec) 
 end
 
-
 ### linear fit
 
+"""
+`error_mitigate_data(xdata::Vector, ydata::Vector)`
 
-# """
-# `error_mitigate_data(xdata::Vector, ydata::Vector)`
+Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
 
-# Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
 
-# This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
+# Arguments
+- `xdata::Vector`: The independent variable data points.
+- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
 
-# # Arguments
-# - `xdata::Vector`: The independent variable data points.
-# - `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
-
-# # Returns
-# - `est`: The estimated intercept from the linear fit.
-# - `se`: The standard error of the estimated intercept.
-# - `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
-# """
+# Returns
+- `est`: The estimated intercept from the linear fit.
+- `se`: The standard error of the estimated intercept.
+- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
+"""
 function error_mitigate_data(xdata::Vector,ydata::Vector)
     a, b, se_a, se_b = linear_fit(xdata, ydata)
     est=round(a,sigdigits=3)
