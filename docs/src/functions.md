@@ -41,7 +41,7 @@ classical_shadow
 
 ```@docs
 get_N
-find_basis
+show_basis
 expand_multi_op
 string_to_matrix
 state_vector_create
