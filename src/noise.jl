@@ -146,6 +146,7 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
     #measurements as a quantum channel for classical_shadow
     elseif _is_it_measurement(model)
         ops=[gate.proj0, gate.proj1]#these are projectors
+        
     else
         throw(ArgumentError("Unknown quantum error model"))
     end

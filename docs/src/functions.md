@@ -41,11 +41,13 @@ classical_shadow
 
 ```@docs
 get_N
+find_basis
 expand_multi_op
 string_to_matrix
 state_vector_create
 apply_op!
 apply_op_rho!
+linear_fit
 ```
 
 ## Object types

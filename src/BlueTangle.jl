@@ -2,9 +2,9 @@ module BlueTangle
 
 include("all.jl")
 
-export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho
+export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, find_basis
 export QuantumOps,Op,ifOp,Measurement,QuantumChannel,Circuit,Options
-export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,error_mitigate_data
+export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,error_mitigate_data
 export plot_measurement, plot_circuit
 export entanglement_entropy,clasical_shadow
 export trotter_ising
@@ -317,15 +317,14 @@ function apply_op!(state::SparseVector,op::QuantumOps)
         else
             op=Op(["MX","MY","MZ"][rOp],op.qubit)
         end
-
     end
 
-    # state[:]=_extend_apply(state,op)
     state[:]=_extend_op(op,get_N(state))*state
 
     if op.noise!=false #if measurement then it applies measurement `channel`
         _apply_kraus!(state,op)
     end
+
 
 end
 

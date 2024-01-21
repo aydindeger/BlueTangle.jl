@@ -20,25 +20,26 @@ This includes:
 Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `SYC`, `CZ`, and `SWAP`, `iSWAP`, `fSWAP` are represented as 4x4 matrices.
 """
 const gate = (
-    I = [1 0; 0 1],
-    X  = [0 1; 1 0],
-    SX  = (1/2)*[1+1im 1-1im; 1-1im 1+1im],# ==RX(pi/2)*exp(1im*pi/4)
+    I = [1. 0; 0 1],
+    X  = [0 1.; 1 0],
+    SX  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# ==RX(pi/2)*exp(1im*pi/4)
     Y  = [0 -im; im 0],
-    Z  = [1 0; 0 -1],
-    H  = (1/sqrt(2)) * [1 1; 1 -1],
-    S  =[1 0; 0 im],
-    T  = [1 0; 0 exp(im * π / 4)],
-    HSp = (1/sqrt(2)) * [1+0im  0-1im;1+0im  0+1im],
-    proj0=[1 0; 0 0], #|0><0> #projector
-    proj1=[0 0; 0 1], #|1><1> #projector
-    CX = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
-    CNOT = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
-    CZ = [1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
-    SWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1],
-    iSWAP =[1 0 0 0; 0 0 im 0; 0 im 0 0; 0 0 0 1],
-    fSWAP =[1 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 -1],
-    SYC =[1 0 0 0; 0 0 -im 0; 0 -im 0 0; 0 0 0 exp(-im*pi/6)],#Sycamore
-    ECR = (1/sqrt(2)) * [0 + 0im 1 + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2)
+    Z  = [1.0 0; 0 -1],
+    H  = (1/sqrt(2)) * [1.0 1; 1 -1],
+    S  = [1. 0; 0 im],
+    T  = [1. 0; 0 exp(im * π / 4)],
+    HSp = (1/sqrt(2)) * [1.0+0im  0-1im;1+0im  0+1im],
+    # HS = (1/sqrt(2)) * [1.0  1;1im  -1im],
+    proj0=[1.0 0; 0 0], #|0><0> #projector
+    proj1=[0 0; 0 1.0], #|1><1> #projector
+    CX = [1. 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
+    CNOT = [1. 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
+    CZ = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
+    SWAP =[1. 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1],
+    iSWAP =[1. 0 0 0; 0 0 im 0; 0 im 0 0; 0 0 0 1],
+    fSWAP =[1. 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 -1],
+    SYC =[1. 0 0 0; 0 0 -im 0; 0 -im 0 0; 0 0 0 exp(-im*pi/6)],#Sycamore
+    ECR = (1/sqrt(2)) * [0 + 0im 1. + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2)
     )
 
 """
@@ -300,6 +301,8 @@ function gates1(op_name::String,param...)
         return gate.H
     elseif uppercase_name=="M(Y)" || uppercase_name=="MY"
         return gate.HSp
+    elseif uppercase_name=="RES"
+        return gate.I
     
     else
         if haskey(gate, Symbol(uppercase_name))

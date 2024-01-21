@@ -7,6 +7,11 @@ These functions are utilities for bit manipulation and conversion in quantum com
 int2bit(a::Int,N::Int)=reverse(digits(a,base=2,pad=N))
 
 """
+`find_basis(N::Int)=int2bit.(0:2^N-1,N)`
+"""
+find_basis(N::Int)=int2bit.(0:2^N-1,N)
+
+"""
 `bit2label(bit_rep::Array) -> Int`
 Converts a binary representation (array of bits) to an integer.
 """

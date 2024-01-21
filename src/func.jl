@@ -121,7 +121,6 @@ function _apply_kraus!(state::SparseVector,op::QuantumOps)
         if typeof(op)==ifOp #follow-up gate applied
             ifgates=op.if01[bit]
             # println("$(op.name) measurement on qubit $(op.qubit) resulted in |$(bit-1)>\n$(ifgate) applied)\n")
-            # state[:]=foldl(kron,
             
             for ifop=ifgates
                 apply_op!(state,ifop)#[x==op.qubit ? sparse(ifgate) : sparse(gate.I) for x=1:N])*state ##extend apply
@@ -130,11 +129,12 @@ function _apply_kraus!(state::SparseVector,op::QuantumOps)
         end
 
     else
-        throw("kraus operator probability error")
+        throw("kraus operator probability error ≈ $(sum(probs))")
     end
     
 end
 
+#todo fix this
 """
 `_apply_kraus_rho!(rho::SparseMatrixCSC, op::QuantumOps)`
 
@@ -403,30 +403,92 @@ function entanglement_entropy(rho::SparseMatrixCSC)
     return sum(-spec.*log.(spec)),-log.(spec) 
 end
 
-"""
-`error_mitigate_data(xdata::Vector, ydata::Vector)`
 
-Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+### linear fit
 
-This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
 
-# Arguments
-- `xdata::Vector`: The independent variable data points.
-- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
+# """
+# `error_mitigate_data(xdata::Vector, ydata::Vector)`
 
-# Returns
-- `est`: The estimated intercept from the linear fit.
-- `se`: The standard error of the estimated intercept.
-- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
-"""
+# Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+
+# This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
+
+# # Arguments
+# - `xdata::Vector`: The independent variable data points.
+# - `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
+
+# # Returns
+# - `est`: The estimated intercept from the linear fit.
+# - `se`: The standard error of the estimated intercept.
+# - `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
+# """
 function error_mitigate_data(xdata::Vector,ydata::Vector)
-    # xdata=collect(1:2:2length(ydata))
-    model(x, p) = p[1] .+ p[2] .* x
-    rfit = LsqFit.curve_fit(model, xdata, ydata, [.5, 1.0])
-    est=round(rfit.param[1],sigdigits=3)
-    se=LsqFit.standard_errors(rfit)[1]
+    a, b, se_a, se_b = linear_fit(xdata, ydata)
+    est=round(a,sigdigits=3)
 
     dx=(xdata[2]-xdata[1])/4
-    fit_plot=(0:dx:xdata[end],[model(x,rfit.param) for x=0:dx:xdata[end]])
-    est,se,fit_plot
+    fit_plot=(0:dx:xdata[end],[_linear_model(x,a,b) for x=0:dx:xdata[end]])
+    est,se_a,fit_plot
+end
+
+"""
+Simple linear model: y = a + b*x
+"""
+_linear_model(x, a, b)=a .+ b .* x
+
+"""
+`linear_fit(xdata::Vector, ydata::Vector)`
+
+Compute the coefficients a and b for the linear fit of the given data.
+
+# Arguments
+- `xdata`: Array of x values.
+- `ydata`: Array of corresponding y values.
+
+# Returns
+- `a`: Intercept of the linear fit.
+- `b`: Slope of the linear fit.
+- `se_a`: Standard error of the intercept.
+- `se_b`: Standard error of the slope.
+
+# Description
+This function fits a simple linear model (y = a + b*x) to the provided data points.
+It checks if the lengths of xdata and ydata are the same and then calculates the coefficients
+for the linear fit. Additionally, it computes the standard errors for both the slope and the intercept.
+
+The function uses the least squares method for the linear regression. The standard errors are calculated
+based on the residual sum of squares and the total sum of squares for the x values.
+"""
+function linear_fit(xdata::Vector, ydata::Vector)
+
+    n = length(xdata)
+
+    if n != length(ydata)
+        throw("xdata and ydata must have the same length")
+    end
+
+    # Calculate sums needed for the coefficients
+    sum_x = sum(xdata)
+    sum_y = sum(ydata)
+    sum_x2 = sum(xdata .* xdata)
+    sum_xy = sum(xdata .* ydata)
+
+    # Calculate coefficients
+    b = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x^2)
+    a = (sum_y - b * sum_x) / n
+
+    rss = sum((y - (a + b * x))^2 for (x, y) in zip(xdata, ydata))
+
+    # Calculate total sum of squares for x
+    x_mean = sum_x / n
+    sst_x = sum((x - x_mean)^2 for x in xdata)
+
+    # Standard Error of the Slope (SE(b))
+    se_b = sqrt(rss / (n - 2) / sst_x)
+
+    # Standard Error of the Intercept (SE(a))
+    se_a = se_b * sqrt(sum_x2 / n)
+
+    return a, b, se_a, se_b
 end

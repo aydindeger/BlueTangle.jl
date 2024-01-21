@@ -208,6 +208,8 @@ function Op(name::String,qubit::Int)
     if _is_it_measurement(name)
         born=Noise1(name,0.0) #note that this is a born measurement `channel`
         return Op(name,gates1(name),qubit,born)
+    elseif uppercase(name)=="RES"
+        return ifOp("MZ",qubit,"I","X")
     else
        return Op(name,gates1(name),qubit,false)
     end
