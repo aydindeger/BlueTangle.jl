@@ -92,4 +92,8 @@ state_vector_create(list_of_qubits::Vector)=sparse(foldl(kron,_b2v.(list_of_qubi
 
 Returns a sparse vector representing the |000...> quantum state.
 """
-init_state_create(N::Int)=spzeros(ComplexF64,2^N);state[1]=1;
+function init_state_create(N::Int)
+    state=spzeros(ComplexF64,2^N);
+    state[1]=1;
+    return state
+end
