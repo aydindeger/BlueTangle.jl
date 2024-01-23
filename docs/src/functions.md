@@ -35,6 +35,7 @@ plot_circuit
 ```@docs
 entanglement_entropy
 classical_shadow
+mag_moments_from_rho
 ```
 
 ## Other
@@ -42,9 +43,12 @@ classical_shadow
 ```@docs
 get_N
 show_basis
+hilbert
+hilbert_op
 expand_multi_op
 string_to_matrix
 state_vector_create
+init_state_create
 apply_op!
 apply_op_rho!
 linear_fit

@@ -2,11 +2,12 @@ module BlueTangle
 
 include("all.jl")
 
-export get_N, fields, sample_outcomes, state_vector_create, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, show_basis
+export get_N, fields, sample_outcomes, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, show_basis
 export QuantumOps,Op,ifOp,Measurement,QuantumChannel,Circuit,Options
+export hilbert, hilbert_op, state_vector_create, init_state_create
 export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,error_mitigate_data
 export plot_measurement, plot_circuit, savefigure
-export entanglement_entropy,clasical_shadow
+export entanglement_entropy,clasical_shadow,mag_moments_from_rho
 export trotter_ising
 
 """
@@ -226,8 +227,8 @@ Calculate the expectation value for quantum states or density matrices given an 
 # Returns
 - The expectation value as a `Float64` or a vector of `Float64` for multiple qubits.
 """
-get_expect(state::SparseVector,op::QuantumOps)=real(state'*_extend_op(op,get_N(state))*state)
-get_expect(rho::SparseMatrixCSC,op::QuantumOps)=real(tr(rho*_extend_op(op,get_N(rho))))
+get_expect(state::SparseVector,op::QuantumOps)=real(state'*hilbert_op(state,op,get_N(state)))
+get_expect(rho::SparseMatrixCSC,op::QuantumOps)=real(tr(rho*hilbert_op(op,get_N(rho))))
 
 get_expect(state::SparseVector,op_str::String,qubit::Int)=real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state)
 get_expect(rho::SparseMatrixCSC,op_str::String,qubit::Int)=real(tr(rho*expand_multi_op(op_str,[qubit],get_N(rho))))
@@ -319,7 +320,9 @@ function apply_op!(state::SparseVector,op::QuantumOps)
         end
     end
 
-    state[:]=_extend_op(op,get_N(state))*state
+    # state[:]=_extend_op(op,get_N(state))*state
+
+    state[:]=hilbert_op(state,op,get_N(state))
 
     if op.noise!=false #if measurement then it applies measurement `channel`
         _apply_kraus!(state,op)
@@ -357,7 +360,7 @@ function apply_op_rho!(rho::SparseMatrixCSC,op::QuantumOps)
     end
 
     N=get_N(rho)
-    e_op=_extend_op(op,N)
+    e_op=hilbert_op(op,N)
 
     rho[:]=e_op*rho*e_op'
 
@@ -540,7 +543,6 @@ end
 function _measurement_mitigate_inv_matrix(N::Int,final_measurement_error::QuantumChannel)
     mat=[]
     for a=0:2^N-1
-        # state=state_vector_create(int2bit(a,N))
 
         state=spzeros(2^N)
         state[a+1]=1
@@ -662,7 +664,7 @@ function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]),i
     N=circuit.stats.number_of_qubits
 
     if isempty(init_state)
-        state=state_vector_create(zeros(N))
+        state=init_state_create(N)
     else
         if N!=get_N(init_state)
             throw("number of qubits error")
@@ -718,7 +720,7 @@ Returns a density matrix representing the circuit.
 function circuit_to_rho(circuit::Circuit;id::Int=0)
 
     N=circuit.stats.number_of_qubits
-    state=state_vector_create(zeros(N))
+    state=init_state_create(N)
     rho=state*state'
 
     for gate in circuit.ops

@@ -1,5 +1,100 @@
 """
-`_extend_op(op::QuantumOps, N::Int) -> Matrix`
+`hilbert(N::Int, mat::Matrix, qubit::Int, target_qubit::Int)`
+
+Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits
+
+The gate `mat` is applied to the `qubit` and`target_qubit`. If `qubit` is greater than `target_qubit`, a controlled 
+swap is performed before applying `mat`.
+
+# Arguments
+- `N::Int`: The number of qubits in the system.
+- `mat::Matrix`: The quantum gate to be applied.
+- `qubit::Int`: The qubit to which the gate is applied.
+- `target_qubit::Int`: The target qubit to which the gate is applied.
+
+# Returns
+`SparseMatrix`: The resulting sparse matrix representation of the gate operation.
+"""
+function hilbert(N::Int,mat::Matrix,qubit::Int,target_qubit::Int)
+    id = sparse([1 0; 0 1])  # Identity
+
+    final_gate=qubit > target_qubit ? sparse(_swap_control_target(mat)) : mat
+    e_ops=[x==qubit ? final_gate : sparse(id) for x=1:N]
+    deleteat!(e_ops,target_qubit)
+
+    return foldl(kron,e_ops)
+end
+
+"""
+`hilbert(N::Int, mat::Matrix, qubit::Int)`
+
+Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits.
+
+# Arguments
+- `N::Int`: The number of qubits in the system.
+- `mat::Matrix`: The quantum gate to be applied.
+- `qubit::Int`: The qubit to which the gate is applied.
+
+# Returns
+`SparseMatrix`: The resulting sparse matrix representation of the gate operation.
+"""
+function hilbert(N::Int,mat::Matrix,qubit::Int)
+    id = sparse([1 0; 0 1])
+    return foldl(kron,[x==qubit ? sparse(mat) : id for x=1:N])
+end
+
+"""
+`hilbert(N::Int, state::SparseVector, gate::Matrix, qubit::Int, target_qubit::Int)`
+
+Applies a quantum gate to a given quantum state in a Hilbert space.
+
+If `qubit` is greater than `target_qubit`, a controlled swap is performed before applying `gate`.
+
+The identity matrix is applied to all other qubits.
+
+# Arguments
+- `N::Int`: The number of qubits in the system.
+- `state::SparseVector`: The quantum state vector.
+- `mat::Matrix`: The quantum gate to be applied.
+- `qubit::Int`: The qubit to which the gate is applied.
+- `target_qubit::Int`: The target qubit to which the gate is applied.
+
+# Returns
+`SparseVector`: The resulting state vector after the gate operation.
+"""
+function hilbert(N::Int,state::SparseVector,gate::Matrix,qubit::Int,target_qubit::Int)
+    id = sparse([1 0; 0 1])  # Identity
+
+    final_gate=qubit > target_qubit ? sparse(_swap_control_target(gate)) : gate
+    e_ops=[x==qubit ? final_gate : sparse(id) for x=1:N]
+    deleteat!(e_ops,target_qubit)
+
+    return foldl(kron,e_ops)*state
+end
+
+"""
+`hilbert(N::Int, state::SparseVector, gate::Matrix, qubit::Int)`
+
+Applies a quantum gate to a given quantum state in a Hilbert space.
+
+The identity matrix is applied to all other qubits.
+
+# Arguments
+- `N::Int`: The number of qubits in the system.
+- `state::SparseVector`: The quantum state vector.
+- `mat::Matrix`: The quantum gate to be applied.
+- `qubit::Int`: The qubit to which the gate is applied.
+
+# Returns
+`SparseVector`: The resulting state vector after the gate operation.
+"""
+function hilbert(N::Int,state::SparseVector,gate::Matrix,qubit::Int)
+    id = sparse([1 0; 0 1])
+    return foldl(kron,[x==qubit ? sparse(gate) : id for x=1:N])*state
+end
+
+"""
+`hilbert_op(op::QuantumOps, N::Int) -> Matrix`
 
 Extends a quantum operation to the full Hilbert space.
 
@@ -8,35 +103,43 @@ Extends a quantum operation to the full Hilbert space.
 
 Returns a matrix representation of the extended operation, ensuring it acts on the entire Hilbert space of `N` qubits.
 """
-function _extend_op(op::QuantumOps,N::Int)
-    id = [1 0; 0 1]  # Identity
+function hilbert_op(op::QuantumOps,N::Int)
 
     if op.qubit>N #|| op.target_qubit>N
         throw("qubit cannot be larger than total system size")
     end
 
     if op.q==1
-        e_ops=[x==op.qubit ? sparse(op.gate) : sparse(id) for x=1:N]
+        return hilbert(N,op.gate,op.qubit)
     elseif op.q==2
-        final_gate=op.qubit > op.target_qubit ? sparse(_swap_control_target(op.gate)) : op.gate
-        e_ops=[x==op.qubit ? final_gate : sparse(id) for x=1:N]
-        deleteat!(e_ops,op.target_qubit)#target qubit
+        return hilbert(N,op.gate,op.qubit,op.target_qubit)
     end
 
-    return foldl(kron,e_ops)
 end
 
-# """
-# `_extend_apply(state::SparseVector, op::QuantumOps) -> SparseVector`
+"""
+`hilbert_op(state::SparseVector, op::QuantumOps) -> SparseVector`
 
-# Applies an extended quantum operation to a given quantum state.
+Applies an extended quantum operation to a given quantum state.
 
-# - `state`: The quantum state vector (SparseVector) to which the operation is applied.
-# - `op`: The quantum operation (QuantumOps object) to be applied.
+- `state`: The quantum state vector (SparseVector) to which the operation is applied.
+- `op`: The quantum operation (QuantumOps object) to be applied.
 
-# Returns the new state vector after applying the extended operation.
-# """
-# _extend_apply(state::SparseVector,op::QuantumOps)=_extend_op(op,get_N(state))*state
+Returns the new state vector after applying the extended operation.
+"""
+function hilbert_op(state::SparseVector,op::QuantumOps,N::Int)
+
+    if op.qubit>N #|| op.target_qubit>N
+        throw("qubit cannot be larger than total system size")
+    end
+
+    if op.q==1
+        return hilbert(N,state,op.gate,op.qubit)
+    elseif op.q==2
+        return hilbert(N,state,op.gate,op.qubit,op.target_qubit)
+    end
+    
+end
 
 """
 `_extend_kraus(op::QuantumOps, N::Int) -> Vector`
@@ -256,7 +359,7 @@ Returns the computed magnetization moment of the specified order.
 """
 function mag_moments_from_rho(rho::SparseMatrixCSC,op_str::String,moment_order::Int)
     N=get_N(rho)
-    mag_op=sum(_extend_op(Op(op_str,i),N) for i=1:N)
+    mag_op=sum(hilbert_op(Op(op_str,i),N) for i=1:N)
     return real(tr(mag_op^moment_order*rho))
 end
 
