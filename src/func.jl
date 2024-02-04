@@ -18,8 +18,8 @@ swap is performed before applying `mat`.
 function hilbert(N::Int,mat::Matrix,qubit::Int,target_qubit::Int)
     id = sparse([1 0; 0 1])  # Identity
 
-    final_gate=qubit > target_qubit ? sparse(_swap_control_target(mat)) : mat
-    e_ops=[x==qubit ? final_gate : sparse(id) for x=1:N]
+    final_mat=qubit > target_qubit ? sparse(BlueTangle._swap_control_target(mat)) : mat
+    e_ops=[x==qubit ? final_mat : sparse(id) for x=1:N]
     deleteat!(e_ops,target_qubit)
 
     return foldl(kron,e_ops)
@@ -65,8 +65,8 @@ The identity matrix is applied to all other qubits.
 function hilbert(N::Int,state::SparseVector,mat::Matrix,qubit::Int,target_qubit::Int)
     id = sparse([1 0; 0 1])  # Identity
 
-    final_gate=qubit > target_qubit ? sparse(_swap_control_target(gate)) : mat
-    e_ops=[x==qubit ? final_gate : sparse(id) for x=1:N]
+    final_mat=qubit > target_qubit ? sparse(BlueTangle._swap_control_target(mat)) : mat
+    e_ops=[x==qubit ? final_mat : sparse(id) for x=1:N]
     deleteat!(e_ops,target_qubit)
 
     return foldl(kron,e_ops)*state
