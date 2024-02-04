@@ -114,14 +114,15 @@ Abstract type representing quantum operations.
 """
 abstract type QuantumOps end
 
+#todo: add type of gate to Op.
 """
-`Op(q::Int, name::String, gate::Matrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
+`Op(q::Int, name::String, mat::Matrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
 
 Represents a quantum operation.
 
 - `q`: Number of qubits involved in the operation.
 - `name`: Name of the operation.
-- `gate`: Matrix representation of the quantum operation.
+- `mat`: Matrix representation of the quantum operation.
 - `qubit`: Index of the target qubit.
 - `target_qubit`: Index of the target qubit for two-qubit operations.
 - `noise`: Noise model associated with the operation.
@@ -131,21 +132,21 @@ Constructs an Op object representing a quantum operation with optional noise.
 struct Op <: QuantumOps
     q::Int
     name::String
-    gate::Matrix
+    mat::Matrix
     qubit::Int
     target_qubit::Int
     noise::Union{QuantumChannel, Bool}
 end
 
 """
-`ifOp(q::Int, name::String, gate::Matrix, qubit::Int, if01::Tuple{Matrix,Matrix}, noise::QuantumChannel) <: QuantumOps`
+`ifOp(q::Int, name::String, mat::Matrix, qubit::Int, if01::Tuple{Matrix,Matrix}, noise::QuantumChannel) <: QuantumOps`
 
 Represents a conditional quantum operation used for mid-circuit born measurements. It is specifically designed for mid-circuit measurements in the X, Y, Z, or a random basis (R). Depending on the measurement outcomes (0 or 1), different gates specified in `if01` can be applied.
 
 # Fields
 - `q`: Integer representing the number of qubits involved in the operation.
 - `name`: String indicating the name of the operation. Valid names are "MX", "MY", "MZ", or "MR", corresponding to operations in the X, Y, Z basis, or a random basis (R), respectively.
-- `gate`: Matrix representing the quantum operation.
+- `mat`: Matrix representing the quantum operation.
 - `qubit`: Integer specifying the index of the target qubit.
 - `if01`: Tuple of two matrices. The first matrix is applied if the measured state of the qubit is 0, and the second matrix is applied if the measured state is 1.
 - `noise`: Represents a 'born measurement quantum channel', indicating the noise model associated with the operation.
@@ -161,7 +162,7 @@ conditional_op = ifOp("MX", qubit, (operation_if_0, operation_if_1))
 struct ifOp <: QuantumOps
     q::Int
     name::String
-    gate::Matrix
+    mat::Matrix
     qubit::Int
     if01::Tuple{Vector{Op},Vector{Op}}
     noise::QuantumChannel
@@ -177,30 +178,26 @@ struct ifOp <: QuantumOps
     ifOp(name::String,qubit::Int,if0::String,if1::String) = ifOp(name,qubit,([Op(if0,qubit)],[Op(if1,qubit)]))
 end
 
-function Op(name::String,gate::Matrix,qubit::Int,noise::Union{QuantumChannel, Bool})
-
-    if size(gate,1)!=2
+function Op(name::String,mat::Matrix,qubit::Int,noise::Union{QuantumChannel, Bool})
+    if size(mat,1)!=2
         throw("gate size and selected qubits do not match!")
     end
 
     if noise==false
-        return Op(1,name,gate,qubit,-1,noise)
+        return Op(1,name,mat,qubit,-1,noise)
     elseif noise==true
         throw("provide valid noise model")
     else
         if noise.q==1
-            return Op(1,name,gate,qubit,-1,noise)
+            return Op(1,name,mat,qubit,-1,noise)
         else
-            throw("gate or noise matrix size error!")
+            throw("mat or noise matrix size error!")
         end
     end
 
 end
 
-function Op(name::String,gate::Matrix,qubit::Int)
-    return Op(name,gate,qubit,false)
-end
-
+Op(name::String,mat::Matrix,qubit::Int)=Op(name,mat,qubit,false)
 
 #here is the function handling measurement and reset operation
 function Op(name::String,qubit::Int)
@@ -225,22 +222,20 @@ function Op(name::String,qubit::Int,noise::Union{QuantumChannel,Bool})
     end
 end
 
-_name_with_phase_bool(name::String)=name ∈ ["P","RX","RY","RZ","CP"]
-
 # Op(namePhase::Vector,qubit::Int)=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,false) : throw("$(namePhase[1]) does not need a parameter")
 # Op(namePhase::Vector,qubit::Int,noise::QuantumChannel)=_name_with_phase_bool(namePhase[1]) ? Op("$(namePhase[1])($(namePhase[2]/pi)π)",gates1(namePhase[1],namePhase[2]),qubit,noise) : throw("$(namePhase[1]) does not need a parameter")
 
+#this is constructor for 2-qubit gates
+function Op(name::String,mat::Matrix,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})
 
-function Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})
-
-    if size(gate,1)!=4 #two qubit operation
+    if size(mat,1)!=4 #two qubit operation
         throw("gate size and selected qubits do not match!")
     elseif qubit==target_qubit
         throw("control and target qubits cannot be same!")
     elseif noise==true
         throw("provide valid noise model")
     else
-        return Op(2,name,gate,qubit,target_qubit,noise)
+        return Op(2,name,mat,qubit,target_qubit,noise)
     end
 
     # # Initialize final_gate with a default value
@@ -254,7 +249,7 @@ function Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int,noise::Union{
 
 end
 
-Op(name::String,gate::Matrix,qubit::Int,target_qubit::Int)=Op(name,gate,qubit,target_qubit,false)
+Op(name::String,mat::Matrix,qubit::Int,target_qubit::Int)=Op(name,mat,qubit,target_qubit,false)
 Op(name::String,qubit::Int,target_qubit::Int)=Op(name,gates2(name),qubit,target_qubit,false)
 Op(name::String,qubit::Int,target_qubit::Int,noise::Union{QuantumChannel,Bool})=Op(name,gates2(name),qubit,target_qubit,noise)
 

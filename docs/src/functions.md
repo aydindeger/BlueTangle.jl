@@ -6,6 +6,7 @@ Detailed explanations or additional notes about all functions.
 
 ```@docs
 sample_outcomes
+state_to_measurement
 get_probabilities_from_sample
 get_expect
 get_expect_from_measurement
@@ -49,9 +50,10 @@ expand_multi_op
 string_to_matrix
 state_vector_create
 init_state_create
-apply_op!
-apply_op_rho!
+apply_op
+apply_op_rho
 linear_fit
+quadratic_fit
 ```
 
 ## Object types

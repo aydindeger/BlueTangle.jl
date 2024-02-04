@@ -2,10 +2,10 @@ module BlueTangle
 
 include("all.jl")
 
-export get_N, fields, sample_outcomes, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op!, apply_op_rho!, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, show_basis
+export get_N, ro3, fields, sample_outcomes, get_probabilities_from_sample,  expand_multi_op, string_to_matrix, get_corr_from_measurement, get_expect_from_measurement, get_expect, get_corr, apply_op, apply_op_rho, classical_shadow, compile, quantum_circuit, sample, circuit_to_state, circuit_to_rho, show_basis
 export QuantumOps,Op,ifOp,Measurement,QuantumChannel,Circuit,Options
-export hilbert, hilbert_op, state_vector_create, init_state_create
-export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,error_mitigate_data
+export hilbert, hilbert_op, state_vector_create, init_state_create, state_to_measurement
+export gate,gates1,gates2,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_kraus_valid,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,quadratic_fit,error_mitigate_data
 export plot_measurement, plot_circuit, savefigure
 export entanglement_entropy,clasical_shadow,mag_moments_from_rho
 export trotter_ising
@@ -141,6 +141,7 @@ function string_to_matrix(list_of_operators::String)
     ops_str=String.(split(list_of_operators,","));
     return foldl(kron,sparse.(gates1.(ops_str)))
 end
+
 
 ##========== functions ==========
 
@@ -292,8 +293,39 @@ end
 
 ##***## apply gate
 
+
+# function apply_op!(state::SparseVector,op::QuantumOps)
+    
+#     if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+#         throw("non-local gate $(op.name) is not allowed!")
+#     end
+
+#     # random measurement mid-circuit
+#     if uppercase(op.name)=="MR" || uppercase(op.name)=="M(R)"
+#         rOp=rand(1:3)
+#         println("random mid-measurement applied in $(["X","Y","Z"][rOp]) basis")
+        
+#         if typeof(op)==ifOp
+#             op=ifOp(["MX","MY","MZ"][rOp],op.qubit,op.if01)
+#         else
+#             op=Op(["MX","MY","MZ"][rOp],op.qubit)
+#         end
+#     end
+
+#     # state[:]=_extend_op(op,get_N(state))*state
+
+#     N=get_N(state)
+#     res=hilbert_op(state,op,N)
+#     state[:]=res
+
+#     if op.noise!=false #if measurement then it applies measurement `channel`
+#         _apply_kraus!(state,op)
+#     end
+
+# end
+
 """
-`apply_op!(state::SparseVector, op::QuantumOps)`
+`apply_op(state::SparseVector, op::QuantumOps)`
 
 Apply a quantum gate operation to a state vector in place.
 
@@ -302,7 +334,7 @@ Apply a quantum gate operation to a state vector in place.
 
 Modifies the state vector directly.
 """
-function apply_op!(state::SparseVector,op::QuantumOps)
+function apply_op(state::SparseVector,op::QuantumOps)
     
     if op.q!=1 && abs(op.qubit-op.target_qubit)>1
         throw("non-local gate $(op.name) is not allowed!")
@@ -320,18 +352,19 @@ function apply_op!(state::SparseVector,op::QuantumOps)
         end
     end
 
-    # state[:]=_extend_op(op,get_N(state))*state
-
-    state[:]=hilbert_op(state,op,get_N(state))
+    state=hilbert_op(state,op,get_N(state))
 
     if op.noise!=false #if measurement then it applies measurement `channel`
-        _apply_kraus!(state,op)
+        state=_apply_kraus(state,op)
     end
+
+    return state
 
 end
 
+
 """
-`apply_op_rho!(rho::SparseMatrixCSC, op::QuantumOps)`
+`apply_op_rho(rho::SparseMatrixCSC, op::QuantumOps)`
 
 Apply a quantum gate operation to a state vector in place.
 
@@ -340,7 +373,7 @@ Apply a quantum gate operation to a state vector in place.
 
 Modifies the state vector directly.
 """
-function apply_op_rho!(rho::SparseMatrixCSC,op::QuantumOps)
+function apply_op_rho(rho::SparseMatrixCSC,op::QuantumOps)
 
     if op.q!=1 && abs(op.qubit-op.target_qubit)>1
         throw("non-local gate $(op.name) is not allowed!")
@@ -362,11 +395,13 @@ function apply_op_rho!(rho::SparseMatrixCSC,op::QuantumOps)
     N=get_N(rho)
     e_op=hilbert_op(op,N)
 
-    rho[:]=e_op*rho*e_op'
+    rho=e_op*rho*e_op'
 
     if op.noise!=false  #if measurement then it applies measurement `channel`
-        _apply_kraus_rho!(rho,op)
+        rho=_apply_kraus_rho(rho,op)
     end
+
+    return rho
     
 end
 
@@ -394,7 +429,7 @@ function classical_shadow(circuit::Circuit,number_of_experiment::Int)
         measurement_basis=Vector{Int}(undef,N)
         for qubit=1:N
             rOp=rand(1:3)
-            apply_op!(state,Op(["MX","MY","MZ"][rOp],qubit))
+            state=apply_op(state,Op(["MX","MY","MZ"][rOp],qubit))
             measurement_basis[qubit]=rOp
         end
 
@@ -479,9 +514,9 @@ function compile(ops::Vector{T}, options::Options=Options()) where T <: QuantumO
                 op_n=op
             else
                 if op.q==1
-                    op_n=Op(op.name,op.gate,op.qubit,options.noise1)
+                    op_n=Op(op.name,op.mat,op.qubit,options.noise1)
                 elseif op.q==2
-                    op_n=Op(op.name,op.gate,op.qubit,op.target_qubit,options.noise2)
+                    op_n=Op(op.name,op.mat,op.qubit,op.target_qubit,options.noise2)
                 else
                     throw("only works for 1 or 2 qubit operators")
                 end
@@ -550,12 +585,39 @@ function _measurement_mitigate_inv_matrix(N::Int,final_measurement_error::Quantu
         rho0=state*state'
         for i=1:N
             op=Op("MZ",gate.I,i,final_measurement_error)
-            apply_op_rho!(rho0,op)
+            rho0=apply_op_rho(rho0,op)
         end
         push!(mat,Vector(diag(rho0)))
     end
     return inv(hcat(mat...))
 end
+
+
+"""
+`state_to_measurement(state::SparseVector,number_of_experiment::Int)`
+
+this creates a measurement object from state vector.
+"""
+function state_to_measurement(state::SparseVector,number_of_experiment::Int)
+
+    all_sample=[]
+    N=get_N(state)
+    rho_construct=spzeros(ComplexF64,2^N,2^N)
+
+    int_basis_unsorted,avg_prob_unsorted=sample_state(state,number_of_experiment)
+    sorted_pos=sortperm(int_basis_unsorted) #sort integer basis
+    int_basis=int_basis_unsorted[sorted_pos]
+    avg_prob=avg_prob_unsorted[sorted_pos]
+
+    fock=int2bit.(int_basis,N)
+    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
+    mag_moments=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:12]
+
+    return Measurement(int_basis,fock,avg_prob,expect,mag_moments,"0",number_of_experiment,"state to measurement",N,rho_construct)
+    
+end
+
+
 
 function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
 
@@ -591,7 +653,7 @@ function sample(circuit::Circuit,number_of_experiment::Int,id::Int)
 
     fock=int2bit.(int_basis,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:10]
+    mag_moments=[mag_moments_from_measurement(N,int_basis,avg_prob,moment_order) for moment_order=1:12]
 
     return Measurement(int_basis,fock,avg_prob,expect,mag_moments,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
     
@@ -672,32 +734,32 @@ function circuit_to_state(circuit::Circuit;init_state::SparseVector=sparse([]),i
         state=copy(init_state)
     end
 
-    for gate in circuit.ops
+    for op in circuit.ops
 
-            if gate.q==2 && circuit.options.zne==true && (gate.name=="CNOT" || gate.name=="CX") && id>0 #apply ZNE
+            if op.q==2 && circuit.options.zne==true && (op.name=="CNOT" || op.name=="CX") && id>0 #apply ZNE
             
                 for cnot_pair=1:2id+1 #number of id = extra CNOT pair
 
                     if circuit.options.twirl==true #for each CNOT, twirl applies
-                        t_ops = apply_twirl(gate)
+                        t_ops = apply_twirl(op)
                         for t_op in t_ops
-                            apply_op!(state,t_op)
+                            state=apply_op(state,t_op)
                         end
                     else #twirl false but ZNE still applies
-                        apply_op!(state,gate)
+                        state=apply_op(state,op)
                     end
 
                 end
     
-            elseif gate.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
+            elseif op.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
     
-                t_ops = apply_twirl(gate)
+                t_ops = apply_twirl(op)
                 for t_op in t_ops
-                    apply_op!(state,t_op)
+                    state=apply_op(state,t_op)
                 end
 
             else #no twirling or ZNE
-                apply_op!(state,gate)
+                state=apply_op(state,op)
             end
 
     end
@@ -723,32 +785,32 @@ function circuit_to_rho(circuit::Circuit;id::Int=0)
     state=init_state_create(N)
     rho=state*state'
 
-    for gate in circuit.ops
+    for op in circuit.ops
 
-        if gate.q==2 && circuit.options.zne==true && (gate.name=="CNOT" || gate.name=="CX") && id>0 #apply ZNE
+        if op.q==2 && circuit.options.zne==true && (op.name=="CNOT" || op.name=="CX") && id>0 #apply ZNE
             
             for cnot_pair=1:2id+1 #number of id = extra CNOT pair
 
                 if circuit.options.twirl==true #for each CNOT, twirl applies
-                    t_ops = apply_twirl(gate)
+                    t_ops = apply_twirl(op)
                     for t_op in t_ops
-                        apply_op_rho!(rho,t_op)
+                        rho=apply_op_rho(rho,t_op)
                     end
                 else #twirl false but ZNE still applies
-                    apply_op_rho!(rho,gate)
+                    rho=apply_op_rho(rho,op)
                 end
 
             end
 
-        elseif gate.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
+        elseif op.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
 
-            t_ops = apply_twirl(gate)
+            t_ops = apply_twirl(op)
             for t_op in t_ops
-                apply_op_rho!(rho,t_op)
+                rho=apply_op_rho(rho,t_op)
             end
 
         else #no twirling or ZNE
-            apply_op_rho!(rho,gate)
+            rho=apply_op_rho(rho,op)
         end
 
     end

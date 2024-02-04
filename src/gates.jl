@@ -12,7 +12,7 @@ This includes:
 - Hadamard (`H`)
 - Phase gates (`S`, `T`)
 - Special gates like `sqrt(X)` (equal to RX(pi/2)*exp(1im*pi/4))
-- Projectors (`proj0` for |0><0|, `proj1` for |1><1|)
+- Projectors (`P0` for |0><0|, `P1` for |1><1|)
 - Controlled gates such as `CX` (CNOT), `CNOT` (an alias for CX), and `CZ`
 - The `SWAP`, `iSWAP`, `fSWAP` gate
 - The `ECR`, `SYC` gate
@@ -30,8 +30,8 @@ const gate = (
     T  = [1. 0; 0 exp(im * π / 4)],
     HSp = (1/sqrt(2)) * [1.0+0im  0-1im;1+0im  0+1im],
     # HS = (1/sqrt(2)) * [1.0  1;1im  -1im],
-    proj0=[1.0 0; 0 0], #|0><0> #projector
-    proj1=[0 0; 0 1.0], #|1><1> #projector
+    P0=[1.0 0; 0 0], #|0><0> #projector
+    P1=[0 0; 0 1.0], #|1><1> #projector #n
     CX = [1. 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CNOT = [1. 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CZ = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
@@ -312,6 +312,11 @@ function gates1(op_name::String,param...)
         end
     end
 end
+
+
+_name_with_phase_bool(name::String)=name ∈ ["P","RX","RY","RZ","CP","GIVENS","FSIM1"]
+_name_with_two_qubit_gates_bool(name::String)=name ∈ ["CX", "CNOT", "CZ", "SWAP", "iSWAP", "fSWAP", "SYC", "ECR", "CP","GIVENS","FSIM1"]
+
 
 """
 `gates2(op_name::String, param...) -> Matrix`

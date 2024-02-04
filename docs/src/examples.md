@@ -314,10 +314,10 @@ Alternatively, we can manually simulate the same process using a quantum simulat
 
 ```julia
 state = state_vector_create([0, 0, 0]) # Initial state for N=3
-apply_op!(state, Op("X", 1)) # Apply X on qubit 1
-apply_op!(state, ifOp("MX", 1, "H", "Z")) # Measure qubit 1 in X basis. Apply H if result is 0, Z if 1.
-apply_op!(state, Op("CNOT", 1, 2)) # Apply CNOT on qubit 1 and 2
-apply_op!(state, Op("CNOT", 2, 3)) # Apply CNOT on qubit 2 and 3
+state=apply_op(state, Op("X", 1)) # Apply X on qubit 1
+state=apply_op(state, ifOp("MX", 1, "H", "Z")) # Measure qubit 1 in X basis. Apply H if result is 0, Z if 1.
+state=apply_op(state, Op("CNOT", 1, 2)) # Apply CNOT on qubit 1 and 2
+state=apply_op(state, Op("CNOT", 2, 3)) # Apply CNOT on qubit 2 and 3
 state # Final result: either GHZ state or |111> state.
 ```
 
@@ -342,10 +342,10 @@ N = 2
 state = state_vector_create(zeros(N))
 
 # Applying Hadamard gate to the first qubit
-apply_op!(state, Op("H", 1))
+state=apply_op(state, Op("H", 1))
 
 # Applying CNOT gate with the first qubit as control and the second as target
-apply_op!(state, Op("CX", 1, 2))
+state=apply_op(state, Op("CX", 1, 2))
 
 # Show the state of the qubits
 display(state)
@@ -358,7 +358,7 @@ Now, we'll implement the reset operation on the first qubit. This operation invo
 ```julia
 # Reset operation on the first qubit
 op = Op("RES", 1)
-apply_op!(state, op)
+state=apply_op(state, op)
 ```
 
 ### Understanding the Outcome
@@ -381,10 +381,10 @@ N = 2
 state = state_vector_create(zeros(N))
 
 # Applying Hadamard gate to the first qubit
-apply_op!(state, Op("H", 1))
+state=apply_op(state, Op("H", 1))
 
 # Applying CNOT gate with the first qubit as control and the second as target
-apply_op!(state, Op("CX", 1, 2))
+state=apply_op(state, Op("CX", 1, 2))
 
 # Show the state of the qubits
 display(state)
@@ -394,7 +394,7 @@ n1 = Noise1("amplitude_damping", 1.0)
 
 # Apply the identity operation with amplitude damping noise
 op = Op("I", 1, n1)
-apply_op!(state, op)
+state=apply_op(state, op)
 
 display(state)
 ```
@@ -488,7 +488,7 @@ Entanglement entropy is a fundamental measure in quantum information theory, ind
 
 ### Entanglement Entropy from State Vectors
 
-#### Example - Using `apply_gate`
+#### Example - Using `apply_op`
 To build a GHZ state and obtain its state vector:
 
 ```julia
@@ -496,9 +496,9 @@ To build a GHZ state and obtain its state vector:
 psi = state_vector_create(zeros(3)) 
 
 # Apply gates to create a GHZ state
-psi = apply_gate!(psi, "H", 1)
-psi = apply_gate!(psi, "CNOT", 1, 2)
-psi = apply_gate!(psi, "CNOT", 1, 3)
+psi = apply_op(psi, Op("H", 1))
+psi = apply_op(psi, Op("CNOT", 1, 2))
+psi = apply_op(psi, Op("CNOT", 2, 3))
 
 # Calculate the entanglement entropy
 ent_entropy, ent_spectrum = entanglement_entropy(psi)

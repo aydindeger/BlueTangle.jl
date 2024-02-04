@@ -44,7 +44,7 @@ function hilbert(N::Int,mat::Matrix,qubit::Int)
 end
 
 """
-`hilbert(N::Int, state::SparseVector, gate::Matrix, qubit::Int, target_qubit::Int)`
+`hilbert(N::Int, state::SparseVector, mat::Matrix, qubit::Int, target_qubit::Int)`
 
 Applies a quantum gate to a given quantum state in a Hilbert space.
 
@@ -62,10 +62,10 @@ The identity matrix is applied to all other qubits.
 # Returns
 `SparseVector`: The resulting state vector after the gate operation.
 """
-function hilbert(N::Int,state::SparseVector,gate::Matrix,qubit::Int,target_qubit::Int)
+function hilbert(N::Int,state::SparseVector,mat::Matrix,qubit::Int,target_qubit::Int)
     id = sparse([1 0; 0 1])  # Identity
 
-    final_gate=qubit > target_qubit ? sparse(_swap_control_target(gate)) : gate
+    final_gate=qubit > target_qubit ? sparse(_swap_control_target(gate)) : mat
     e_ops=[x==qubit ? final_gate : sparse(id) for x=1:N]
     deleteat!(e_ops,target_qubit)
 
@@ -73,7 +73,7 @@ function hilbert(N::Int,state::SparseVector,gate::Matrix,qubit::Int,target_qubit
 end
 
 """
-`hilbert(N::Int, state::SparseVector, gate::Matrix, qubit::Int)`
+`hilbert(N::Int, state::SparseVector, mat::Matrix, qubit::Int)`
 
 Applies a quantum gate to a given quantum state in a Hilbert space.
 
@@ -88,9 +88,9 @@ The identity matrix is applied to all other qubits.
 # Returns
 `SparseVector`: The resulting state vector after the gate operation.
 """
-function hilbert(N::Int,state::SparseVector,gate::Matrix,qubit::Int)
+function hilbert(N::Int,state::SparseVector,mat::Matrix,qubit::Int)
     id = sparse([1 0; 0 1])
-    return foldl(kron,[x==qubit ? sparse(gate) : id for x=1:N])*state
+    return foldl(kron,[x==qubit ? sparse(mat) : id for x=1:N])*state
 end
 
 """
@@ -110,9 +110,9 @@ function hilbert_op(op::QuantumOps,N::Int)
     end
 
     if op.q==1
-        return hilbert(N,op.gate,op.qubit)
+        return hilbert(N,op.mat,op.qubit)
     elseif op.q==2
-        return hilbert(N,op.gate,op.qubit,op.target_qubit)
+        return hilbert(N,op.mat,op.qubit,op.target_qubit)
     end
 
 end
@@ -134,9 +134,9 @@ function hilbert_op(state::SparseVector,op::QuantumOps,N::Int)
     end
 
     if op.q==1
-        return hilbert(N,state,op.gate,op.qubit)
+        return hilbert(N,state,op.mat,op.qubit)
     elseif op.q==2
-        return hilbert(N,state,op.gate,op.qubit,op.target_qubit)
+        return hilbert(N,state,op.mat,op.qubit,op.target_qubit)
     end
     
 end
@@ -184,7 +184,10 @@ Selects a Kraus operator from a set based on their associated probabilities.
 
 Returns a tuple containing the index and the selected Kraus operator.
 """
-function _weighted_sample(ek_ops::Vector{Any},probs::Vector{Float64})
+
+#fix
+# function _weighted_sample(ek_ops::Vector{Any},probs::Vector{Any})
+function _weighted_sample(ek_ops::Vector{Any},probs)
 
     rval=rand()
 
@@ -196,7 +199,7 @@ function _weighted_sample(ek_ops::Vector{Any},probs::Vector{Float64})
 end
 
 """
-`_apply_kraus!(state::SparseVector, op::QuantumOps)`
+`_apply_kraus(state::SparseVector, op::QuantumOps)`
 
 Applies a Kraus operator to a quantum state vector in place.
 
@@ -205,7 +208,7 @@ Applies a Kraus operator to a quantum state vector in place.
 
 Modifies the state vector by applying a randomly selected Kraus operator based on the operation's noise model.
 """
-function _apply_kraus!(state::SparseVector,op::QuantumOps)
+function _apply_kraus(state::SparseVector,op::QuantumOps)
 
     N=get_N(state)
     ek_ops=_extend_kraus(op,N)
@@ -219,14 +222,14 @@ function _apply_kraus!(state::SparseVector,op::QuantumOps)
         bit,kraus=_weighted_sample(ek_ops,probs)
         normalization=sqrt(abs(state'*kraus'kraus*state))
         
-        state[:]=kraus*state/normalization
+        state=kraus*state/normalization
 
         if typeof(op)==ifOp #follow-up gate applied
             ifgates=op.if01[bit]
             # println("$(op.name) measurement on qubit $(op.qubit) resulted in |$(bit-1)>\n$(ifgate) applied)\n")
             
             for ifop=ifgates
-                apply_op!(state,ifop)#[x==op.qubit ? sparse(ifgate) : sparse(gate.I) for x=1:N])*state ##extend apply
+                state=apply_op(state,ifop)#[x==op.qubit ? sparse(ifgate) : sparse(gate.I) for x=1:N])*state ##extend apply
             end
         
         end
@@ -234,12 +237,14 @@ function _apply_kraus!(state::SparseVector,op::QuantumOps)
     else
         throw("kraus operator probability error ≈ $(sum(probs))")
     end
+
+    return state
     
 end
 
-#todo fix this
+#fix
 """
-`_apply_kraus_rho!(rho::SparseMatrixCSC, op::QuantumOps)`
+`_apply_kraus_rho(rho::SparseMatrixCSC, op::QuantumOps)`
 
 Applies a Kraus operator to a density matrix in place.
 
@@ -248,7 +253,7 @@ Applies a Kraus operator to a density matrix in place.
 
 Modifies the density matrix by applying the Kraus operators, accounting for quantum noise effects.
 """
-function _apply_kraus_rho!(rho::SparseMatrixCSC,op::QuantumOps)
+function _apply_kraus_rho(rho::SparseMatrixCSC,op::QuantumOps)
 
     N=get_N(rho)
     ek_ops=_extend_kraus(op,N)
@@ -264,19 +269,19 @@ function _apply_kraus_rho!(rho::SparseMatrixCSC,op::QuantumOps)
         #if result is 0
         rho0 = ek_ops[1] * rho * ek_ops[1]'
         for ifop=op.if01[1]
-            apply_op_rho!(rho0,ifop)
+            rho0=apply_op_rho(rho0,ifop)
         end
 
         #if result is 2
-        rho[:] = ek_ops[2] * rho * ek_ops[2]'
+        rho = ek_ops[2] * rho * ek_ops[2]'
         for ifop=op.if01[2]
-            apply_op_rho!(rho,ifop)
+            rho=apply_op_rho(rho,ifop)
         end
 
-        rho[:] = rho+rho0
+        return rho+rho0
 
     else
-        rho[:]=sum(ek * rho * ek' for ek=ek_ops)
+        return sum(ek * rho * ek' for ek=ek_ops)
     end
 
 end
@@ -436,21 +441,21 @@ function _final_measurement!(state::SparseVector,options::Options)
     # final measurement_error or random measurement
     if options.measurement_basis=="Z"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(Z)",gate.I,qubit,options.final_measurement_error))#this construction reserved for internal use only!
+            state=apply_op(state,Op("M(Z)",gate.I,qubit,options.final_measurement_error))#this construction reserved for internal use only!
         end
     elseif options.measurement_basis=="X"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(X)",gate.H,qubit,options.final_measurement_error)) #no measurement error
+            state=apply_op(state,Op("M(X)",gate.H,qubit,options.final_measurement_error)) #no measurement error
         end
     elseif options.measurement_basis=="Y"
         for qubit=1:number_of_qubits
-            apply_op!(state,Op("M(Y)",gate.HSp,qubit,options.final_measurement_error)) #no measurement error
+            state=apply_op(state,Op("M(Y)",gate.HSp,qubit,options.final_measurement_error)) #no measurement error
         end
     elseif options.measurement_basis=="R"
             # random measurement basis
         for qubit=1:number_of_qubits
             rOp=rand(1:3)
-            apply_op!(state,Op(["MX","MY","MZ"][rOp],qubit,options.final_measurement_error)) #random measurement
+            state=apply_op(state,Op(["MX","MY","MZ"][rOp],qubit,options.final_measurement_error)) #random measurement
         end
     else
         throw("measurement_basis error!")
@@ -463,7 +468,7 @@ end
 ##========== Entanglement entropy ==========
 
 """
-`entanglement_entropy(psi::SparseVector) -> Float64`
+    entanglement_entropy(psi::SparseVector) -> Float64
 
 Calculates the entanglement entropy of a quantum state.
 
@@ -486,7 +491,7 @@ function entanglement_entropy(psi::SparseVector)
 end
 
 """
-`partial_trace(rho) -> Matrix`
+ partial_trace(rho) -> Matrix
 
 Computes the partial trace of a density matrix.
 
@@ -509,7 +514,7 @@ function partial_trace(rho)
 end
 
 """
-`entanglement_entropy(rho::SparseMatrixCSC) -> Float64`
+    entanglement_entropy(rho::SparseMatrixCSC) -> Float64
 
 Calculates the entanglement entropy of a density matrix.
 
@@ -527,7 +532,7 @@ end
 ### linear fit
 
 """
-`error_mitigate_data(xdata::Vector, ydata::Vector)`
+ error_mitigate_data(xdata::Vector, ydata::Vector)
 
 Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
 
@@ -555,9 +560,10 @@ end
 Simple linear model: y = a + b*x
 """
 _linear_model(x, a, b)=a .+ b .* x
+_quadratic_model(x,a,b,c)=a .* x .^2 .+ b .*x .+ c
 
 """
-`linear_fit(xdata::Vector, ydata::Vector)`
+    linear_fit(xdata::Vector, ydata::Vector)
 
 Compute the coefficients a and b for the linear fit of the given data.
 
@@ -611,3 +617,39 @@ function linear_fit(xdata::Vector, ydata::Vector)
 
     return a, b, se_a, se_b
 end
+
+
+"""
+    quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64}) -> Vector{Float64}
+
+Fit a quadratic function to the given data.
+
+# Arguments
+- `xdata::Vector{Float64}`: A vector of x-coordinates.
+- `ydata::Vector{Float64}`: A vector of y-coordinates corresponding to `xdata`.
+
+# Returns
+- `Vector{Float64}`: The coefficients `[a, b, c]` of the fitted quadratic function `y = ax^2 + bx + c`.
+
+# Description
+This function performs a least squares quadratic fit to the input data.
+"""
+function quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64})
+    if length(xdata) != length(ydata)
+        error("Vectors xdata and ydata must have the same length")
+    end
+
+    n = length(xdata)
+    X = ones(n, 3)
+    for i in 1:n
+        X[i, 1] = xdata[i]^2
+        X[i, 2] = xdata[i]
+    end
+    Y = reshape(ydata, n, 1)  # Convert y to a column vector
+
+    beta = inv(X' * X) * X' * Y
+
+    return beta # the coefficients [a, b, c]
+end
+
+ro3(x)=round(x,sigdigits=3)
