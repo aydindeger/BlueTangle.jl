@@ -14,6 +14,15 @@ Returns the calculated correlation.
 """
 correlation(m::Measurement,qubits::Vector)=_sample_to_expectation((fock_basis.(m.bitstr,m.number_of_qubits),m.sample),qubits)
 
+
+function correlation(state::sa.SparseVector,qubits::Vector)
+    
+a,b=sample_exact(state)
+
+return _sample_to_expectation((fock_basis.(a,get_N(state)),b),qubits)
+
+end
+
 """
 Alias:
 ```
