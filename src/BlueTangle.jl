@@ -13,6 +13,6 @@ export dim, _born_measure
 export entanglement_entropy, shadow, mag_moments_from_rho, get_mag_moments
 export to_MPS, to_state
 export it, sa, plt, la, sb
-export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, variational_apply, get_stats, get_layers, measure_ZNE
+export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, variational_apply, get_stats, get_layers, measure_ZNE, fidelity
 
 end

@@ -61,10 +61,15 @@ end
 sample(state::sa.SparseVector,shots::Int=1)=int2bin.(sample_outcomes(state,shots),get_N(state))
 sample(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
 
-inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=real(ψ'to_state(MPS))
-inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=real(inner(ψ,MPS))
-inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=real(ψ'ψ2)
-inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=real(it.inner(MPS',MPS2))
+inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
+inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)
+inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=ψ'ψ2
+inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
+
+"""
+    fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)
+"""
+fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)=abs2(ψ'ψ2)
 
 # inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
 # inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))
