@@ -21,20 +21,12 @@ function Base.adjoint(op::Op)
 end
 
 function Base.adjoint(circ::Circuit)
-    all_layers = circ.layers
-    adjoint_all_layers = []
-
-    while !isempty(all_layers)
-        layer = pop!(all_layers)
-        adjointlayer = map(layer) do op
-            return la.ishermitian(op) ? op : adjoint(op)
-        end
-        push!(adjoint_all_layers, adjointlayer)
+    circ2=deepcopy(circ)
+    for ops=circ2.layers
+        replace!(op -> la.ishermitian(op) ? op : adjoint(op), ops)
     end
 
-    adjointcirc = deepcopy(circ)
+    reverse!(circ2.layers)
 
-    copy!(adjointcirc.layers, adjoint_all_layers)
-
-    return adjointcirc
+    return circ2
 end
