@@ -17,6 +17,7 @@ include("noise.jl")
 include("tensor.jl")
 include("trotter.jl")
 include("vqe.jl")
+include("linalg.jl")
 
 import Base: *
 *(o::QuantumOps, state::sa.SparseVector) = apply(o,state)

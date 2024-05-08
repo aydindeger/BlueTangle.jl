@@ -246,141 +246,124 @@ Constructs an Op object representing a quantum operation with optional noise.
 struct Op <: QuantumOps
     q::Int
     name::String
-    mat::Union{Matrix,Function}
+    mat::Union{Matrix, la.Adjoint, Function}
     qubit::Int
     target_qubit::Int
     control::Int
     noisy::Bool
     type::String
     expand::Function
-        
-    #one qubit
-    function Op(name::String,qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
-
-        if qubit==control
-            throw("Qubit must differ from control qubit.")
+    # Inner-constructor for gates defined from a function
+    function Op(name::String,f::Function,qubit::Int,target_qubit::Int;type=nothing,noisy::Bool=true,control::Int=-2)
+        if !isnothing(type)
+            throw(ArgumentError("setting `type` for gates constructed from functions is not supported"))
         end
 
-        mat=gates(name);
-        new_expand(N::Int)=hilbert(N,mat,qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit) : throw("nonlocal tensor is not supported")
+        q = _get_op_num_qubits(qubit, target_qubit, control)
 
-        if _is_it_measurement(name)
-            if control!=-2
-                throw("Measurement and control operations are incompatible.")
-            end
-            new_expand_M(N::Int)=__measurement_hilbert(N,name,qubit)
-            new_expand_M(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit) : throw("nonlocal tensor is not supported")
-
-            return new(1,name,mat,qubit,-1,-2,false,"🔬",new_expand_M)#noiseless mid-circuit measurement
-        elseif _name_with_arg_bool(name)
-            return new(1,name,mat,qubit,-1,control,noisy,"phase",new_expand)
-        elseif uppercase(name)=="RES"
-            return ifOp("MZ",qubit,"I","X")
-        else
-           return new(1,name,mat,qubit,-1,control,noisy,type,new_expand)
-        end
-    end
-
-    #two qubit
-    function Op(name::String,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
-
-        if qubit==control || target_qubit==control
-            throw("qubit or target Qubit must differ from control qubit.")
-        end
-        
-        mat=gates(name);
-        new_expand(N::Int)=hilbert(N,mat,qubit,target_qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("nonlocal tensor is not supported")
-
-        if target_qubit>0 && qubit==target_qubit
-            throw("qubit and target qubits cannot be same!")
-        elseif _name_with_arg_bool(name)
-            return new(2,name,mat,qubit,target_qubit,control,noisy,"phase",new_expand)
-        else
-           return new(2,name,mat,qubit,target_qubit,control,noisy,type,new_expand)
-        end
-
-    end
-
-    #one qubit mat
-    function Op(name::String,mat::Matrix,qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
-
-        if size(mat,1)==2 && qubit!=control
-            q=1
-        else
-            throw("init error. Qubit must differ from control qubit.")
-        end
-
-        new_expand(N::Int)=hilbert(N,mat,qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit) : throw("nonlocal tensor is not supported")
-
-        if _name_with_arg_bool(name)
-            return new(q,name,mat,qubit,-1,control,noisy,"phase",new_expand)
-        else
-            return new(q,name,mat,qubit,-1,control,noisy,type,new_expand)
-        end
-    end
-
-    #one qubit function
-    function Op(name::String,f::Function,qubit::Int;noisy::Bool=true,control::Int=-2)
-
-        # arg_no=BlueTangle._find_argument_number(f)
-        if qubit!=control
-            q=1
-        else
-            throw("init error. Qubit must differ from control qubit.")
-        end
-
-        new_expand(N::Int,pars...)=hilbert(N,f(pars...),qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}},pars...)=control==-2 ? _mat_to_tensor(sites,f(pars...),qubit) : throw("nonlocal tensor is not supported")
-        
-        return new(q,name,f,qubit,-1,control,noisy,"f",new_expand)
-    end
-
-
-    #two qubit
-    function Op(name::String,mat::Matrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
-
-        if size(mat,1)==4 && target_qubit>0 && qubit!=target_qubit && qubit!=control || target_qubit!=control
-            q=2
-        else
-            throw("init error. qubit or target Qubit must differ from control qubit.")
-        end
-
-        new_expand(N::Int)=hilbert(N,mat,qubit,target_qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("nonlocal tensor is not supported")
-
-        if _name_with_arg_bool(name)
-            return new(q,name,mat,qubit,target_qubit,control,noisy,"phase",new_expand)
-        else
-           return new(q,name,mat,qubit,target_qubit,control,noisy,type,new_expand)
-        end
-    end
-
-    #two qubit function
-    function Op(name::String,f::Function,qubit::Int,target_qubit::Int;noisy::Bool=true,control::Int=-2)
-
-        # arg_no=BlueTangle._find_argument_number(f)
-
-        if target_qubit>0 && qubit!=target_qubit && qubit!=control || target_qubit!=control
-            q=2
-        else
-            throw("init error. qubit or target Qubit must differ from control qubit.")
-        end
-
-        new_expand(N::Int,pars...)=hilbert(N,f(pars...),qubit,target_qubit;control=control)
-        new_expand(sites::Vector{it.Index{Int64}},pars...)=control==-2 ? _mat_to_tensor(sites,f(pars...),qubit,target_qubit) : throw("nonlocal tensor is not supported")
+        new_expand = _get_new_expand(f, qubit, target_qubit, control)
 
         return new(q,name,f,qubit,target_qubit,control,noisy,"f",new_expand)
     end
-    
-    # Op(namePhase::Tuple,qubit::Int)=Op(namePhase[1]*"("*namePhase[2]*")",qubit;type::String="phase",noisy::Bool=true)
+    # Inner-constructor for gates defined from a built-in or matrix 
+    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
 
-    #this is constructor for 2-qubit gates
-    
+        q = _get_op_num_qubits(qubit, target_qubit, control)
+
+        sizem = size(mat)
+        if sizem != (2^q, 2^q)
+            throw(ArgumentError("size of matrix $sizem not compatible with $(q)-qubit operation"))
+        end
+
+        if q == 1 && _is_it_measurement(name)
+
+            if control!=-2
+                throw(ArgumentError("measurement and control operations are incompatible."))
+            end
+
+            type = "🔬"
+            noisy = false
+            ismeasure = true
+        else
+            _name_with_arg_bool(name) || (type = "phase")
+            ismeasure = false
+        end
+
+        new_expand = _get_new_expand(name, mat, qubit, target_qubit, control, ismeasure)
+
+        return new(q,name, mat, qubit,target_qubit,control,noisy,type,new_expand)
+    end
 end
 
+# One qubit constructor with built-in gate
+function Op(name::String,qubit::Int;kwargs...)
+
+    if uppercase(name)=="RES"
+        return ifOp("MZ",qubit,"I","X")
+    else
+        return Op(name, qubit, -1; kwargs...)
+    end
+end
+# Two qubit constructor with built-in gate
+function Op(name::String,qubit::Int,target_qubit::Int;kwargs...)
+
+    mat=gates(name)
+
+    return Op(name, mat, qubit, target_qubit; kwargs...)
+end
+# One qubit constructor with matrix or function
+function Op(name::String,matf::Union{Function, AbstractMatrix},qubit::Int; kwargs...)
+    return Op(name, matf, qubit, -1; kwargs...)
+end
+
+function _get_op_num_qubits(qubit::Int, target_qubit::Int, control::Int)
+    if target_qubit == -1 
+        # single qubit operator
+        if qubit == control
+            throw(ArgumentError("`qubit` must differ from `control` qubit"))
+        else
+            q = 1
+        end
+    else
+        # two qubit operator
+        if qubit == target_qubit
+            throw(ArgumentError("`qubit` and `target_qubit` must differ"))
+        elseif qubit == control && target_qubit == control
+            throw(ArgumentError("either `qubit` or `target_qubit` must differ from `control` qubit"))
+        else
+            q = 2
+        end
+    end
+    return q
+end
+
+function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, target_qubit::Int, control::Int, ismeasure::Bool)
+    function new_expand(N::Int)
+        if target_qubit == -1
+            if ismeasure
+                rv = __measurement_hilbert(N,name,qubit)
+            else
+                rv = hilbert(N,mat,qubit;control=control)
+            end
+        else
+            rv = hilbert(N,mat,qubit,target_qubit;control=control)
+        end
+    end
+    new_expand(sites::Vector{it.Index{Int64}})=control==-2 ? _mat_to_tensor(sites,mat,qubit) : throw("nonlocal tensor is not supported")
+    return new_expand
+end
+function _get_new_expand(f::Function, qubit::Int, target_qubit::Int, control::Int)
+    function new_expand(N::Int,pars...)
+        if target_qubit == -1
+            rv = hilbert(N,f(pars...),qubit;control=control)
+        else
+            rv = hilbert(N,f(pars...),qubit,target_qubit;control=control)
+        end
+        return rv 
+    end
+    new_expand(sites::Vector{it.Index{Int64}},pars...)=control==-2 ? _mat_to_tensor(sites,f(pars...),qubit,target_qubit) : throw("nonlocal tensor is not supported")
+    return new_expand
+end
 
 Op(nameAngle::Vector,qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)=Op("$(nameAngle[1])($(nameAngle[2]...))",qubit;type=type,noisy=noisy,control=control)
 Op(nameAngle::Vector,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)=Op("$(nameAngle[1])($(nameAngle[2]))",qubit,target_qubit;type=type,noisy=noisy,control=control)
