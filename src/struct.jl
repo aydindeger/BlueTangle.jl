@@ -643,6 +643,23 @@ struct Circuit
     layers::Vector{Vector{<:QuantumOps}}
 end
 
+sa.sparse(circ) = sa.sparse(ComplexF64, circ)
+function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
+    N = circ.stats.N
+
+    cumprod = sa.sparse(T,la.I,2^N,2^N)
+    outmat = similar(cumprod)
+
+    for layer in circ.layers
+        for op in layer
+            la.mul!(outmat, cumprod, op.expand(N))
+            sa.dropzeros!(outmat)
+        end
+    end
+
+    return outmat
+end
+
 """
 `Measurement(bitstr::Union{Vector, UnitRange}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::sa.SparseMatrixCSC)`
 
