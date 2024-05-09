@@ -9,6 +9,10 @@ function Base.adjoint(op::Op)
     matf = op.mat
     name = op.name * "†"
 
+    if la.ishermitian(op)
+        return op #return original op
+    end
+
     if matf isa Function
         adjmatf = x -> adjoint(matf(x))
     elseif matf isa la.Adjoint
@@ -18,6 +22,11 @@ function Base.adjoint(op::Op)
         adjmatf = adjoint(matf)
     end
     return Op(name, adjmatf, op.qubit, op.target_qubit; type=op.type, noisy=op.noisy, control=op.control)
+
+end
+
+function Base.adjoint(ops::Vector{T}) where T<:QuantumOps
+    return reverse(Base.adjoint.(ops))
 end
 
 function Base.adjoint(circ::Circuit)
