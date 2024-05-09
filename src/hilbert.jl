@@ -1,5 +1,5 @@
 """
-`hilbert(N::Int, mat::Matrix, qubit::Int, target_qubit::Int)`
+`hilbert(N::Int, mat::AbstractMatrix, qubit::Int, target_qubit::Int)`
 
 Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits
 
@@ -8,14 +8,14 @@ swap is performed before applying `mat`.
 
 # Arguments
 - `N::Int`: The number of qubits in the system.
-- `mat::Matrix`: The quantum gate to be applied.
+- `mat::AbstractMatrix`: The quantum gate to be applied.
 - `qubit::Int`: The qubit to which the gate is applied.
 - `target_qubit::Int`: The target qubit to which the gate is applied.
 
 # Returns
 `SparseMatrix`: The resulting sparse matrix representation of the gate operation.
 """
-function hilbert(N::Int,mat::Matrix,qubit::Int,target_qubit::Int;control::Int=-2)
+function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
 
     if N < qubit || N < target_qubit || N < control
         throw("N must be larger than qubits")
@@ -56,19 +56,19 @@ end
 
 
 """
-`hilbert(N::Int, mat::Matrix, qubit::Int)`
+`hilbert(N::Int, mat::AbstractMatrix, qubit::Int)`
 
 Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits.
 
 # Arguments
 - `N::Int`: The number of qubits in the system.
-- `mat::Matrix`: The quantum gate to be applied.
+- `mat::AbstractMatrix`: The quantum gate to be applied.
 - `qubit::Int`: The qubit to which the gate is applied.
 
 # Returns
 `SparseMatrix`: The resulting sparse matrix representation of the gate operation.
 """
-function hilbert(N::Int,mat::Matrix,qubit::Int;control::Int=-2)
+function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 
     if N < qubit || N < control
         throw("N must be larger than qubit")
@@ -88,7 +88,7 @@ end
 """
 not efficient for MPS
 """
-function hilbert_control(mat::Matrix,qubit::Int,target_qubit::Int=-1;control::Int)
+function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;control::Int)
 
     if control==-2
         throw("only works with control qubit")

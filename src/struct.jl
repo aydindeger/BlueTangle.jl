@@ -212,8 +212,8 @@ Abstract type representing quantum operations.
 """
 abstract type QuantumOps end
 
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::Matrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::Matrix,qubit::Int)=it.op(mat,sites[qubit])
+_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
+_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
 
 
 ##
@@ -230,7 +230,7 @@ function _measurement_mat(name::String)
 end
 
 """
-`Op(q::Int, name::String, mat::Matrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
+`Op(q::Int, name::String, mat::AbstractMatrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
 
 Represents a quantum operation.
 
@@ -246,7 +246,7 @@ Constructs an Op object representing a quantum operation with optional noise.
 struct Op <: QuantumOps
     q::Int
     name::String
-    mat::Union{Matrix, la.Adjoint, Function}
+    mat::Union{AbstractMatrix, Function}
     qubit::Int
     target_qubit::Int
     control::Int
@@ -483,7 +483,7 @@ function __ifOp_apply(rho::sa.SparseMatrixCSC,name::String,qubit::Int,if0::Vecto
 end
 
 """
-`ifOp(q::Int, name::String, mat::Matrix, qubit::Int, if01::Tuple{Matrix,Matrix}, noise::QuantumChannel) <: QuantumOps`
+`ifOp(q::Int, name::String, mat::AbstractMatrix, qubit::Int, if01::Tuple{Matrix,Matrix}, noise::QuantumChannel) <: QuantumOps`
 
 Represents a conditional quantum operation used for mid-circuit born measurements. It is specifically designed for mid-circuit measurements in the X, Y, Z, or a random basis (R). Depending on the measurement outcomes (0 or 1), different gates specified in `if01` can be applied.
 
@@ -506,7 +506,7 @@ conditional_op = ifOp("MX", qubit, (operation_if_0, operation_if_1))
 struct ifOp <: QuantumOps
     q::Int
     name::String
-    mat::Matrix
+    mat::AbstractMatrix
     qubit::Int
     if01::Tuple{Vector{Op},Vector{Op}}
     type::String
@@ -646,19 +646,10 @@ end
 sa.sparse(circ) = sa.sparse(ComplexF64, circ)
 function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
     N = circ.stats.N
-
-    cumprod = sa.sparse(T,la.I,2^N,2^N)
-    outmat = similar(cumprod)
-
-    for layer in circ.layers
-        for op in layer
-            la.mul!(outmat, cumprod, op.expand(N))
-            sa.dropzeros!(outmat)
-        end
-    end
-
-    return outmat
+    return prod(o.expand(N) for o=vcat(circ.layers...))
 end
+
+hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
 
 """
 `Measurement(bitstr::Union{Vector, UnitRange}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::sa.SparseMatrixCSC)`
