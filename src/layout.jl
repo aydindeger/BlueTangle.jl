@@ -66,17 +66,19 @@ function _average_connectivity(qubit_grid::sa.SparseMatrixCSC{Int, Int})
     return average_connectivity
 end
 
-function _make_swaps(op::QuantumOps,neighbors::Dict;noisy_swap::Bool=false)
+function _make_swaps(op::QuantumOps,neighbors::Dict;noisy_swap::Bool=false, fswap::Bool=false)
+
+    swap_name=fswap ? "FSWAP" : "SWAP"
 
     if op.q==1 || op.qubit ∈ neighbors[op.target_qubit] #check locality
         return [op]
     else
-        println("Nonlocal operation detected. Swap will be inserted.")
+        println("Nonlocal operation detected. $(swap_name) will be inserted.")
         path = _find_shortest_path(neighbors, op.qubit, op.target_qubit)
 
         swap_operations = []
         for i in 1:length(path)-2
-            push!(swap_operations, ("SWAP",path[i],path[i+1]))#noisy_swap=false: free swap
+            push!(swap_operations, (swap_name,path[i],path[i+1]))#noisy_swap=false: free swap
         end
         
         # new_ind=max(op.qubit,op.target_qubit)

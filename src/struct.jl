@@ -548,15 +548,18 @@ struct Layout
     neighbors::Dict
     geometry::sa.SparseMatrixCSC
     noisy_swap::Bool
+    fswap::Bool
     check::Function
     swap::Function
 
-    function Layout(layout::Union{Matrix,sa.SparseMatrixCSC};noisy_swap=false)
+    function Layout(layout::Union{Matrix,Vector,sa.SparseMatrixCSC};noisy_swap::Bool=false,fswap::Bool=false)
 
         # layout=Int.(layout .> 0) #only 0 and 1
 
         if isa(layout,Matrix)
             layout=sa.sparse(layout)
+        elseif isa(layout,Vector)
+            layout=sa.sparse(hcat(layout...))
         end
 
         qubit_num_to_pos, pos_to_qubit_num = BlueTangle.enumerate_qubits(layout)
@@ -569,7 +572,7 @@ struct Layout
         neighbors_dict = BlueTangle.generate_neighbors_dict(qubit_num_to_pos, pos_to_qubit_num)
 
         new_check(qubit_num1::Int, qubit_num2::Int)=qubit_num1 ∈ neighbors_dict[qubit_num2]
-        new_make_swaps(op::QuantumOps)=_make_swaps(op,neighbors_dict;noisy_swap=noisy_swap)
+        new_make_swaps(op::QuantumOps)=_make_swaps(op,neighbors_dict;noisy_swap=noisy_swap,fswap=fswap)
 
         println("Physical Qubits:")
         num_rows, num_cols = size(layout)
@@ -581,7 +584,7 @@ struct Layout
             println()
         end
 
-        new(N,layout,connectivity,neighbors_dict,geometry,noisy_swap,new_check,new_make_swaps);
+        new(N,layout,connectivity,neighbors_dict,geometry,noisy_swap,fswap,new_check,new_make_swaps);
     end
 end
 
