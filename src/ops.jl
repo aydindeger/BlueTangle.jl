@@ -508,6 +508,11 @@ function to_state(circuit::Circuit,id::Int=0)
 
             for op=vcat(circuit.layers...)
 
+                if isa(op,OpF)
+                    state=apply(state,op;noise=nm)
+                    continue
+                end
+
                 if id>0 && op.q==2 && (uppercase(op.name)=="CNOT" || uppercase(op.name)=="CX") #apply ZNE
                 
                     for cnot_pair=1:2id+1 #number of id = extra CNOT pair
