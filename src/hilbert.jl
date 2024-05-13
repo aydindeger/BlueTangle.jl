@@ -168,6 +168,8 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
             state,ind=_born_measure(state,op)
         end
         # println("measurement result=$(ind)")
+    elseif isa(op,OpF)
+        state=op.expand(N)*state#todo unify expand and apply
     else
         state=op.expand(N)*state#todo unify expand and apply
     end

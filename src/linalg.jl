@@ -5,7 +5,12 @@ function la.ishermitian(op::Op)
         return false
     end
 end
+
+Base.adjoint(op::OpF)=op
+Base.adjoint(op::ifOp)=op
+
 function Base.adjoint(op::Op)
+
     matf = op.mat
     name = op.name * "†"
 
