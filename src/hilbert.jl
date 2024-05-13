@@ -161,17 +161,17 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
         throw("non-local gate $(op.name) is not allowed!")
     end
 
-    if op.type=="🔬"
+    if isa(op,OpF)
+        state=op.apply(state)
+    elseif op.type=="🔬"
         if isa(op,ifOp)
             state,ind=op.born_apply(state,noise)
         else
             state,ind=_born_measure(state,op)
         end
         # println("measurement result=$(ind)")
-    elseif isa(op,OpF)
-        state=op.expand(N)*state#todo unify expand and apply
     else
-        state=op.expand(N)*state#todo unify expand and apply
+        state=op.expand(N)*state
     end
 
     if isa(noise, NoiseModel) && op.noisy
