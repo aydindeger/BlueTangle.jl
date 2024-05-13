@@ -149,6 +149,8 @@ function get_stats(ops::Vector{<:QuantumOps})
     two_qubit_count=0
     mid_measurement_count=0
 
+    ops=filter(op -> !isa(op, OpF), ops)
+
     for op in ops
 
         len+=1
@@ -228,19 +230,35 @@ function get_layers(ops::Vector{<:QuantumOps})
     layers = Vector{Vector{QuantumOps}}()
     qubit_layers = Dict{Int, Int}()
 
+    # Determine the maximum qubit index
+    max_q = maximum([max(o.qubit, o.target_qubit, o.control) for o in ops if !isa(o, OpF)])
+
     for op in ops
+        if isa(op, OpF)
+            # Create a new layer for OpF
+            push!(layers, [op])
+            
+            # Reset all qubit layers to ensure separation
+            for q in 1:max_q
+                qubit_layers[q] = length(layers)
+            end
+
+            continue
+        end
+
         # Determine the first possible layer for the operation
         op_layer = 0
         if op.q == 2
             op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.target_qubit, 0), get(qubit_layers, op.control, 0)) + 1
         elseif op.q == 1
-            if isa(op,ifOp)
+            if isa(op, ifOp)
                 op_layer = get(qubit_layers, op.qubit, 0) + 1
             else
                 op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.control, 0)) + 1
             end
         end
 
+        # Ensure there is enough space for the new layer
         while length(layers) < op_layer
             push!(layers, Vector{QuantumOps}())
         end
@@ -253,10 +271,9 @@ function get_layers(ops::Vector{<:QuantumOps})
             qubit_layers[op.target_qubit] = op_layer
         end
 
-        if isa(op,Op) && op.control != -2
+        if isa(op, Op) && op.control != -2
             qubit_layers[op.control] = op_layer
         end
-        
     end
 
     return layers

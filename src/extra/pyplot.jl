@@ -87,15 +87,13 @@ Creates a bar plot showing the probabilities of the most likely outcomes from th
 """
 plotq(m::Measurement)=plotq([m])
 
-
-
 ## circuit drawing
 
 _target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
 _control_find(op::QuantumOps)=typeof(op)==ifOp ? -2 : op.control
 
 """
-`_draw_gate(ax, op::QuantumOps, pos, gate_width)`
+`_draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)`
 
 Internal function to draw a quantum gate on a circuit diagram.
 
@@ -106,88 +104,59 @@ Internal function to draw a quantum gate on a circuit diagram.
 
 Draws the specified quantum gate on the given plot axis.
 """
-function _draw_gate(ax, op::QuantumOps, pos, gate_width)
+function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
+    if isa(op, OpF)
+        # Draw a full vertical line for OpF operations
+        ax.plot([pos, pos], [-.2, qubit_lines-.8], "black", linewidth=2)
+        ax.text(pos, qubit_lines - 0.6, op.name, color="black", ha="center", va="center")
+        return
+    end
+
     qubit = op.qubit
     target_qubit = _target_find(op)
     control = _control_find(op)
 
-    # symbol2=op.q==1 ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "o" : "x")
-    c="black"
-    if op.type=="🔬" #op.noisy!=false
-        c_t="red"
-    else
-        c_t="black"
-    end
-
-
-    if isa(op.mat,Function) #BlueTangle._clean_name(op.name) ∈ BlueTangle.gates_with_phase
-        symbol2="o"
-        c_t="blue"
-    elseif op.q==1
-        symbol2="o"
-    else
-        symbol2=BlueTangle._swap_control_target(op.mat)==op.mat ? "o" : "x"
-    end
+    c = "black"
+    c_t = "black"
 
     if control != -2
-        
         # Draw a line for the control-target connection
         ax.plot([pos, pos], [qubit - 1, control - 1], c)
-        ax.plot(pos, control - 1, "o", color=c, markersize=gate_width*20)
- 
+        ax.plot(pos, control - 1, "o", color=c, markersize=gate_width * 20)
+
         # Draw the control dot
-        if op.q==1
-            ax.plot(pos, qubit - 1, "x", color=c, markersize=gate_width*20)
-
-            if control>qubit
-                ax.text(pos, qubit - 1.4, "c-"*op.name, color=c_t, ha="center")
+        if op.q == 1
+            ax.plot(pos, qubit - 1, "x", color=c, markersize=gate_width * 20)
+            if control > qubit
+                ax.text(pos, qubit - 1.4, "c-" * op.name, color=c_t, ha="center")
             else
-                ax.text(pos, qubit - 0.7, "c-"*op.name, color=c_t, ha="center")
+                ax.text(pos, qubit - 0.7, "c-" * op.name, color=c_t, ha="center")
             end
-
-        elseif op.q==2
-            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width*20)
-            ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width*20)
+        elseif op.q == 2
+            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
+            ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width * 20)
             ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c)
-
-            ax.text(pos, target_qubit - .8, "c-"*op.name, color=c_t, ha="center")
-
+            ax.text(pos, target_qubit - 0.8, "c-" * op.name, color=c_t, ha="center")
         end
 
     # Single qubit gate
     elseif op.q == 1
-        # Draw the gate symbol (e.g., a circle)
-
-        if op.type=="🔬"
-            ax.plot(pos, qubit - 1, marker=">", color=c, markersize=gate_width*30)
-        else
-            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width*20)
-        end
-        # Add the gate name
-        ax.text(pos, qubit - .7, op.name, color=c_t, ha="center", va="center")
+        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
+        ax.text(pos, qubit - 0.7, op.name, color=c_t, ha="center", va="center")
 
     elseif op.q == 2
-        # Draw a line for the control-target connection
-        ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width*20)
-
-        # Draw the control dot
-        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width*20)
-
-        ax.plot(pos, target_qubit - 1, symbol2, color=c, markersize=gate_width*20)
-
-        if target_qubit<qubit
+        ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width * 20)
+        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
+        ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width * 20)
+        if target_qubit < qubit
             ax.text(pos, target_qubit - 1.4, op.name, color=c_t, ha="center")
         else
             ax.text(pos, target_qubit - 0.7, op.name, color=c_t, ha="center")
         end
-
     end
-
 end
 
-plotq(circuit::Circuit)=plotq(circuit.layers)
 
-plotq(ansatz::AnsatzOptions)=plotq(ansatz.ops)
 
 """
 `plot(ops::Vector{QuantumOps}; list_of_initial_qubits::Vector{Int}=Int[])`
@@ -196,12 +165,11 @@ Plots a quantum circuit diagram from a vector of quantum operations.
 
 Creates a visual representation of the quantum circuit based on the specified operations and initial qubit states.
 """
-function plotq(layers::Vector;list_of_initial_qubits::Vector{Int}=Int[])
+function plotq(layers::Vector{Vector{<:QuantumOps}}; list_of_initial_qubits::Vector{Int} = Int[])
+    ops = vcat(layers...)
 
-    ops=vcat(layers...)
-    
     if isempty(list_of_initial_qubits)
-        qubit_lines = maximum([max(op.qubit, _target_find(op), _control_find(op)) for op in ops])
+        qubit_lines = maximum([max(op.qubit, _target_find(op), _control_find(op)) for op in ops if !isa(op, OpF)])
     else
         qubit_lines = length(list_of_initial_qubits)
     end
@@ -210,17 +178,17 @@ function plotq(layers::Vector;list_of_initial_qubits::Vector{Int}=Int[])
     num_layers = length(layers)
     println("layers=$(num_layers), ops=$(num_ops)")
 
-    num=isa(layers,Vector{<:QuantumOps}) ? num_ops : num_layers
+    num = isa(layers, Vector{<:QuantumOps}) ? num_ops : num_layers
 
-     # Adjust the xsize calculation
+    # Adjust the xsize calculation
     xsize = num * 1.5  # Provide horizontal space based on number of operations
     ysize = qubit_lines * 1  # Vertical space based on qubit lines
     
-    fig, ax = subplots(figsize=(xsize,ysize),dpi=100)#,tight_layout=true)
+    fig, ax = subplots(figsize=(xsize, ysize), dpi=100)
     ax.axis("off")  # Turn off the axis
     
     # Drawing constants
-    gate_width = .4
+    gate_width = 0.4
 
     # Set plot limits
     ax.set_ylim(-1, qubit_lines)
@@ -228,30 +196,32 @@ function plotq(layers::Vector;list_of_initial_qubits::Vector{Int}=Int[])
 
     # Draw the horizontal lines for qubits and label them
     for i in 1:qubit_lines
-        ax.hlines(i-1, -.5, num - 0.5, colors="black")#horizontal line
+        ax.hlines(i - 1, -0.5, num - 0.5, colors="black")  # Horizontal line
         label_text = list_of_initial_qubits == Int[] ? "Qubit $i" : "Qubit $i [$(list_of_initial_qubits[i])]"
-        ax.text(-0.7, i-1, label_text, ha="right", va="center")
+        ax.text(-0.7, i - 1, label_text, ha="right", va="center")
     end
 
-
-    if isa(layers,Vector{<:QuantumOps})
-
+    if isa(layers, Vector{<:QuantumOps})
         for (pos, op) in enumerate(ops)
-            _draw_gate(ax, op, pos-1, gate_width)  # Position gates with some offset
+            _draw_gate(ax, op, pos - 1, gate_width, qubit_lines)  # Position gates with some offset
         end
-
     else
-
         for (layer_idx, layer) in enumerate(layers)
             for op in layer
-                _draw_gate(ax, op, layer_idx - 1, gate_width)  # Use layer_idx as horizontal position
+                _draw_gate(ax, op, layer_idx - 1, gate_width, qubit_lines)  # Use layer_idx as horizontal position
             end
         end
-
     end
 
     display(fig)
 end
+
+
+plotq(circuit::Circuit)=plotq(circuit.layers)
+
+plotq(ansatz::AnsatzOptions)=plotq(ansatz.ops)
+
+
 
 """
 `savefigure(name::String)`

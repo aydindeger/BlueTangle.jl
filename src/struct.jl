@@ -536,6 +536,25 @@ end
 
 _find_argument_number(func::Function)=length(methods(func)[1].sig.parameters)-1
 
+"""
+f(state) -> return state
+"""
+struct OpF <: QuantumOps
+    q::Int
+    name::String
+    noisy::Bool
+    apply::Function
+
+    function OpF(name::String,f::Function;noisy::Bool=false)
+
+        new_apply(state::sa.SparseVector;kwargs...)=f(state;kwargs...)
+
+        return new(1, name, noisy, new_apply)
+    end
+    
+end
+
+
 ##========== Struct ==========
 
 """
