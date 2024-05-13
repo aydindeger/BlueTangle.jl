@@ -177,6 +177,7 @@ function get_stats(ops::Vector{<:QuantumOps})
         if op.type=="🔬"
             mid_measurement_count+=1
         end
+
     end
 
     return (N=max_index,len=len,depth=_calculate_circuit_depth(ops),cx_count=cx_count,swap_count=swap_count,two_qubit_count=two_qubit_count,mid_measurement_count=mid_measurement_count)
@@ -196,6 +197,7 @@ function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
     circuit_depth = 0
 
     for op in ops
+
         # Initialize max_layer based on the control qubit
         max_layer = get(qubit_layers, op.qubit, 0)
 
@@ -213,6 +215,7 @@ function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
         if op.q == 2
             qubit_layers[op.target_qubit] = current_layer
         end
+
     end
 
     return circuit_depth
@@ -358,9 +361,9 @@ function measure(state::sa.SparseVector,number_of_experiment::Int=-1;label="stat
 
     fock=int2bin.(bitstr,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments=[get_mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
 
-    return Measurement(bitstr,avg_prob,expect,mag_moments,"0",number_of_experiment,label,N,rho_construct)
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",number_of_experiment,label,N,rho_construct)
     
 end
 
@@ -407,9 +410,9 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
     fock=int2bin.(bitstr,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments=[get_mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12] #fix this
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12] #fix this
 
-    return Measurement(bitstr,avg_prob,expect,mag_moments,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
     
 end
 

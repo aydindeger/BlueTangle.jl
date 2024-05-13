@@ -27,8 +27,7 @@ to_MPS
 ```@docs
 entanglement_entropy
 shadow
-mag_moments_from_rho
-get_mag_moments
+mag_moments
 ```
 
 ## Other

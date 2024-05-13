@@ -10,7 +10,7 @@ export gate,gates,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,
 export plotq, savefigure
 export fock_basis_create, int2bin
 export dim, _born_measure
-export entanglement_entropy, shadow, mag_moments_from_rho, get_mag_moments
+export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state
 export it, sa, plt, la, sb
 export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, variational_apply, get_stats, get_layers, measure_ZNE, fidelity
