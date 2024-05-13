@@ -169,19 +169,17 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
         end
         # println("measurement result=$(ind)")
     else
-        state=op.expand(N)*state
+        state=op.expand(N)*state#todo unify expand and apply
     end
 
     if isa(noise, NoiseModel) && op.noisy
-
         selected_noise = op.q == 1 ? noise.q1 : noise.q2
 
         if isa(selected_noise, QuantumChannel)
             state = apply_noise(state, op, selected_noise)
         end
+    end
 
-   end
-    
     return state
 
 end

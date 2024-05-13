@@ -184,10 +184,10 @@ end
 
 ##========== expectation from measurement ==========
 
-mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)=[mag_moments_from_rho(rho,op_str,ord) for ord=1:max_moment]
+mag_moments(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)=[mag_moments(rho,op_str,ord) for ord=1:max_moment]
 
 """
-`mag_moments_from_rho(rho::sa.SparseMatrixCSC, op_str::String, moment_order::Int) -> Float64`
+`mag_moments(rho::sa.SparseMatrixCSC, op_str::String, moment_order::Int) -> Float64`
 
 Calculates the magnetization moments from a given density matrix.
 
@@ -197,7 +197,7 @@ Calculates the magnetization moments from a given density matrix.
 
 Returns the computed magnetization moment of the specified order.
 """
-function mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String,moment_order::Int)
+function mag_moments(rho::sa.SparseMatrixCSC,op_str::String,moment_order::Int)
     throw("fix")
     N=get_N(rho)
     mag_op=sum(hilbert_op(Op(op_str,i),N) for i=1:N)
@@ -205,7 +205,7 @@ function mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String,moment_orde
 end
 
 """
-`mag_cumulants_from_rho(rho::sa.SparseMatrixCSC, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
+`mag_cumulants(rho::sa.SparseMatrixCSC, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
 
 Calculates the magnetization cumulants from a given density matrix.
 
@@ -216,23 +216,23 @@ Calculates the magnetization cumulants from a given density matrix.
 
 Returns the computed magnetization cumulant of the specified order.
 """
-function mag_cumulants_from_rho(rho::sa.SparseMatrixCSC,op_str::String,cumulant_order::Int;max_moment=12)
-    moments=[mag_moments_from_rho(rho,op_str,i) for i=1:max_moment]
+function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String,cumulant_order::Int;max_moment=12)
+    moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments,cumulant_order)
 end
 
-function mag_cumulants_from_rho(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)
-    moments=[mag_moments_from_rho(rho,op_str,i) for i=1:max_moment]
+function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)
+    moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments)
 end
 
 """
 calculates average magnetization moments from sample
 """
-get_mag_moments(m::Measurement,moment_order::Int)=get_mag_moments(m.number_of_qubits,m.bitstr,m.sample,moment_order)
-get_mag_moments(m::Measurement;max_moment=12)=[get_mag_moments(m::Measurement,ord) for ord=1:max_moment]
+mag_moments(m::Measurement,moment_order::Int)=mag_moments(m.number_of_qubits,m.bitstr,m.sample,moment_order)
+mag_moments(m::Measurement;max_moment=12)=[mag_moments(m::Measurement,ord) for ord=1:max_moment]
 
-function get_mag_moments(number_of_qubits::Int,bitstr::Union{UnitRange,Vector},sample::Union{sa.SparseVector,Vector},moment_order::Int)
+function mag_moments(number_of_qubits::Int,bitstr::Union{UnitRange,Vector},sample::Union{sa.SparseVector,Vector},moment_order::Int)
     mag=sum.(BlueTangle.mag_basis.(bitstr,number_of_qubits))
     return sum(mag.^(moment_order) .* sample)
 end
@@ -253,8 +253,8 @@ function cumulants_from_moments(moments::Vector,n::Int)
     end
 end
 
-function mag_cumulants_from_measurement(m::Measurement,cumulant_order::Int;max_moment=12)
-    moments=[get_mag_moments(m,i) for i=1:max_moment]
+function mag_cumulants(m::Measurement,cumulant_order::Int;max_moment=12)
+    moments=[mag_moments(m,i) for i=1:max_moment]
     return cumulants_from_moments(moments,cumulant_order)
 end
 

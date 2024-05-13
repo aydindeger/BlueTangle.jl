@@ -87,6 +87,7 @@ function _make_swaps(op::QuantumOps,neighbors::Dict;noisy_swap::Bool=false, fswa
         new_op = op.qubit<op.target_qubit ? Op(op.name,path[end-1],op.target_qubit;noisy=op.noisy) : Op(op.name,op.target_qubit+1,op.target_qubit;noisy=op.noisy)
         return [[Op(s...;noisy=noisy_swap) for s=swap_operations];new_op;[Op(s...;noisy=noisy_swap) for s=reverse(swap_operations)]]
     end
+
 end
 
 
