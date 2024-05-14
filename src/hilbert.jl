@@ -283,14 +283,15 @@ function _born_measure(state::sa.SparseVector,o::QuantumOps)
     N=get_N(state)
     rotMat=o.expand(N)
     state=rotMat*state#rotate
-    state,ind=_born_rule_apply(N,state,o.qubit)
+    state,ind=born_measure_Z(N,state,o.qubit)
     state=rotMat'*state#rotate back
 
     return state,ind
 
 end
 
-function _born_rule_apply(N::Int,state::sa.SparseVector,qubit::Int)
+
+function born_measure_Z(N::Int,state::sa.SparseVector,qubit::Int)
 
     born_ops=[gate.P0, gate.P1]
 
@@ -306,17 +307,42 @@ function _born_rule_apply(N::Int,state::sa.SparseVector,qubit::Int)
 
 end
 
+
+"""
+    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
+    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int)
+"""
+function born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
+  
+    slist=[expand_multi_op("P0,P0",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P1,P0",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P0,P1",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P1,P1",[qubit1,qubit2],N)*state]
+    
+    measure0i0=abs(state'slist[1])
+    measure1i0=abs(state'slist[2])
+    measure0i1=abs(state'slist[3])
+    measure1i1=abs(state'slist[4])
+    
+    probs=[measure0i0,measure1i0,measure0i1,measure1i1]
+    ind=BlueTangle._weighted_sample(probs)
+    
+    return sa.normalize(slist[ind]),ind
+end
+
+
+
 function _born_measure(psi::it.MPS,o::QuantumOps;cutoff=1e-10,maxdim=500)
 
     M=it.siteinds(psi)
     psi=it.apply(o.expand(M),psi;cutoff=cutoff,maxdim=maxdim) #rotate
-    psi,ind=_born_rule_apply(psi,o.qubit)
+    psi,ind=born_measure_Z(psi,o.qubit)
     psi=it.apply(it.op(o.mat',M[o.qubit]),psi;cutoff=cutoff,maxdim=maxdim)#rotate back
     return psi,ind
 
 end
 
-function _born_rule_apply(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
+function born_measure_Z(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
 
     born_ops=[gate.P0, gate.P1]
     si=it.siteinds(psi, qubit)
@@ -341,13 +367,13 @@ function _born_measure(rho::sa.SparseMatrixCSC,o::QuantumOps)
     mat = o.expand(N)
     rho = mat * rho * mat'; #rotate
 
-    rho_born =_born_rule_apply(N,rho,o.qubit)
+    rho_born =born_measure_Z(N,rho,o.qubit)
     
     return mat' * rho_born * mat#todo fix rotate back
 
 end
 
-function _born_rule_apply(N::Int,rho::sa.SparseMatrixCSC,qubit::Int)
+function born_measure_Z(N::Int,rho::sa.SparseMatrixCSC,qubit::Int)
 
     new_rho=zero(rho)
 

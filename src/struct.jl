@@ -423,6 +423,10 @@ product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(li
 neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
 neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
 
+"""
+    random_state(N)
+"""
+random_state(N::Int)=product_state(rand([0,1],N))
 
 """
 `zero_state(N::Int) -> sa.SparseVector`
@@ -451,7 +455,7 @@ function __ifOp_apply(state::sa.SparseVector,name::String,qubit::Int,if0::Vector
     N=get_N(state)
     rotMat=__measurement_hilbert(N,name,qubit)
     state=rotMat*state #rotate
-    state,ind=_born_rule_apply(N,state,qubit)
+    state,ind=born_measure_Z(N,state,qubit)
     state=rotMat'*state #rotate back
 
     if_op_list=ind==0 ? if0 : if1
