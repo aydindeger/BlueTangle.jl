@@ -710,5 +710,8 @@ function string_to_matrix(list_of_operators::String)
     return foldl(kron,sa.sparse.(gates.(ops_str)))
 end
 
-
+"""
+    hamming_distance(v1::Vector{Int}, v2::Vector{Int})
+"""
+hamming_distance(v1::Vector{Int}, v2::Vector{Int})=sum(v1 .⊻ v2)
 
