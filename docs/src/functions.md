@@ -76,7 +76,7 @@ get_layers
 ## Noise
 
 ```@docs
-is_kraus_valid
+iskraus
 Noise1
 Noise2
 apply_noise

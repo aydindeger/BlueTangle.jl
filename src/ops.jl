@@ -678,7 +678,7 @@ Expand multiple quantum operators over a specified set of qubits.
 
 Returns a matrix representing the expanded operators.
 """
-function expand_multi_op(list_of_operators::String,qubits_applied::Vector,N::Int)
+function expand_multi_op(list_of_operators::String,qubits_applied::Vector{Int},N::Int)
 
     ops_str =String.(split(list_of_operators,","))
     result = ["I" for _ in 1:N]

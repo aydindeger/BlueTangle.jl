@@ -68,17 +68,17 @@ struct QuantumChannel
     q::Int
     model::String
     p::Float64
-    kraus::Vector{Matrix}
+    kraus::Vector{AbstractMatrix}
     prob::Function
     apply::Function
 
-    function QuantumChannel(q::Int,model::String,p::Float64)
+    function QuantumChannel(model::String,kraus_ops::Vector{<:AbstractMatrix},p::Float64)
 
+        q=Int(sqrt(size(kraus_ops[1],1)))
         model=lowercase(model)
 
         if q==1
 
-            kraus_ops=BlueTangle.noise_model1(model,p)
             new_prob(state::sa.SparseVector,qubit::Int)=__calc_prob(get_N(state),state,kraus_ops,qubit)
             new_apply(state::sa.SparseVector,qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
             new_apply(rho::sa.SparseMatrixCSC,qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
@@ -87,17 +87,29 @@ struct QuantumChannel
 
         elseif q==2
 
-            kraus_ops=BlueTangle.noise_model2(model,p)
             new_prob2(state::sa.SparseVector,qubit::Int,target_qubit::Int)=__calc_prob(get_N(state),state,kraus_ops,qubit,target_qubit)
             new_apply2(state::sa.SparseVector,qubit::Int,target_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
             new_apply2(rho::sa.SparseMatrixCSC,qubit::Int,target_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
 
             return new(q,model,p,kraus_ops,new_prob2,new_apply2)
-
         else
             throw("Noise models are available only for 1 and 2 qubits!")
         end
     end
+
+    function QuantumChannel(q::Int,model::String,p::Float64)
+        model=lowercase(model)
+
+        kraus_ops=q==1 ? BlueTangle.noise_model1(model,p) : BlueTangle.noise_model2(model,p)
+        return QuantumChannel(model,kraus_ops,p)
+    end
+
+    function QuantumChannel(model::String,p::Float64)
+        model=lowercase(model)
+        kraus_ops=BlueTangle.noise_model1(model,p)
+        return QuantumChannel(model,kraus_ops,p)
+    end
+
 
 end
 
@@ -161,10 +173,10 @@ In this example, `custom_noise_model` is a single-qubit noise model named "MyNoi
 # Notes
 Ensure that the provided Kraus operators comply with the rules for quantum channels. Invalid operators will result in an error being thrown by the function.
 """
-custom_noise(q::Int,name_of_model::String,kraus::Vector{Matrix})=QuantumChannel(q,name_of_model,is_kraus_valid(kraus) ? kraus : throw("define valid kraus operators"))
+custom_noise(q::Int,name_of_model::String,kraus::Vector{AbstractMatrix})=QuantumChannel(q,name_of_model,iskraus(kraus) ? kraus : throw("define valid kraus operators"))
 
 """
-`is_kraus_valid(kraus::Vector{Matrix}) -> Bool`
+`iskraus(kraus::Vector{Matrix}) -> Bool`
 
 Determines the validity of a set of Kraus operators.
 
@@ -174,7 +186,7 @@ This function checks if the provided Kraus operators form a valid quantum channe
 It does so by verifying if the sum of the products of each Kraus operator and its adjoint 
 (approximately) equals the identity matrix. Returns `true` if the set is valid, `false` otherwise.
 """
-function is_kraus_valid(kraus::Vector{Matrix})
+function iskraus(kraus::Vector)
     sumk = sum(k' * k for k in kraus)
     sumk ≈ Matrix(sa.I, size(sumk, 1), size(sumk, 1))
 end

@@ -44,3 +44,18 @@ function Base.adjoint(circ::Circuit)
 
     return circ2
 end
+
+"""
+    isunitary(mat::AbstractMatrix) --> Bool
+"""
+isunitary(mat::AbstractMatrix)=isapprox(mat'mat,Matrix(la.I, size(mat,1),size(mat,1)),atol=1e-12)
+
+"""
+    ishermitian(mat::AbstractMatrix) --> Bool
+"""
+ishermitian(mat::AbstractMatrix)=la.ishermitian(mat)
+
+"""
+    sparsevector(vec::AbstractArray)=sa.SparseVector(vec)
+"""
+sparsevector(vec::AbstractArray)=sa.SparseVector(vec)

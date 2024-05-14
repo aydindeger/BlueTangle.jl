@@ -19,6 +19,8 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
 
     if N < qubit || N < target_qubit || N < control
         throw("N must be larger than qubits")
+    elseif size(mat,1)>4
+        throw("only 2-qubit operations are supported")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -72,6 +74,8 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 
     if N < qubit || N < control
         throw("N must be larger than qubit")
+    elseif size(mat,1)>2
+        throw("only 2-qubit operations are supported")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -92,6 +96,10 @@ function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;con
 
     if control==-2
         throw("only works with control qubit")
+    end
+
+    if size(mat,1)>4
+        throw("only 2-qubit operations are supported")
     end
 
     id = gate.I

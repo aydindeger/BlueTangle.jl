@@ -392,27 +392,6 @@ function partial_trace(N::Int,state::sa.SparseVector,keep_index1::Int,keep_index
 end
 
 
-# N=6
-# state=sa.normalize(sa.sparse(rand(ComplexF64,2^N)));
-
-
-# keep_index1=4
-# keep_index2=5
-# traceout_ind=setdiff(1:N,[keep_index1,keep_index2])
-# a=BlueTangle.partial_trace(state*state',fill(2,N),traceout_ind)
-
-# b=partial_trace(N,state,keep_index1,keep_index2)
-
-# println("two qubit implementation=",a ≈ b)
-
-
-# traceout_ind=setdiff(1:N,[keep_index1])
-# c=BlueTangle.partial_trace(state*state',fill(2,N),traceout_ind)
-# d=partial_trace(N,state,keep_index1)
-
-# println("one qubit implementation=",c ≈ d)
-
-
 # Define a function to perform the partial trace over the second subsystem
 function partial_trace_second_subsystem(ρ, dimA, dimB)
     # ρ is the full density matrix of the system A ⊗ B
