@@ -76,6 +76,8 @@ function plotq(mVector::Vector{Measurement},labels::Vector{String}=[""])
 
 end
 
+
+
 """
 `plot(m::Measurement; rep::Symbol=:int)`
 
@@ -86,6 +88,9 @@ Plots the outcome probabilities for a single quantum measurement.
 Creates a bar plot showing the probabilities of the most likely outcomes from the measurement.
 """
 plotq(m::Measurement)=plotq([m])
+
+plotq(state::sa.SparseVector)=plotq([measure(state)])
+plotq(states::Vector{<:sa.SparseVector})=plotq(measure.([states...]))
 
 ## circuit drawing
 
@@ -165,7 +170,7 @@ Plots a quantum circuit diagram from a vector of quantum operations.
 
 Creates a visual representation of the quantum circuit based on the specified operations and initial qubit states.
 """
-function plotq(layers::Vector{Vector{<:QuantumOps}}; list_of_initial_qubits::Vector{Int} = Int[])
+function plotq(layers::Vector; list_of_initial_qubits::Vector{Int} = Int[])
     ops = vcat(layers...)
 
     if isempty(list_of_initial_qubits)

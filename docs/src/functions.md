@@ -5,7 +5,7 @@ Detailed explanations or additional notes about all functions.
 ## Measurement functions
 
 ```@docs
-sample_outcomes
+sample
 get_probabilities_from_sample
 expect
 correlation

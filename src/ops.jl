@@ -8,7 +8,7 @@ get_N(rho::sa.SparseMatrixCSC)=Int(log(2,size(rho,1)))
 get_N(state::it.MPS)=it.siteinds(state)
 
 """
-    sample_outcomes(state::sa.SparseVector, shots::Int) -> Vector
+    sample(state::sa.SparseVector, shots::Int) -> Vector
 
 Sample outcomes from a quantum state vector based on the probability distribution.
 
@@ -17,7 +17,7 @@ Sample outcomes from a quantum state vector based on the probability distributio
 
 Returns a vector of sampled outcomes.
 """
-function sample_outcomes(state::sa.SparseVector, shots)
+function sample(state::sa.SparseVector, shots)
 
     N=get_N(state)
 
@@ -36,25 +36,25 @@ function sample_outcomes(state::sa.SparseVector, shots)
 end
 
 """
-    get_probabilities_from_sample(sample_outcomes::Vector, N::Int) -> (Vector, Vector)
+    get_probabilities_from_sample(sample::Vector, N::Int) -> (Vector, Vector)
 
 Convert a sample of outcomes into probabilities.
 
-- `sample_outcomes`: A vector of sampled outcomes.
+- `sample`: A vector of sampled outcomes.
 - `N`: Number of qubits.
 
 Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
 """
-function get_probabilities_from_sample(sample_outcomes::Vector, N::Int)
+function get_probabilities_from_sample(sample::Vector, N::Int)
     # Preallocate the frequency array
     freq = zeros(Int, 2^N)
 
     # Increment frequencies
-    for outcome in sample_outcomes
+    for outcome in sample
         freq[outcome + 1] += 1  # +1 because Julia arrays are 1-indexed
     end
 
-    total_samples = length(sample_outcomes)
+    total_samples = length(sample)
 
     # Convert frequencies to probabilities
     probabilities = freq ./ total_samples
@@ -72,7 +72,7 @@ function sort_vectors(vector1::Vector,vector2::Vector)
     return (vector1[sorted_pos],vector2[sorted_pos])
 end
 
-sample_state(state::sa.SparseVector, shots::Int)=get_probabilities_from_sample(sample_outcomes(state, shots),get_N(state))
+sample_state(state::sa.SparseVector, shots::Int)=get_probabilities_from_sample(sample(state, shots),get_N(state))
 
 function sample_exact(state::sa.SparseVector)
     a,b=sa.findnz(abs2.(state))
@@ -112,7 +112,7 @@ function shadow(circuit::Circuit,number_of_experiment::Int)
             measurement_basis[qubit]=rOp
         end
 
-        classical_state=sample_outcomes(state,1)#shot=1 #this should stay as 1 for noisy experiments
+        classical_state=sample(state,1)#shot=1 #this should stay as 1 for noisy experiments
 
         classical_bit=int2bin(classical_state[1],N)
         rho_single_list=[]
@@ -384,6 +384,21 @@ function measure(state::sa.SparseVector,number_of_experiment::Int=-1;label="stat
     
 end
 
+
+function measure(sample::Vector{Int},N::Int)
+
+    rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
+
+    bitstr,avg_prob=get_probabilities_from_sample(sample,N)
+
+    fock=int2bin.(bitstr,N)
+    expect=[BlueTangle._sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
+
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",length(sample),"sample to measurement",N,rho_construct)
+    
+end
+
 function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
     all_sample=[]
@@ -395,7 +410,7 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
         state=to_state(circuit,0)# id=0 no noise no zne
         state=_final_measurement(state,circuit.options)#notice how state is changed
-        classical_state=sample_outcomes(state,number_of_experiment) #shots=number_of_experiment
+        classical_state=sample(state,number_of_experiment) #shots=number_of_experiment
         append!(all_sample,classical_state)
         if circuit.options.density_matrix==true
             rho_construct = state*state'
@@ -408,7 +423,7 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
             state=to_state(circuit,id)
             state=_final_measurement(state,circuit.options)#notice how state is changed
 
-            classical_state=sample_outcomes(state,1)#shot=1 #this should stay as 1 for noisy experiments
+            classical_state=sample(state,1)#shot=1 #this should stay as 1 for noisy experiments
             append!(all_sample,classical_state)
 
             if circuit.options.density_matrix==true

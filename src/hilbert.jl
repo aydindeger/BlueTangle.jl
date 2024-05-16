@@ -17,10 +17,14 @@ swap is performed before applying `mat`.
 """
 function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
 
+    distance=abs(qubit-target_qubit)
+
     if N < qubit || N < target_qubit || N < control
         throw("N must be larger than qubits")
     elseif size(mat,1)>4
         throw("only 2-qubit operations are supported")
+    # elseif distance>2
+        # throw("nonlocal operations (distance>2) are not allowed")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -28,9 +32,30 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
     final_mat=qubit > target_qubit ? sa.sparse(BlueTangle._swap_control_target(mat)) : sa.sparse(mat)
 
     if control==-2
-        e_ops = [x == qubit ? final_mat : id for x in 1:N if x!=target_qubit]
-        return foldl(kron,e_ops)
-    else
+
+        if distance==1 #local
+            e_ops = [x == qubit ? final_mat : id for x in 1:N if x!=target_qubit]
+            return foldl(kron,e_ops)
+        # elseif distance==2 #pauli decomposition
+        else #pauli decomposition and reconstruction to build nonlocal ops
+            println("nonlocal hilbert construction")
+            coefficients, _ = pauli_decomposition(final_mat)
+            final_mat_nonlocal=pauli_reconstruction(coefficients,min(qubit,target_qubit);distance=distance)#nonlocal reconstruct
+
+            for _=1:N-max(qubit,target_qubit)
+                final_mat_nonlocal=kron(final_mat_nonlocal,id)
+            end
+
+            return final_mat_nonlocal
+
+        end
+
+    else #control operation
+
+        if distance>1 #local
+            throw("nonlocal operations (qubit and target) with control are not allowed")
+        end
+
         list=foldl(kron,[x==qubit ? final_mat : (x==control ? sa.sparse(gate.P1) : id) for x=1:N if x!=target_qubit])    
         return list+foldl(kron,[x==control ? sa.sparse(gate.P0) : id for x=1:N])#control
     end
@@ -46,6 +71,11 @@ function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector
         if op.q==1
             vec[op.qubit]=op.mat
         elseif op.q==2
+
+            if abs(op.qubit-op.target_qubit)>1 #nonlocal
+                throw("nonlocal operations (qubit and target) with control are not allowed")
+            end
+
             final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
             vec[op.qubit]=final_mat
             vec[op.target_qubit]*=NaN
@@ -74,7 +104,7 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 
     if N < qubit || N < control
         throw("N must be larger than qubit")
-    elseif size(mat,1)>2
+    elseif size(mat,1)>2 
         throw("only 2-qubit operations are supported")
     end
 
@@ -89,38 +119,38 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 end
 
 
-"""
-not efficient for MPS
-"""
-function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;control::Int)
+# """
+# not efficient for MPS
+# """
+# function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;control::Int)
 
-    if control==-2
-        throw("only works with control qubit")
-    end
+#     if control==-2
+#         throw("only works with control qubit")
+#     end
 
-    if size(mat,1)>4
-        throw("only 2-qubit operations are supported")
-    end
+#     if size(mat,1)>4
+#         throw("only 2-qubit operations are supported")
+#     end
 
-    id = gate.I
+#     id = gate.I
 
-    if target_qubit==-1
+#     if target_qubit==-1
     
-        n=abs(control-qubit)+min(qubit,control)
-        l1=[x==qubit ? mat : (x==control ? gate.P1 : id) for x=1:n]
-        return foldl(kron,l1)+foldl(kron,[x==control ? gate.P0 : id for x=1:n])
+#         n=abs(control-qubit)+min(qubit,control)
+#         l1=[x==qubit ? mat : (x==control ? gate.P1 : id) for x=1:n]
+#         return foldl(kron,l1)+foldl(kron,[x==control ? gate.P0 : id for x=1:n])
     
-    else
+#     else
     
-        n=max(abs(qubit-target_qubit),abs(qubit-control),abs(control-target_qubit))+min(qubit,target_qubit,control)
+#         n=max(abs(qubit-target_qubit),abs(qubit-control),abs(control-target_qubit))+min(qubit,target_qubit,control)
     
-        final_mat=qubit > target_qubit ? BlueTangle._swap_control_target(mat) : mat
-        list=foldl(kron,[x==qubit ? final_mat : (x==control ? gate.P1 : id) for x=1:n if x!=target_qubit])    
-        return list+foldl(kron,[x==control ? gate.P0 : id for x=1:n])#control
+#         final_mat=qubit > target_qubit ? BlueTangle._swap_control_target(mat) : mat
+#         list=foldl(kron,[x==qubit ? final_mat : (x==control ? gate.P1 : id) for x=1:n if x!=target_qubit])    
+#         return list+foldl(kron,[x==control ? gate.P0 : id for x=1:n])#control
     
-    end
+#     end
     
-end
+# end
 
 """
 `_swap_control_target(matrix::Matrix) -> Matrix`
@@ -275,8 +305,9 @@ end
 """
 apply noise on qubit or target_qubit of a given state and noise model
 """
-apply_noise(state::sa.SparseVector,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? noise.apply(state,op.qubit) : noise.apply(state,op.qubit,op.target_qubit)
-apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? noise.apply(rho,op.qubit) : noise.apply(rho,op.qubit,op.target_qubit)
+apply_noise(state::sa.SparseVector,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? (op.control == -2 ? noise.apply(state,op.qubit) : noise.apply(state,op.control,op.qubit)) : noise.apply(state,op.qubit,op.target_qubit)
+
+apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? (op.control == -2 ? noise.apply(rho,op.qubit) : noise.apply(rho,op.control,op.qubit)) : noise.apply(rho,op.qubit,op.target_qubit)
 
 function _born_measure(state::sa.SparseVector,o::QuantumOps)
 

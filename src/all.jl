@@ -7,6 +7,7 @@ import Pkg
 using ForwardDiff, Optimisers, OptimKit
 
 include("struct.jl")
+include("decompose.jl")
 include("hilbert.jl")
 include("func.jl")
 include("ops.jl")
@@ -20,4 +21,4 @@ include("vqe.jl")
 include("linalg.jl")
 
 import Base: *
-*(o::QuantumOps, state::sa.SparseVector) = apply(o,state)
+*(o::QuantumOps, state::sa.SparseVector) = apply(state,o)

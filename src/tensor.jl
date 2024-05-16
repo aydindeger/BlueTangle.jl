@@ -46,11 +46,12 @@ function tensor_to_matrix(tensor::it.ITensor)
 end
 
 """
+    prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
 this gives probability of measuring 0 and 1 on select_qubit after shots
 """
-function sample(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
+function prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
 
-    all_sample=hcat(sample(state,shots)...)[select_qubit,:]
+    all_sample=hcat(sample_bit(state,shots)...)[select_qubit,:]
 
     P1=sum(all_sample)/shots
     P0=1-P1
@@ -58,8 +59,8 @@ function sample(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_
     return P0,P1
 end
 
-sample(state::sa.SparseVector,shots::Int=1)=int2bin.(sample_outcomes(state,shots),get_N(state))
-sample(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
+sample_bit(state::sa.SparseVector,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
+sample_bit(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
 
 inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
 inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)

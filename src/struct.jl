@@ -14,7 +14,7 @@ end
 
 function __calc_prob(N::Int,state::sa.SparseVector,kraus_vec::Vector,qubit::Int,target_qubit::Int)
 
-    pA=partial_trace(N,state,qubit,target_qubit)
+    pA=partial_trace(N,state,qubit,target_qubit) #todo: does it work if qubit and target_qubit are not close?
     
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
@@ -74,7 +74,7 @@ struct QuantumChannel
 
     function QuantumChannel(model::String,kraus_ops::Vector{<:AbstractMatrix},p::Float64)
 
-        q=Int(sqrt(size(kraus_ops[1],1)))
+        q=Int(log2(size(kraus_ops[1],1)))
         model=lowercase(model)
 
         if q==1
@@ -278,7 +278,7 @@ struct Op <: QuantumOps
         return new(q,name,f,qubit,target_qubit,control,noisy,"f",new_expand)
     end
     # Inner-constructor for gates defined from a built-in or matrix 
-    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
+    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;noisy::Bool=true,control::Int=-2)
 
         q = _get_op_num_qubits(qubit, target_qubit, control)
 
@@ -297,7 +297,7 @@ struct Op <: QuantumOps
             noisy = false
             ismeasure = true
         else
-            _name_with_arg_bool(name) || (type = "phase")
+            _name_with_arg_bool(name) ? type = "phase" : type="op"
             ismeasure = false
         end
 
