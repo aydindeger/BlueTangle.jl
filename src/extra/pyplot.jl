@@ -95,7 +95,14 @@ plotq(states::Vector{<:sa.SparseVector})=plotq(measure.([states...]))
 ## circuit drawing
 
 _target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
-_control_find(op::QuantumOps)=typeof(op)==ifOp ? -2 : op.control
+
+function _control_find(op::QuantumOps)
+    if isa(op,ifOp) || isa(op,QC)
+        return -2
+    else
+        return op.control
+    end
+end
 
 """
 `_draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)`
@@ -110,6 +117,15 @@ Internal function to draw a quantum gate on a circuit diagram.
 Draws the specified quantum gate on the given plot axis.
 """
 function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
+
+    if isa(op, QC)
+        c = "tab:red"
+        c_t = "tab:red"
+    else
+        c = "black"
+        c_t = "black"
+    end
+
     if isa(op, OpF)
         # Draw a full vertical line for OpF operations
         ax.plot([pos, pos], [-.2, qubit_lines-.8], "black", linewidth=2)
@@ -121,8 +137,9 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
     target_qubit = _target_find(op)
     control = _control_find(op)
 
-    c = "black"
-    c_t = "black"
+    if target_qubit>0
+        marker2=isa(op,QC) ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "x" : "o")
+    end
 
     if control != -2
         # Draw a line for the control-target connection
@@ -152,7 +169,7 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
     elseif op.q == 2
         ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width * 20)
         ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
-        ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width * 20)
+        ax.plot(pos, target_qubit - 1, marker2, color=c, markersize=gate_width * 20)
         if target_qubit < qubit
             ax.text(pos, target_qubit - 1.4, op.name, color=c_t, ha="center")
         else

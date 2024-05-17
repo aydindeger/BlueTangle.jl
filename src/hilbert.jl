@@ -23,8 +23,6 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
         throw("N must be larger than qubits")
     elseif size(mat,1)>4
         throw("only 2-qubit operations are supported")
-    # elseif distance>2
-        # throw("nonlocal operations (distance>2) are not allowed")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -36,9 +34,8 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
         if distance==1 #local
             e_ops = [x == qubit ? final_mat : id for x in 1:N if x!=target_qubit]
             return foldl(kron,e_ops)
-        # elseif distance==2 #pauli decomposition
         else #pauli decomposition and reconstruction to build nonlocal ops
-            println("nonlocal hilbert construction")
+            # println("nonlocal hilbert reconstruction")
             coefficients, _ = pauli_decomposition(final_mat)
             final_mat_nonlocal=pauli_reconstruction(coefficients,min(qubit,target_qubit);distance=distance)#nonlocal reconstruct
 
@@ -62,29 +59,6 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
 
 end
 
-function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector) #fix and implement control here
-    
-    id = sa.sparse([1.0 0; 0im 1]);
-    vec=fill(id,N)
-
-    for op=layer
-        if op.q==1
-            vec[op.qubit]=op.mat
-        elseif op.q==2
-
-            if abs(op.qubit-op.target_qubit)>1 #nonlocal
-                throw("nonlocal operations (qubit and target) with control are not allowed")
-            end
-
-            final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
-            vec[op.qubit]=final_mat
-            vec[op.target_qubit]*=NaN
-        end#
-    end
-    
-    return foldl(kron,vec[any.(!isnan, vec)])*state
-
-end
 
 
 """
@@ -119,38 +93,31 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 end
 
 
-# """
-# not efficient for MPS
-# """
-# function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;control::Int)
 
-#     if control==-2
-#         throw("only works with control qubit")
-#     end
+function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector) #todo #fix and implement control here
+    
+    id = sa.sparse([1.0 0; 0im 1]);
+    vec=fill(id,N)
 
-#     if size(mat,1)>4
-#         throw("only 2-qubit operations are supported")
-#     end
+    for op=layer
+        if op.q==1
+            vec[op.qubit]=op.mat
+        elseif op.q==2
 
-#     id = gate.I
+            if abs(op.qubit-op.target_qubit)>1 #nonlocal
+                throw("nonlocal operations (qubit and target) with control are not allowed")
+            end
 
-#     if target_qubit==-1
+            final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
+            vec[op.qubit]=final_mat
+            vec[op.target_qubit]*=NaN
+        end#
+    end
     
-#         n=abs(control-qubit)+min(qubit,control)
-#         l1=[x==qubit ? mat : (x==control ? gate.P1 : id) for x=1:n]
-#         return foldl(kron,l1)+foldl(kron,[x==control ? gate.P0 : id for x=1:n])
-    
-#     else
-    
-#         n=max(abs(qubit-target_qubit),abs(qubit-control),abs(control-target_qubit))+min(qubit,target_qubit,control)
-    
-#         final_mat=qubit > target_qubit ? BlueTangle._swap_control_target(mat) : mat
-#         list=foldl(kron,[x==qubit ? final_mat : (x==control ? gate.P1 : id) for x=1:n if x!=target_qubit])    
-#         return list+foldl(kron,[x==control ? gate.P0 : id for x=1:n])#control
-    
-#     end
-    
-# end
+    return foldl(kron,vec[any.(!isnan, vec)])*state
+
+end
+
 
 """
 `_swap_control_target(matrix::Matrix) -> Matrix`
@@ -181,6 +148,8 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
+apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+
 """
 `apply(state::sa.SparseVector, op::QuantumOps)`
 
@@ -195,11 +164,13 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
     
     N=get_N(state)
 
-    if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-        throw("non-local gate $(op.name) is not allowed!")
-    end
+    # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+    #     throw("non-local gate $(op.name) is not allowed!")
+    # end
 
     if isa(op,OpF)
+        state=op.apply(state)
+    elseif isa(op,QC)
         state=op.apply(state)
     elseif op.type=="🔬"
         if isa(op,ifOp)
@@ -208,15 +179,15 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
             state,ind=_born_measure(state,op)
         end
         # println("measurement result=$(ind)")
-    else
+    else #good old gates
         state=op.expand(N)*state
-    end
 
-    if isa(noise, NoiseModel) && op.noisy
-        selected_noise = op.q == 1 ? noise.q1 : noise.q2
-
-        if isa(selected_noise, QuantumChannel)
-            state = apply_noise(state, op, selected_noise)
+        if isa(noise, NoiseModel) && op.noisy
+            selected_noise = op.q == 1 ? noise.q1 : noise.q2
+    
+            if isa(selected_noise, QuantumChannel)
+                state = apply_noise(state, op, selected_noise)
+            end
         end
     end
 
@@ -330,7 +301,7 @@ function born_measure_Z(N::Int,state::sa.SparseVector,qubit::Int)
     if N<=12
         prob0=sum(abs2.(hilbert(N,born_ops[1],qubit)*state))
     else
-        prob0=real(BlueTangle.partial_trace(N,state,qubit))[1,1]
+        prob0=real(BlueTangle.partial_trace(state,qubit))[1,1]
     end
 
     ind=rand() < prob0 ? 0 : 1
@@ -342,6 +313,8 @@ end
 """
     born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
     born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int)
+
+    #todo test this!
 """
 function born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
   
@@ -443,11 +416,39 @@ end
 
 
 
+##
+##========== state preparation ==========
 
+"""
+`product_state(list_of_qubits::Vector) -> sa.SparseVector`
 
+Creates a quantum state vector from a list of qubits.
 
+- `list_of_qubits`: A vector representing the state of each qubit.
 
+Returns a sparse vector representing the quantum state of the system.
+"""
+product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
+neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
 
+"""
+    random_state(N)
+"""
+random_state(N::Int)=product_state(rand([0,1],N))
 
+"""
+zero_state(N::Int) -> sa.SparseVector
 
+Returns a sparse vector representing the |000...> quantum state.
+"""
+zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
+one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
 
+"""
+    mixed_state(N::Int) -> sa.SparseVector
+"""
+mixed_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
+
+##========== state preparation ==========

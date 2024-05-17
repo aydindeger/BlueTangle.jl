@@ -22,3 +22,7 @@ include("linalg.jl")
 
 import Base: *
 *(o::QuantumOps, state::sa.SparseVector) = apply(state,o)
+
+fields(m)=fieldnames(typeof(m))
+attributes(m)=fields(m)
+ro3(x)=round(x,sigdigits=3)

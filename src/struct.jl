@@ -1,20 +1,27 @@
-##
-##========== Struct ==========
+"""
+`QuantumOps`
 
-fields(m)=fieldnames(typeof(m))
-attributes(m)=fields(m)
+Abstract type representing quantum operations.
+"""
+abstract type QuantumOps end
 
-function __calc_prob(N::Int,state::sa.SparseVector,kraus_vec::Vector,qubit::Int)
+function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int)
 
-    pA=partial_trace(N,state,qubit)
+    pA=partial_trace(state,qubit)
     
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
 end
 
-function __calc_prob(N::Int,state::sa.SparseVector,kraus_vec::Vector,qubit::Int,target_qubit::Int)
+function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int,target_qubit::Int)
 
-    pA=partial_trace(N,state,qubit,target_qubit) #todo: does it work if qubit and target_qubit are not close?
+    distance=abs(qubit-target_qubit)
+
+    if distance==1
+        pA=partial_trace(state,qubit,target_qubit)#local
+    else
+        pA=partial_trace(state,[qubit,target_qubit])#nonlocal
+    end
     
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
@@ -22,13 +29,13 @@ end
 
 function __QuantumChannel_new_apply(state::sa.SparseVector,kraus_ops::Vector,qubit::Int)
     N=get_N(state)
-    ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(N,state,kraus_ops,qubit))
+    ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(state,kraus_ops,qubit))
     return sa.normalize(hilbert(N,kraus_ops[ind],qubit)*state)
 end
 
 function __QuantumChannel_new_apply(state::sa.SparseVector,kraus_ops::Vector,qubit::Int,target_qubit::Int)
     N=get_N(state)
-    ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(N,state,kraus_ops,qubit,target_qubit))
+    ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(state,kraus_ops,qubit,target_qubit))
     return sa.normalize(hilbert(N,kraus_ops[ind],qubit,target_qubit)*state)
 end
 
@@ -66,7 +73,7 @@ Constructs a QuantumChannel object for specified qubits, noise model, and probab
 """
 struct QuantumChannel
     q::Int
-    model::String
+    name::String
     p::Float64
     kraus::Vector{AbstractMatrix}
     prob::Function
@@ -79,19 +86,20 @@ struct QuantumChannel
 
         if q==1
 
-            new_prob(state::sa.SparseVector,qubit::Int)=__calc_prob(get_N(state),state,kraus_ops,qubit)
-            new_apply(state::sa.SparseVector,qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
-            new_apply(rho::sa.SparseMatrixCSC,qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
+            new_prob(state::sa.SparseVector,first_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit)
+            new_apply(state::sa.SparseVector,first_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit)
+            new_apply(rho::sa.SparseMatrixCSC,first_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit)
 
             return new(q,model,p,kraus_ops,new_prob,new_apply)
 
         elseif q==2
 
-            new_prob2(state::sa.SparseVector,qubit::Int,target_qubit::Int)=__calc_prob(get_N(state),state,kraus_ops,qubit,target_qubit)
-            new_apply2(state::sa.SparseVector,qubit::Int,target_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
-            new_apply2(rho::sa.SparseMatrixCSC,qubit::Int,target_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
+            new_prob2(state::sa.SparseVector,first_qubit::Int,second_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit,second_qubit)
+            new_apply2(state::sa.SparseVector,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit,second_qubit)
+            new_apply2(rho::sa.SparseMatrixCSC,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit,second_qubit)
 
             return new(q,model,p,kraus_ops,new_prob2,new_apply2)
+
         else
             throw("Noise models are available only for 1 and 2 qubits!")
         end
@@ -99,7 +107,6 @@ struct QuantumChannel
 
     function QuantumChannel(q::Int,model::String,p::Float64)
         model=lowercase(model)
-
         kraus_ops=q==1 ? BlueTangle.noise_model1(model,p) : BlueTangle.noise_model2(model,p)
         return QuantumChannel(model,kraus_ops,p)
     end
@@ -110,9 +117,60 @@ struct QuantumChannel
         return QuantumChannel(model,kraus_ops,p)
     end
 
-
 end
 
+"""
+    QC=QuantumChannel but like Op
+
+    QC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1)
+    QC(q::Int,model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
+"""
+struct QC <: QuantumOps
+    q::Int
+    name::String
+    kraus::Vector{AbstractMatrix}
+    qubit::Int
+    target_qubit::Int
+    control::Int
+    type::String
+    prob::Function
+    apply::Function
+
+    #the following is like quantum ops
+    function QC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1;type="")
+
+        q=Int(log2(size(kraus_ops[1],1)))
+        name=lowercase(name)
+
+        if q==1
+
+            new_prob_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit)
+            new_apply_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
+            new_apply_op(rho::sa.SparseMatrixCSC)=throw("fix")
+
+            return new(q,name,kraus_ops,qubit,target_qubit,-2,type,new_prob_op,new_apply_op)
+
+        elseif q==2
+
+            new_prob2_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit,target_qubit)
+            new_apply2_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
+            new_apply2_op(rho::sa.SparseMatrixCSC)=throw("fix")
+
+            return new(q,name,kraus_ops,qubit,target_qubit,-2,type,new_prob2_op,new_apply2_op)
+
+        else
+            throw("Noise models are available only for 1 and 2 qubits!")
+        end
+    end
+
+    function QC(model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
+        q=target_qubit>0 ? 2 : 1
+        model=lowercase(model)
+        kraus_ops=q==1 ? BlueTangle.noise_model1(model,p) : BlueTangle.noise_model2(model,p)
+        return QC(model,kraus_ops,qubit,target_qubit;type="$(p)")
+    end
+
+end
 
 """
     Create a NoiseModel
@@ -216,30 +274,6 @@ Returns a QuantumChannel object.
 Noise2(model::String,p::Float64)=QuantumChannel(2,model,p)
 
 ##
-
-"""
-`QuantumOps`
-
-Abstract type representing quantum operations.
-"""
-abstract type QuantumOps end
-
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
-
-
-##
-
-function _measurement_mat(name::String)
-    uppercase_name=uppercase(name)
-    if uppercase_name=="M(Z)" || uppercase_name=="MZ"
-        return BlueTangle.gate.I
-    elseif uppercase_name=="M(X)" || uppercase_name=="MX"
-        return BlueTangle.gate.H
-    elseif uppercase_name=="M(Y)" || uppercase_name=="MY"
-        return BlueTangle.gate.HSp
-    end
-end
 
 """
 `Op(q::Int, name::String, mat::AbstractMatrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
@@ -380,65 +414,17 @@ end
 Op(nameAngle::Vector,qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)=Op("$(nameAngle[1])($(nameAngle[2]...))",qubit;type=type,noisy=noisy,control=control)
 Op(nameAngle::Vector,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)=Op("$(nameAngle[1])($(nameAngle[2]))",qubit,target_qubit;type=type,noisy=noisy,control=control)
 
-sitesN(N::Int)=it.siteinds("Qubit", N)
 
-init(N::Int)=N,sitesN(N)
-
-"""
-create all zero state
-"""
-zero_state(M::Vector{it.Index{Int64}})=it.productMPS(M,"0")
-
-"""
-create all one state
-"""
-one_state(M::Vector{it.Index{Int64}})=it.productMPS(M,"1")
-
-"""
-create given product state
-"""
-product_state(M::Vector{it.Index{Int64}},list_of_qubits::Vector)=it.productMPS(M,map(string,list_of_qubits))
-
-"""
-create neel state 010101
-"""
-neel_state01(M::Vector{it.Index{Int64}})=product_state(M,[isodd(i) ? 0 : 1 for i=1:length(M)])
-
-"""
-create neel state 101010
-"""
-neel_state10(M::Vector{it.Index{Int64}})=product_state(M,[isodd(i) ? 1 : 0 for i=1:length(M)])
-
-"""
-`product_state(list_of_qubits::Vector) -> sa.SparseVector`
-
-Creates a quantum state vector from a list of qubits.
-
-- `list_of_qubits`: A vector representing the state of each qubit.
-
-Returns a sparse vector representing the quantum state of the system.
-"""
-product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
-product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
-neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
-neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
-
-"""
-    random_state(N)
-"""
-random_state(N::Int)=product_state(rand([0,1],N))
-
-"""
-`zero_state(N::Int) -> sa.SparseVector`
-
-Returns a sparse vector representing the |000...> quantum state.
-"""
-zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
-one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
-
-dim(MPS::it.MPS)=it.maxlinkdim(MPS)
-dim(MPO::it.MPO)=it.maxlinkdim(MPO)
-
+function _measurement_mat(name::String)
+    uppercase_name=uppercase(name)
+    if uppercase_name=="M(Z)" || uppercase_name=="MZ"
+        return BlueTangle.gate.I
+    elseif uppercase_name=="M(X)" || uppercase_name=="MX"
+        return BlueTangle.gate.H
+    elseif uppercase_name=="M(Y)" || uppercase_name=="MY"
+        return BlueTangle.gate.HSp
+    end
+end
 
 function __measurement_hilbert(N::Int,name::String,qubit::Int)
     if uppercase(name)=="MR" || uppercase(name)=="M(R)"
@@ -556,7 +542,7 @@ _find_argument_number(func::Function)=length(methods(func)[1].sig.parameters)-1
 f(state) -> return state
 """
 struct OpF <: QuantumOps
-    q::Int
+    q::Vector{Int}
     name::String
     noisy::Bool
     apply::Function
@@ -565,7 +551,7 @@ struct OpF <: QuantumOps
 
         new_apply(state::sa.SparseVector;kwargs...)=f(state;kwargs...)
 
-        return new(1, name, noisy, new_apply)
+        return new([1],name, noisy, new_apply)
     end
     
 end
