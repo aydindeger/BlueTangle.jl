@@ -181,20 +181,16 @@ end
 
 
 """
-`plot(ops::Vector{QuantumOps}; list_of_initial_qubits::Vector{Int}=Int[])`
+    plot(ops::Vector{QuantumOps}; labels::Vector{String} = [""])
 
 Plots a quantum circuit diagram from a vector of quantum operations.
 
 Creates a visual representation of the quantum circuit based on the specified operations and initial qubit states.
 """
-function plotq(layers::Vector; list_of_initial_qubits::Vector{Int} = Int[])
+function plotq(layers::Vector; labels::Vector{String} = [""])
     ops = vcat(layers...)
 
-    if isempty(list_of_initial_qubits)
-        qubit_lines = maximum([max(op.qubit, _target_find(op), _control_find(op)) for op in ops if !isa(op, OpF)])
-    else
-        qubit_lines = length(list_of_initial_qubits)
-    end
+    qubit_lines = maximum([max(op.qubit, _target_find(op), _control_find(op)) for op in ops if !isa(op, OpF)])
 
     num_ops = length(ops)
     num_layers = length(layers)
@@ -219,7 +215,7 @@ function plotq(layers::Vector; list_of_initial_qubits::Vector{Int} = Int[])
     # Draw the horizontal lines for qubits and label them
     for i in 1:qubit_lines
         ax.hlines(i - 1, -0.5, num - 0.5, colors="black")  # Horizontal line
-        label_text = list_of_initial_qubits == Int[] ? "Qubit $i" : "Qubit $i [$(list_of_initial_qubits[i])]"
+        label_text = labels == [""] ? "Qubit ($i)" : "$(labels[i]) ($i)"
         ax.text(-0.7, i - 1, label_text, ha="right", va="center")
     end
 
@@ -239,10 +235,9 @@ function plotq(layers::Vector; list_of_initial_qubits::Vector{Int} = Int[])
 end
 
 
-plotq(circuit::Circuit)=plotq(circuit.layers)
+plotq(circuit::Circuit; labels::Vector{String} = [""])=plotq(circuit.layers;labels=labels)
 
-plotq(ansatz::AnsatzOptions)=plotq(ansatz.ops)
-
+plotq(ansatz::AnsatzOptions; labels::Vector{String} = [""])=plotq(ansatz.ops;labels=labels)
 
 
 """

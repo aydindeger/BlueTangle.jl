@@ -3,7 +3,7 @@ module BlueTangle
 include("all.jl")
 
 export get_N, ro3, fields, sample, get_probabilities_from_sample, sample_state, sample_exact, expand_multi_op, string_to_matrix
-export expect, correlation, apply, measure, compile, quantum_circuit, sample, to_state, to_rho, fock_basis
+export expect, correlation, apply, measure, compile, quantum_circuit, prob, to_state, to_rho, fock_basis
 export QuantumOps,Op,ifOp,OpF,Measurement,QuantumChannel,QC,Layout,Circuit,Options,NoiseModel
 export init, sitesN, hilbert, hilbert_op, product_state, zero_state, one_state, neel_state01, neel_state10, random_state, mixed_state
 export pauli_decomposition,pauli_reconstruction, pauli_decomposition_names, pauli_decomposition_tensor, partial_trace

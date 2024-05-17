@@ -148,7 +148,7 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
-apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+# apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
 
 """
 `apply(state::sa.SparseVector, op::QuantumOps)`
@@ -181,19 +181,56 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
         # println("measurement result=$(ind)")
     else #good old gates
         state=op.expand(N)*state
+    end
 
-        if isa(noise, NoiseModel) && op.noisy
-            selected_noise = op.q == 1 ? noise.q1 : noise.q2
-    
-            if isa(selected_noise, QuantumChannel)
-                state = apply_noise(state, op, selected_noise)
-            end
-        end
+    ##aply noise.
+    if isa(noise, NoiseModel) && op.noisy
+        state=apply_noise(state,op,noise)
     end
 
     return state
 
 end
+
+
+"""
+    apply noise on qubit or target_qubit of a given state and noise model
+"""
+function apply_noise(state::sa.SparseVector,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q1.apply(state,op.qubit)
+        else
+            return noise.q2.apply(state,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(state,op.qubit,op.target_qubit)
+    end
+
+end
+
+
+
+"""
+apply noise on qubit or target_qubit of a given density matrix and noise model
+"""
+function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q2.apply(rho,op.qubit)
+        else
+            return noise.q1.apply(rho,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(rho,op.qubit,op.target_qubit)
+    end
+
+end
+
+
+
 
 function apply(ops::Vector,psi::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
     for o=ops
@@ -272,13 +309,6 @@ function apply(rho::sa.SparseMatrixCSC,op::QuantumOps;noise::Union{NoiseModel,Bo
     return rho
     
 end
-
-"""
-apply noise on qubit or target_qubit of a given state and noise model
-"""
-apply_noise(state::sa.SparseVector,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? (op.control == -2 ? noise.apply(state,op.qubit) : noise.apply(state,op.control,op.qubit)) : noise.apply(state,op.qubit,op.target_qubit)
-
-apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? (op.control == -2 ? noise.apply(rho,op.qubit) : noise.apply(rho,op.control,op.qubit)) : noise.apply(rho,op.qubit,op.target_qubit)
 
 function _born_measure(state::sa.SparseVector,o::QuantumOps)
 

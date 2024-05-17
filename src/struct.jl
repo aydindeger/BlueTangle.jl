@@ -132,6 +132,7 @@ struct QC <: QuantumOps
     qubit::Int
     target_qubit::Int
     control::Int
+    noisy::Bool
     type::String
     prob::Function
     apply::Function
@@ -148,7 +149,7 @@ struct QC <: QuantumOps
             new_apply_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
             new_apply_op(rho::sa.SparseMatrixCSC)=throw("fix")
 
-            return new(q,name,kraus_ops,qubit,target_qubit,-2,type,new_prob_op,new_apply_op)
+            return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob_op,new_apply_op)
 
         elseif q==2
 
@@ -156,7 +157,7 @@ struct QC <: QuantumOps
             new_apply2_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(rho::sa.SparseMatrixCSC)=throw("fix")
 
-            return new(q,name,kraus_ops,qubit,target_qubit,-2,type,new_prob2_op,new_apply2_op)
+            return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob2_op,new_apply2_op)
 
         else
             throw("Noise models are available only for 1 and 2 qubits!")
@@ -551,7 +552,7 @@ struct OpF <: QuantumOps
 
         new_apply(state::sa.SparseVector;kwargs...)=f(state;kwargs...)
 
-        return new([1],name, noisy, new_apply)
+        return new([1],name,noisy,new_apply)
     end
     
 end
