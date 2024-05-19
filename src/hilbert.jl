@@ -60,6 +60,29 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
 end
 
 
+function hilbert3(N::Int,mat::AbstractMatrix,first_qubit::Int)
+
+    second_qubit=first_qubit+1
+    third_qubit=second_qubit+1
+
+    if N < third_qubit
+        throw("N must be larger than all three qubits")
+    elseif size(mat,1)!=8
+        throw("only 3-qubit operations are supported")
+    end
+
+    id = sa.sparse(ComplexF64,sa.I, 2, 2);
+    e_ops=fill(id,N)
+
+    insert!(e_ops,first_qubit,mat)
+
+    for i=1:3
+        popat!(e_ops,first_qubit+1)
+    end
+
+    return foldl(kron,e_ops)
+
+end
 
 """
 `hilbert(N::Int, mat::AbstractMatrix, qubit::Int)`
@@ -170,7 +193,7 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
 
     if isa(op,OpF)
         state=op.apply(state)
-    elseif isa(op,QC)
+    elseif isa(op,OpQC)
         state=op.apply(state)
     elseif op.type=="🔬"
         if isa(op,ifOp)
@@ -464,9 +487,9 @@ neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
 neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
 
 """
-    random_state(N)
+    random_product_state(N)
 """
-random_state(N::Int)=product_state(rand([0,1],N))
+random_product_state(N::Int)=product_state(rand([0,1],N))
 
 """
 zero_state(N::Int) -> sa.SparseVector
@@ -477,8 +500,8 @@ zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
 one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
 
 """
-    mixed_state(N::Int) -> sa.SparseVector
+    random_state(N::Int) -> sa.SparseVector
 """
-mixed_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
+random_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
 
 ##========== state preparation ==========

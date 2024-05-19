@@ -158,7 +158,7 @@ function get_stats(ops::Vector{<:QuantumOps})
 
         if isa(op, ifOp)
             current_max = op.qubit
-        elseif isa(op, QC)
+        elseif isa(op, OpQC)
             current_max = max(op.qubit, op.target_qubit)
         else
             current_max = max(op.qubit, op.target_qubit, op.control)

@@ -97,7 +97,7 @@ plotq(states::Vector{<:sa.SparseVector})=plotq(measure.([states...]))
 _target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
 
 function _control_find(op::QuantumOps)
-    if isa(op,ifOp) || isa(op,QC)
+    if isa(op,ifOp) || isa(op,OpQC)
         return -2
     else
         return op.control
@@ -118,7 +118,7 @@ Draws the specified quantum gate on the given plot axis.
 """
 function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
 
-    if isa(op, QC)
+    if isa(op, OpQC)
         c = "tab:red"
         c_t = "tab:red"
     else
@@ -138,7 +138,7 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
     control = _control_find(op)
 
     if target_qubit>0
-        marker2=isa(op,QC) ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "x" : "o")
+        marker2=isa(op,OpQC) ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "o" : "x")
     end
 
     if control != -2

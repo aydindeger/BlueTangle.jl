@@ -39,6 +39,20 @@ function __QuantumChannel_new_apply(state::sa.SparseVector,kraus_ops::Vector,qub
     return sa.normalize(hilbert(N,kraus_ops[ind],qubit,target_qubit)*state)
 end
 
+
+function __calc_prob3(state::sa.SparseVector,kraus_vec::Vector,first_qubit::Int)
+
+    pA=partial_trace(state,[first_qubit,first_qubit+1,first_qubit+2])
+    return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
+
+end
+function __QuantumChannel_new_apply3(state::sa.SparseVector,kraus_ops::Vector,first_qubit::Int)
+    N=get_N(state)
+    ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob3(state,kraus_ops,first_qubit))
+    return sa.normalize(hilbert3(N,kraus_ops[ind],first_qubit)*state)
+end
+
+
 function __QuantumChannel_new_apply(rho::sa.SparseMatrixCSC,kraus_ops::Vector,qubit::Int)
     new_rho=zero(rho)
     N=get_N(rho)
@@ -81,6 +95,10 @@ struct QuantumChannel
 
     function QuantumChannel(model::String,kraus_ops::Vector{<:AbstractMatrix},p::Float64)
 
+        if !is_valid_quantum_channel(kraus_ops)
+            throw("not valid kraus operators: not CPTP!")
+        end
+
         q=Int(log2(size(kraus_ops[1],1)))
         model=lowercase(model)
 
@@ -120,12 +138,12 @@ struct QuantumChannel
 end
 
 """
-    QC=QuantumChannel but like Op
+    OpQC=QuantumChannel but like Op
 
-    QC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1)
-    QC(q::Int,model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
+    OpQC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1)
+    OpQC(q::Int,model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
 """
-struct QC <: QuantumOps
+struct OpQC <: QuantumOps
     q::Int
     name::String
     kraus::Vector{AbstractMatrix}
@@ -138,7 +156,11 @@ struct QC <: QuantumOps
     apply::Function
 
     #the following is like quantum ops
-    function QC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1;type="")
+    function OpQC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1;type="")
+
+        if !is_valid_quantum_channel(kraus_ops)
+            throw("not valid kraus operators: not CPTP!")
+        end
 
         q=Int(log2(size(kraus_ops[1],1)))
         name=lowercase(name)
@@ -159,16 +181,25 @@ struct QC <: QuantumOps
 
             return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob2_op,new_apply2_op)
 
+        elseif q==3
+
+            println("!!! note that 8x8 kraus operators will be applied to qubits: $(qubit),$(qubit+1),$(qubit+2) !!!")
+
+            new_prob3_op(state::sa.SparseVector)=__calc_prob3(state,kraus_ops,qubit)
+            new_apply3_op(state::sa.SparseVector)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
+
+            return new(q,name,kraus_ops,qubit,-1,-2,false,type,new_prob3_op,new_apply3_op)
+
         else
-            throw("Noise models are available only for 1 and 2 qubits!")
+            throw("Noise models are available only for up to 3 qubits!")
         end
     end
 
-    function QC(model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
+    function OpQC(model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
         q=target_qubit>0 ? 2 : 1
         model=lowercase(model)
         kraus_ops=q==1 ? BlueTangle.noise_model1(model,p) : BlueTangle.noise_model2(model,p)
-        return QC(model,kraus_ops,qubit,target_qubit;type="$(p)")
+        return OpQC(model,kraus_ops,qubit,target_qubit;type="$(p)")
     end
 
 end
@@ -232,10 +263,10 @@ In this example, `custom_noise_model` is a single-qubit noise model named "MyNoi
 # Notes
 Ensure that the provided Kraus operators comply with the rules for quantum channels. Invalid operators will result in an error being thrown by the function.
 """
-custom_noise(q::Int,name_of_model::String,kraus::Vector{AbstractMatrix})=QuantumChannel(q,name_of_model,iskraus(kraus) ? kraus : throw("define valid kraus operators"))
+custom_noise(q::Int,name_of_model::String,kraus::Vector{AbstractMatrix})=QuantumChannel(q,name_of_model,is_valid_quantum_channel(kraus) ? kraus : throw("define valid kraus operators"))
 
 """
-`iskraus(kraus::Vector{Matrix}) -> Bool`
+`is_valid_quantum_channel(kraus::Vector{Matrix}) -> Bool`
 
 Determines the validity of a set of Kraus operators.
 
@@ -245,10 +276,40 @@ This function checks if the provided Kraus operators form a valid quantum channe
 It does so by verifying if the sum of the products of each Kraus operator and its adjoint 
 (approximately) equals the identity matrix. Returns `true` if the set is valid, `false` otherwise.
 """
-function iskraus(kraus::Vector)
-    sumk = sum(k' * k for k in kraus)
-    sumk ≈ Matrix(sa.I, size(sumk, 1), size(sumk, 1))
+function is_valid_quantum_channel(kraus_operators::Vector)
+    n = size(kraus_operators[1],1)
+    sum_kdagger_k = zeros(Complex{Float64}, n, n)
+    
+    # Iterate over each Kraus operator
+    for K in kraus_operators
+        sum_kdagger_k += K' * K
+    end
+    
+    trace_preserving = sum_kdagger_k ≈ Matrix{Complex{Float64}}(la.I, n, n)
+    
+    choi_matrix = kraus_to_choi(kraus_operators)
+
+    eigvals = la.eigen(choi_matrix).values
+
+    completely_positive = (choi_matrix ≈ choi_matrix') && all(round.(eigvals,digits=10) .>= 0)#ishermitian and is_positive_semidefinite
+    
+    return trace_preserving && completely_positive
 end
+
+function kraus_to_choi(kraus_operators::Vector)
+    d = size(kraus_operators[1], 1)
+    choi = zeros(ComplexF64, d * d, d * d)
+    for K in kraus_operators
+        vK = vec(K)
+        choi += vK * vK'
+    end
+    return choi
+end
+# function is_valid_quantum_channel(kraus::Vector)
+#     sumk = sum(k' * k for k in kraus)
+#     sumk ≈ Matrix(sa.I, size(sumk, 1), size(sumk, 1))
+# end
+
 
 """
 `Noise1(model::String, p::Float64)`
@@ -545,14 +606,13 @@ f(state) -> return state
 struct OpF <: QuantumOps
     q::Vector{Int}
     name::String
-    noisy::Bool
     apply::Function
 
-    function OpF(name::String,f::Function;noisy::Bool=false)
+    function OpF(name::String,f::Function)
 
         new_apply(state::sa.SparseVector;kwargs...)=f(state;kwargs...)
 
-        return new([1],name,noisy,new_apply)
+        return new([1],name,new_apply)
     end
     
 end

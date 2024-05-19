@@ -76,7 +76,7 @@ get_layers
 ## Noise
 
 ```@docs
-iskraus
+is_valid_quantum_channel
 Noise1
 Noise2
 apply_noise
