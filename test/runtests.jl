@@ -31,4 +31,21 @@ using Test
         probs ≈ probs2 ≈ probs3
     end
 
+    @test begin #test stinespring_dilation
+
+    kraus_ops=OpQC("amplitude_damping",.2,2,3).kraus
+    mat = stinespring_dilation(kraus_ops);
+    
+    N=2
+    state=random_state(N)
+    rho=state*state'
+    zero=zero_state(N)   
+    rho_zero=zero*zero'
+    a=sum(kraus * rho * kraus' for kraus=kraus_ops)
+    b=mat * kron(rho_zero,rho) * mat'
+    c=partial_trace(sa.sparse(b),[4,4],[1])
+    a==c
+
+    end
+
 end

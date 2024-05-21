@@ -68,7 +68,7 @@ function partial_trace(state::sa.SparseVector, keep_qubits::Vector)
     return partial_trace(state*state', fill(2,N),setdiff(1:N,keep_qubits))
 end
 
-function partial_trace(ρ::sa.SparseMatrixCSC, dims::Vector, trace_out::Vector)
+function partial_trace(ρ::Union{AbstractMatrix,sa.SparseMatrixCSC}, dims::Vector, trace_out::Vector)
     # julia version of algorithm: https://copyprogramming.com/howto/how-to-take-partial-trace
 
     # Calculate the total dimension of the system and initialize the reduced density matrix
@@ -131,7 +131,7 @@ Computes the partial trace of a density matrix.
 
 Returns the resulting matrix after performing the partial trace.
 """
-function bipartition_trace(rho::sa.SparseMatrixCSC)
+function bipartition_trace(rho::Union{AbstractMatrix,sa.SparseMatrixCSC})
     dim=Int(get_N(rho)/2)
     d=2^dim
     ptr = zeros(Complex{Float64}, d, d)
@@ -229,6 +229,23 @@ function partial_trace_second_subsystem(ρ, dimA, dimB)
     end
     
     return ρA
+end
+
+"""
+    stinespring_dilation(kraus_ops::Vector{AbstractMatrix}) -> Unitary Matrix
+"""
+function stinespring_dilation(kraus_ops::Vector{AbstractMatrix})
+    n = size(kraus_ops[1], 1)  # Dimension of the system
+    d = n * length(kraus_ops) 
+    Q = vcat(kraus_ops...)
+
+    # Ensure Q is unitary by completing it if necessary
+    if d > n
+        U = hcat(Q, nullspace(Q'))        # Complete the orthonormal basis to form a unitary matrix
+    else
+        U = Q  # Q is already unitary
+    end
+    return isunitary(U) ? U : throw("not unitary. something's wrong")
 end
 
 ##========== partial trace  ==========

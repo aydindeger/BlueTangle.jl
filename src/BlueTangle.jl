@@ -6,7 +6,7 @@ export get_N, ro3, fields, sample, get_probabilities_from_sample, sample_state, 
 export expect, correlation, apply, measure, compile, quantum_circuit, prob, to_state, to_rho, fock_basis
 export QuantumOps, Op, ifOp, OpF, OpQC, Measurement, QuantumChannel, Layout, Circuit, Options, NoiseModel
 export init, sitesN, hilbert, hilbert_op, product_state, zero_state, one_state, neel_state01, neel_state10, random_product_state, random_state
-export pauli_decomposition,pauli_reconstruction, pauli_decomposition_names, pauli_decomposition_tensor, partial_trace
+export pauli_decomposition,pauli_reconstruction, pauli_decomposition_names, pauli_decomposition_tensor, partial_trace, stinespring_dilation
 export gate,gates,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_valid_quantum_channel,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,quadratic_fit,error_mitigate_data
 export plotq, savefigure
 export fock_basis_create, int2bin, isunitary, sparsevector, hamming_distance,born_measure_Z
