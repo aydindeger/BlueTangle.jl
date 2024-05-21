@@ -234,16 +234,15 @@ end
 """
     stinespring_dilation(kraus_ops::Vector{AbstractMatrix}) -> Unitary Matrix
 """
-function stinespring_dilation(kraus_ops::Vector{AbstractMatrix})
+function stinespring_dilation(kraus_ops::Vector{<:AbstractMatrix})
     n = size(kraus_ops[1], 1)  # Dimension of the system
     d = n * length(kraus_ops) 
     Q = vcat(kraus_ops...)
 
-    # Ensure Q is unitary by completing it if necessary
     if d > n
-        U = hcat(Q, nullspace(Q'))        # Complete the orthonormal basis to form a unitary matrix
+        U = hcat(Q, la.nullspace(Q')) # Complete the orthonormal basis to form a unitary matrix
     else
-        U = Q  # Q is already unitary
+        U = Q
     end
     return isunitary(U) ? U : throw("not unitary. something's wrong")
 end
