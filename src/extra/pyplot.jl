@@ -94,16 +94,6 @@ plotq(states::Vector{<:sa.SparseVector})=plotq(measure.([states...]))
 
 ## circuit drawing
 
-_target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
-
-function _control_find(op::QuantumOps)
-    if isa(op,ifOp) || isa(op,OpQC)
-        return -2
-    else
-        return op.control
-    end
-end
-
 """
 `_draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)`
 
@@ -134,8 +124,8 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
     end
 
     qubit = op.qubit
-    target_qubit = _target_find(op)
-    control = _control_find(op)
+    target_qubit = BlueTangle._target_find(op)
+    control = BlueTangle._control_find(op)
 
     if target_qubit>0
         marker2=isa(op,OpQC) ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "o" : "x")
@@ -190,7 +180,7 @@ Creates a visual representation of the quantum circuit based on the specified op
 function plotq(layers::Vector; labels::Vector{String} = [""])
     ops = vcat(layers...)
 
-    qubit_lines = maximum([max(op.qubit, _target_find(op), _control_find(op)) for op in ops if !isa(op, OpF)])
+    qubit_lines = maximum([max(op.qubit, BlueTangle._target_find(op), BlueTangle._control_find(op)) for op in ops if !isa(op, OpF)])
 
     num_ops = length(ops)
     num_layers = length(layers)

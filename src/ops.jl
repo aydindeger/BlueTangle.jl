@@ -233,7 +233,7 @@ function get_layers(ops::Vector{<:QuantumOps})
     qubit_layers = Dict{Int, Int}()
 
     # Determine the maximum qubit index
-    max_q = maximum([max(o.qubit, o.target_qubit, o.control) for o in ops if !isa(o, OpF)])
+    max_q = maximum([max(o.qubit, _target_find(o), _control_find(o)) for o in ops if !isa(o, OpF)])
 
     for op in ops
         if isa(op, OpF)

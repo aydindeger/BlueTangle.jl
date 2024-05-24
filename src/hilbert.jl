@@ -482,9 +482,25 @@ Creates a quantum state vector from a list of qubits.
 Returns a sparse vector representing the quantum state of the system.
 """
 product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
-product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+# product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
 neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
 neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
+
+
+"""
+    Z3(N::Int,j=1)
+"""
+Z3(N::Int,j=1)=product_state([mod(i+2-j+1,3)==0 ? 1 : 0 for i=1:N])
+
+"""
+    Z3_s(N::Int)
+"""
+Z3_s(N::Int)=la.normalize(Z3(N,1)+Z3(N,2)+Z3(N,3))
+
+"""
+    neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
+"""
+neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
 
 """
     random_product_state(N)

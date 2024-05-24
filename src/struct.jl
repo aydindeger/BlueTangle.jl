@@ -183,7 +183,7 @@ struct OpQC <: QuantumOps
 
         elseif q==3
 
-            println("!!! note that 8x8 kraus operators will be applied to qubits: $(qubit),$(qubit+1),$(qubit+2) !!!")
+            # println("!!! note that 8x8 kraus operators will be applied to qubits: $(qubit),$(qubit+1),$(qubit+2) !!!")
 
             new_prob3_op(state::sa.SparseVector)=__calc_prob3(state,kraus_ops,qubit)
             new_apply3_op(state::sa.SparseVector)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
@@ -616,6 +616,19 @@ struct OpF <: QuantumOps
     end
     
 end
+
+
+
+_target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
+
+function _control_find(op::QuantumOps)
+    if isa(op,ifOp) || isa(op,OpQC)
+        return -2
+    else
+        return op.control
+    end
+end
+
 
 
 ##========== Struct ==========
