@@ -649,7 +649,27 @@ end
 sa.sparse(circ) = sa.sparse(ComplexF64, circ)
 function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
     N = circ.stats.N
-    return prod(o.expand(N) for o=vcat(circ.layers...))
+
+    # Concatenate all the operators together; preserves ordering of non-commuting gates.
+    # `allops[begin]` is the first gate in the circuit and `allops[end]` is the final.
+    allops = vcat(circ.layers...)
+
+    # Value to be returned; the sparse matrix from of the circuit.
+    rv = sa.sparse(T, la.I, 2^N,2^N)
+
+    while !isempty(allops)
+        @debug "multiplying op: $(length(allops))"
+        # `pop!` is faster so I always make a habit of using it over `popfirst!` for large
+        # vectors (if it is not too much effort).
+        o = pop!(allops)
+
+        # As `pop!` returns later gates first, we must multiply on the right
+        rv = rv * o.expand(N)
+
+        sa.droptol!(rv, 10 * eps())
+    end
+
+    return rv
 end
 
 hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
