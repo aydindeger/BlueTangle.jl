@@ -374,7 +374,7 @@ struct Op <: QuantumOps
         return new(q,name,f,qubit,target_qubit,control,noisy,"f",new_expand)
     end
     # Inner-constructor for gates defined from a built-in or matrix 
-    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;noisy::Bool=true,control::Int=-2)
+    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
 
         q = _get_op_num_qubits(qubit, target_qubit, control)
 
