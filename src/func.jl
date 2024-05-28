@@ -1,4 +1,3 @@
-
 ##
 ##========== expectation and correlations from measurement ==========
 
@@ -184,10 +183,10 @@ end
 
 ##========== expectation from measurement ==========
 
-mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)=[mag_moments_from_rho(rho,op_str,ord) for ord=1:max_moment]
+mag_moments(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)=[mag_moments(rho,op_str,ord) for ord=1:max_moment]
 
 """
-`mag_moments_from_rho(rho::sa.SparseMatrixCSC, op_str::String, moment_order::Int) -> Float64`
+`mag_moments(rho::sa.SparseMatrixCSC, op_str::String, moment_order::Int) -> Float64`
 
 Calculates the magnetization moments from a given density matrix.
 
@@ -197,7 +196,7 @@ Calculates the magnetization moments from a given density matrix.
 
 Returns the computed magnetization moment of the specified order.
 """
-function mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String,moment_order::Int)
+function mag_moments(rho::sa.SparseMatrixCSC,op_str::String,moment_order::Int)
     throw("fix")
     N=get_N(rho)
     mag_op=sum(hilbert_op(Op(op_str,i),N) for i=1:N)
@@ -205,7 +204,7 @@ function mag_moments_from_rho(rho::sa.SparseMatrixCSC,op_str::String,moment_orde
 end
 
 """
-`mag_cumulants_from_rho(rho::sa.SparseMatrixCSC, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
+`mag_cumulants(rho::sa.SparseMatrixCSC, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
 
 Calculates the magnetization cumulants from a given density matrix.
 
@@ -216,23 +215,23 @@ Calculates the magnetization cumulants from a given density matrix.
 
 Returns the computed magnetization cumulant of the specified order.
 """
-function mag_cumulants_from_rho(rho::sa.SparseMatrixCSC,op_str::String,cumulant_order::Int;max_moment=12)
-    moments=[mag_moments_from_rho(rho,op_str,i) for i=1:max_moment]
+function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String,cumulant_order::Int;max_moment=12)
+    moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments,cumulant_order)
 end
 
-function mag_cumulants_from_rho(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)
-    moments=[mag_moments_from_rho(rho,op_str,i) for i=1:max_moment]
+function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)
+    moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments)
 end
 
 """
 calculates average magnetization moments from sample
 """
-get_mag_moments(m::Measurement,moment_order::Int)=get_mag_moments(m.number_of_qubits,m.bitstr,m.sample,moment_order)
-get_mag_moments(m::Measurement;max_moment=12)=[get_mag_moments(m::Measurement,ord) for ord=1:max_moment]
+mag_moments(m::Measurement,moment_order::Int)=mag_moments(m.number_of_qubits,m.bitstr,m.sample,moment_order)
+mag_moments(m::Measurement;max_moment=12)=[mag_moments(m::Measurement,ord) for ord=1:max_moment]
 
-function get_mag_moments(number_of_qubits::Int,bitstr::Union{UnitRange,Vector},sample::Union{sa.SparseVector,Vector},moment_order::Int)
+function mag_moments(number_of_qubits::Int,bitstr::Union{UnitRange,Vector},sample::Union{sa.SparseVector,Vector},moment_order::Int)
     mag=sum.(BlueTangle.mag_basis.(bitstr,number_of_qubits))
     return sum(mag.^(moment_order) .* sample)
 end
@@ -253,8 +252,8 @@ function cumulants_from_moments(moments::Vector,n::Int)
     end
 end
 
-function mag_cumulants_from_measurement(m::Measurement,cumulant_order::Int;max_moment=12)
-    moments=[get_mag_moments(m,i) for i=1:max_moment]
+function mag_cumulants(m::Measurement,cumulant_order::Int;max_moment=12)
+    moments=[mag_moments(m,i) for i=1:max_moment]
     return cumulants_from_moments(moments,cumulant_order)
 end
 
@@ -312,127 +311,6 @@ function entanglement_entropy(psi::sa.SparseVector)
     
 end
 
-"""
- partial_trace(rho) -> Matrix
-
-Computes the partial trace of a density matrix.
-
-- `rho`: The density matrix (sa.SparseMatrixCSC) for which to perform the partial trace.
-
-Returns the resulting matrix after performing the partial trace.
-"""
-function bipartition_trace(rho::sa.SparseMatrixCSC)
-    dim=Int(get_N(rho)/2)
-    d=2^dim
-    ptr = zeros(Complex{Float64}, d, d)
-    for i = 1:d, j = 1:d
-        for k = 0:d-1
-            ptr[i, j] += rho[i+k*d, j+k*d]
-        end
-    end
-    return ptr
-end
-
-
-function partial_trace(N::Int,state::sa.SparseVector,keep_index1::Int)
-
-    qubit_index =  N - keep_index1 + 1
-
-    size_left = 2^(qubit_index - 1)
-    size_middle = 2
-    size_right = 2^(N - qubit_index)
-
-    # Reshape the state vector to correctly isolate the two-qubit subsystem
-    tensor = reshape(state, (size_left, size_middle, size_right))
-
-    # Initialize the reduced density matrix for the qubit of interest
-    ρ_reduced = zeros(ComplexF64, size_middle, size_middle)
-
-    # Sum over the other qubits to obtain the reduced density matrix
-    for i in 1:size_left
-        for j in 1:size_right
-            ρ_reduced += tensor[i, :, j] * tensor[i, :, j]'
-        end
-    end
-
-    ρ_reduced
-
-end
-
-function partial_trace(N::Int,state::sa.SparseVector,keep_index1::Int,keep_index2::Int)
-
-    if abs(keep_index1-keep_index2)>1
-        throw("must be local")
-    end
-
-    qubit_index1 = N-minimum([keep_index1,keep_index2])#this fixes enumeration.
-    qubit_index2 = qubit_index1+1
-
-    size_left = 2^(qubit_index1 - 1)
-    size_middle = 4  # Since we're dealing with a two-qubit subsystem, this should directly be 2^2
-    size_right = 2^(N - qubit_index2)
-
-    # Reshape the state vector to correctly isolate the two-qubit subsystem
-    tensor = reshape(state, (size_left, size_middle, size_right))
-
-    # Initialize the reduced density matrix for the two-qubit subsystem as a 4x4 matrix
-    ρ_reduced = zeros(ComplexF64, 4, 4)
-
-    # Adjust the loop to correctly compute the reduced density matrix
-    for i in 1:size_left
-        for k in 1:size_right
-            # Isolate the two-qubit subsystem
-            mat = tensor[i, :, k]  # This should be a 4-element vector for the two-qubit subsystem
-            ρ_reduced += mat * mat'
-        end
-    end
-
-    return ρ_reduced
-
-end
-
-
-# N=6
-# state=sa.normalize(sa.sparse(rand(ComplexF64,2^N)));
-
-
-# keep_index1=4
-# keep_index2=5
-# traceout_ind=setdiff(1:N,[keep_index1,keep_index2])
-# a=BlueTangle.partial_trace(state*state',fill(2,N),traceout_ind)
-
-# b=partial_trace(N,state,keep_index1,keep_index2)
-
-# println("two qubit implementation=",a ≈ b)
-
-
-# traceout_ind=setdiff(1:N,[keep_index1])
-# c=BlueTangle.partial_trace(state*state',fill(2,N),traceout_ind)
-# d=partial_trace(N,state,keep_index1)
-
-# println("one qubit implementation=",c ≈ d)
-
-
-# Define a function to perform the partial trace over the second subsystem
-function partial_trace_second_subsystem(ρ, dimA, dimB)
-    # ρ is the full density matrix of the system A ⊗ B
-    # dimA is the dimension of subsystem A
-    # dimB is the dimension of subsystem B
-    
-    # Initialize the reduced density matrix for subsystem A
-    ρA = zeros(ComplexF64, dimA, dimA)
-    
-    # Perform the partial trace over subsystem B
-    for i in 1:dimA
-        for j in 1:dimA
-            for k in 1:dimB
-                ρA[i, j] += ρ[(i-1)*dimB + k, (j-1)*dimB + k]
-            end
-        end
-    end
-    
-    return ρA
-end
 
 
 """
@@ -450,128 +328,3 @@ function entanglement_entropy(rho::sa.SparseMatrixCSC)
     spec=spec[spec .> 0]
     return sum(-spec.*log.(spec)),-log.(spec) 
 end
-
-### linear fit
-
-"""
- error_mitigate_data(xdata::Vector, ydata::Vector)
-
-Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
-
-This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
-
-# Arguments
-- `xdata::Vector`: The independent variable data points.
-- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
-
-# Returns
-- `est`: The estimated intercept from the linear fit.
-- `se`: The standard error of the estimated intercept.
-- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
-"""
-function error_mitigate_data(xdata::Vector,ydata::Vector)
-    a, b, se_a, se_b = linear_fit(xdata, ydata)
-    est=round(a,sigdigits=5)
-
-    dx=(xdata[2]-xdata[1])/4
-    fit_plot=(0:dx:xdata[end],[_linear_model(x,a,b) for x=0:dx:xdata[end]])
-    est,se_a,fit_plot
-end
-
-"""
-Simple linear model: y = a + b*x
-"""
-_linear_model(x, a, b)=a .+ b .* x
-_quadratic_model(x,a,b,c)=a .* x .^2 .+ b .*x .+ c
-
-"""
-    linear_fit(xdata::Vector, ydata::Vector)
-
-Compute the coefficients a and b for the linear fit of the given data.
-
-# Arguments
-- `xdata`: Array of x values.
-- `ydata`: Array of corresponding y values.
-
-# Returns
-- `a`: Intercept of the linear fit.
-- `b`: Slope of the linear fit.
-- `se_a`: Standard error of the intercept.
-- `se_b`: Standard error of the slope.
-
-# Description
-This function fits a simple linear model (y = a + b*x) to the provided data points.
-It checks if the lengths of xdata and ydata are the same and then calculates the coefficients
-for the linear fit. Additionally, it computes the standard errors for both the slope and the intercept.
-
-The function uses the least squares method for the linear regression. The standard errors are calculated
-based on the residual sum of squares and the total sum of squares for the x values.
-"""
-function linear_fit(xdata::Vector, ydata::Vector)
-
-    n = length(xdata)
-
-    if n != length(ydata)
-        throw("xdata and ydata must have the same length")
-    end
-
-    # Calculate sums needed for the coefficients
-    sum_x = sum(xdata)
-    sum_y = sum(ydata)
-    sum_x2 = sum(xdata .* xdata)
-    sum_xy = sum(xdata .* ydata)
-
-    # Calculate coefficients
-    b = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x^2)
-    a = (sum_y - b * sum_x) / n
-
-    rss = sum((y - (a + b * x))^2 for (x, y) in zip(xdata, ydata))
-
-    # Calculate total sum of squares for x
-    x_mean = sum_x / n
-    sst_x = sum((x - x_mean)^2 for x in xdata)
-
-    # Standard Error of the Slope (SE(b))
-    se_b = sqrt(rss / (n - 2) / sst_x)
-
-    # Standard Error of the Intercept (SE(a))
-    se_a = se_b * sqrt(sum_x2 / n)
-
-    return a, b, se_a, se_b
-end
-
-
-"""
-    quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64}) -> Vector{Float64}
-
-Fit a quadratic function to the given data.
-
-# Arguments
-- `xdata::Vector{Float64}`: A vector of x-coordinates.
-- `ydata::Vector{Float64}`: A vector of y-coordinates corresponding to `xdata`.
-
-# Returns
-- `Vector{Float64}`: The coefficients `[a, b, c]` of the fitted quadratic function `y = ax^2 + bx + c`.
-
-# Description
-This function performs a least squares quadratic fit to the input data.
-"""
-function quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64})
-    if length(xdata) != length(ydata)
-        error("Vectors xdata and ydata must have the same length")
-    end
-
-    n = length(xdata)
-    X = ones(n, 3)
-    for i in 1:n
-        X[i, 1] = xdata[i]^2
-        X[i, 2] = xdata[i]
-    end
-    Y = reshape(ydata, n, 1)  # Convert y to a column vector
-
-    beta = inv(X' * X) * X' * Y
-
-    return beta # the coefficients [a, b, c]
-end
-
-ro3(x)=round(x,sigdigits=3)

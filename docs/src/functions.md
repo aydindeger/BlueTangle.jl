@@ -5,7 +5,7 @@ Detailed explanations or additional notes about all functions.
 ## Measurement functions
 
 ```@docs
-sample_outcomes
+sample
 get_probabilities_from_sample
 expect
 correlation
@@ -27,8 +27,7 @@ to_MPS
 ```@docs
 entanglement_entropy
 shadow
-mag_moments_from_rho
-get_mag_moments
+mag_moments
 ```
 
 ## Other
@@ -77,7 +76,7 @@ get_layers
 ## Noise
 
 ```@docs
-is_kraus_valid
+is_valid_quantum_channel
 Noise1
 Noise2
 apply_noise

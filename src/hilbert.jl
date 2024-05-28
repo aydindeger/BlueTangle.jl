@@ -17,8 +17,12 @@ swap is performed before applying `mat`.
 """
 function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
 
+    distance=abs(qubit-target_qubit)
+
     if N < qubit || N < target_qubit || N < control
         throw("N must be larger than qubits")
+    elseif size(mat,1)>4
+        throw("only 2-qubit operations are supported")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -26,34 +30,59 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
     final_mat=qubit > target_qubit ? sa.sparse(BlueTangle._swap_control_target(mat)) : sa.sparse(mat)
 
     if control==-2
-        e_ops = [x == qubit ? final_mat : id for x in 1:N if x!=target_qubit]
-        return foldl(kron,e_ops)
-    else
+
+        if distance==1 #local
+            e_ops = [x == qubit ? final_mat : id for x in 1:N if x!=target_qubit]
+            return foldl(kron,e_ops)
+        else #pauli decomposition and reconstruction to build nonlocal ops
+            # println("nonlocal hilbert reconstruction")
+            coefficients, _ = pauli_decomposition(final_mat)
+            final_mat_nonlocal=pauli_reconstruction(coefficients,min(qubit,target_qubit);distance=distance)#nonlocal reconstruct
+
+            for _=1:N-max(qubit,target_qubit)
+                final_mat_nonlocal=kron(final_mat_nonlocal,id)
+            end
+
+            return final_mat_nonlocal
+
+        end
+
+    else #control operation
+
+        if distance>1 #local
+            throw("nonlocal operations (qubit and target) with control are not allowed")
+        end
+
         list=foldl(kron,[x==qubit ? final_mat : (x==control ? sa.sparse(gate.P1) : id) for x=1:N if x!=target_qubit])    
         return list+foldl(kron,[x==control ? sa.sparse(gate.P0) : id for x=1:N])#control
     end
 
 end
 
-function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector) #fix and implement control here
-    
-    id = sa.sparse([1.0 0; 0im 1]);
-    vec=fill(id,N)
 
-    for op=layer
-        if op.q==1
-            vec[op.qubit]=op.mat
-        elseif op.q==2
-            final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
-            vec[op.qubit]=final_mat
-            vec[op.target_qubit]*=NaN
-        end#
+function hilbert3(N::Int,mat::AbstractMatrix,first_qubit::Int)
+
+    second_qubit=first_qubit+1
+    third_qubit=second_qubit+1
+
+    if N < third_qubit
+        throw("N must be larger than all three qubits")
+    elseif size(mat,1)!=8
+        throw("only 3-qubit operations are supported")
     end
-    
-    return foldl(kron,vec[any.(!isnan, vec)])*state
+
+    id = sa.sparse(ComplexF64,sa.I, 2, 2);
+    e_ops=fill(id,N)
+
+    insert!(e_ops,first_qubit,mat)
+
+    for i=1:3
+        popat!(e_ops,first_qubit+1)
+    end
+
+    return foldl(kron,e_ops)
 
 end
-
 
 """
 `hilbert(N::Int, mat::AbstractMatrix, qubit::Int)`
@@ -72,6 +101,8 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 
     if N < qubit || N < control
         throw("N must be larger than qubit")
+    elseif size(mat,1)>2 
+        throw("only 2-qubit operations are supported")
     end
 
     id = sa.sparse(sa.I, 2, 2);
@@ -85,34 +116,31 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 end
 
 
-"""
-not efficient for MPS
-"""
-function hilbert_control(mat::AbstractMatrix,qubit::Int,target_qubit::Int=-1;control::Int)
 
-    if control==-2
-        throw("only works with control qubit")
-    end
+function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector) #todo #fix and implement control here
+    
+    id = sa.sparse([1.0 0; 0im 1]);
+    vec=fill(id,N)
 
-    id = gate.I
+    for op=layer
+        if op.q==1
+            vec[op.qubit]=op.mat
+        elseif op.q==2
 
-    if target_qubit==-1
-    
-        n=abs(control-qubit)+min(qubit,control)
-        l1=[x==qubit ? mat : (x==control ? gate.P1 : id) for x=1:n]
-        return foldl(kron,l1)+foldl(kron,[x==control ? gate.P0 : id for x=1:n])
-    
-    else
-    
-        n=max(abs(qubit-target_qubit),abs(qubit-control),abs(control-target_qubit))+min(qubit,target_qubit,control)
-    
-        final_mat=qubit > target_qubit ? BlueTangle._swap_control_target(mat) : mat
-        list=foldl(kron,[x==qubit ? final_mat : (x==control ? gate.P1 : id) for x=1:n if x!=target_qubit])    
-        return list+foldl(kron,[x==control ? gate.P0 : id for x=1:n])#control
-    
+            if abs(op.qubit-op.target_qubit)>1 #nonlocal
+                throw("nonlocal operations (qubit and target) with control are not allowed")
+            end
+
+            final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
+            vec[op.qubit]=final_mat
+            vec[op.target_qubit]*=NaN
+        end#
     end
     
+    return foldl(kron,vec[any.(!isnan, vec)])*state
+
 end
+
 
 """
 `_swap_control_target(matrix::Matrix) -> Matrix`
@@ -143,6 +171,8 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
+# apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+
 """
 `apply(state::sa.SparseVector, op::QuantumOps)`
 
@@ -157,34 +187,73 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
     
     N=get_N(state)
 
-    if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-        throw("non-local gate $(op.name) is not allowed!")
-    end
+    # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+    #     throw("non-local gate $(op.name) is not allowed!")
+    # end
 
-    if op.type=="🔬"
+    if isa(op,OpF)
+        state=op.apply(state)
+    elseif isa(op,OpQC)
+        state=op.apply(state)
+    elseif op.type=="🔬"
         if isa(op,ifOp)
             state,ind=op.born_apply(state,noise)
         else
             state,ind=_born_measure(state,op)
         end
         # println("measurement result=$(ind)")
-    else
+    else #good old gates
         state=op.expand(N)*state
     end
 
+    ##aply noise.
     if isa(noise, NoiseModel) && op.noisy
+        state=apply_noise(state,op,noise)
+    end
 
-        selected_noise = op.q == 1 ? noise.q1 : noise.q2
-
-        if isa(selected_noise, QuantumChannel)
-            state = apply_noise(state, op, selected_noise)
-        end
-
-   end
-    
     return state
 
 end
+
+
+"""
+    apply noise on qubit or target_qubit of a given state and noise model
+"""
+function apply_noise(state::sa.SparseVector,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q1.apply(state,op.qubit)
+        else
+            return noise.q2.apply(state,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(state,op.qubit,op.target_qubit)
+    end
+
+end
+
+
+
+"""
+apply noise on qubit or target_qubit of a given density matrix and noise model
+"""
+function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q2.apply(rho,op.qubit)
+        else
+            return noise.q1.apply(rho,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(rho,op.qubit,op.target_qubit)
+    end
+
+end
+
+
+
 
 function apply(ops::Vector,psi::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
     for o=ops
@@ -264,25 +333,20 @@ function apply(rho::sa.SparseMatrixCSC,op::QuantumOps;noise::Union{NoiseModel,Bo
     
 end
 
-"""
-apply noise on qubit or target_qubit of a given state and noise model
-"""
-apply_noise(state::sa.SparseVector,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? noise.apply(state,op.qubit) : noise.apply(state,op.qubit,op.target_qubit)
-apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::QuantumChannel)=op.q == 1 ? noise.apply(rho,op.qubit) : noise.apply(rho,op.qubit,op.target_qubit)
-
 function _born_measure(state::sa.SparseVector,o::QuantumOps)
 
     N=get_N(state)
     rotMat=o.expand(N)
     state=rotMat*state#rotate
-    state,ind=_born_rule_apply(N,state,o.qubit)
+    state,ind=born_measure_Z(N,state,o.qubit)
     state=rotMat'*state#rotate back
 
     return state,ind
 
 end
 
-function _born_rule_apply(N::Int,state::sa.SparseVector,qubit::Int)
+
+function born_measure_Z(N::Int,state::sa.SparseVector,qubit::Int)
 
     born_ops=[gate.P0, gate.P1]
 
@@ -290,7 +354,7 @@ function _born_rule_apply(N::Int,state::sa.SparseVector,qubit::Int)
     if N<=12
         prob0=sum(abs2.(hilbert(N,born_ops[1],qubit)*state))
     else
-        prob0=real(BlueTangle.partial_trace(N,state,qubit))[1,1]
+        prob0=real(BlueTangle.partial_trace(state,qubit))[1,1]
     end
 
     ind=rand() < prob0 ? 0 : 1
@@ -298,17 +362,44 @@ function _born_rule_apply(N::Int,state::sa.SparseVector,qubit::Int)
 
 end
 
+
+"""
+    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
+    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int)
+
+    #todo test this!
+"""
+function born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
+  
+    slist=[expand_multi_op("P0,P0",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P1,P0",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P0,P1",[qubit1,qubit2],N)*state
+    ,expand_multi_op("P1,P1",[qubit1,qubit2],N)*state]
+    
+    measure0i0=abs(state'slist[1])
+    measure1i0=abs(state'slist[2])
+    measure0i1=abs(state'slist[3])
+    measure1i1=abs(state'slist[4])
+    
+    probs=[measure0i0,measure1i0,measure0i1,measure1i1]
+    ind=BlueTangle._weighted_sample(probs)
+    
+    return sa.normalize(slist[ind]),ind
+end
+
+
+
 function _born_measure(psi::it.MPS,o::QuantumOps;cutoff=1e-10,maxdim=500)
 
     M=it.siteinds(psi)
     psi=it.apply(o.expand(M),psi;cutoff=cutoff,maxdim=maxdim) #rotate
-    psi,ind=_born_rule_apply(psi,o.qubit)
+    psi,ind=born_measure_Z(psi,o.qubit)
     psi=it.apply(it.op(o.mat',M[o.qubit]),psi;cutoff=cutoff,maxdim=maxdim)#rotate back
     return psi,ind
 
 end
 
-function _born_rule_apply(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
+function born_measure_Z(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
 
     born_ops=[gate.P0, gate.P1]
     si=it.siteinds(psi, qubit)
@@ -333,13 +424,13 @@ function _born_measure(rho::sa.SparseMatrixCSC,o::QuantumOps)
     mat = o.expand(N)
     rho = mat * rho * mat'; #rotate
 
-    rho_born =_born_rule_apply(N,rho,o.qubit)
+    rho_born =born_measure_Z(N,rho,o.qubit)
     
     return mat' * rho_born * mat#todo fix rotate back
 
 end
 
-function _born_rule_apply(N::Int,rho::sa.SparseMatrixCSC,qubit::Int)
+function born_measure_Z(N::Int,rho::sa.SparseMatrixCSC,qubit::Int)
 
     new_rho=zero(rho)
 
@@ -378,11 +469,55 @@ end
 
 
 
+##
+##========== state preparation ==========
+
+"""
+`product_state(list_of_qubits::Vector) -> sa.SparseVector`
+
+Creates a quantum state vector from a list of qubits.
+
+- `list_of_qubits`: A vector representing the state of each qubit.
+
+Returns a sparse vector representing the quantum state of the system.
+"""
+product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+# product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
+neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
 
 
+"""
+    Z3(N::Int,j=1)
+"""
+Z3(N::Int,j=1)=product_state([mod(i+2-j+1,3)==0 ? 1 : 0 for i=1:N])
 
+"""
+    Z3_s(N::Int)
+"""
+Z3_s(N::Int)=la.normalize(Z3(N,1)+Z3(N,2)+Z3(N,3))
 
+"""
+    neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
+"""
+neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
 
+"""
+    random_product_state(N)
+"""
+random_product_state(N::Int)=product_state(rand([0,1],N))
 
+"""
+zero_state(N::Int) -> sa.SparseVector
 
+Returns a sparse vector representing the |000...> quantum state.
+"""
+zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
+one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
 
+"""
+    random_state(N::Int) -> sa.SparseVector
+"""
+random_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
+
+##========== state preparation ==========

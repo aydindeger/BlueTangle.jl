@@ -8,7 +8,7 @@ get_N(rho::sa.SparseMatrixCSC)=Int(log(2,size(rho,1)))
 get_N(state::it.MPS)=it.siteinds(state)
 
 """
-    sample_outcomes(state::sa.SparseVector, shots::Int) -> Vector
+    sample(state::sa.SparseVector, shots::Int) -> Vector
 
 Sample outcomes from a quantum state vector based on the probability distribution.
 
@@ -17,7 +17,7 @@ Sample outcomes from a quantum state vector based on the probability distributio
 
 Returns a vector of sampled outcomes.
 """
-function sample_outcomes(state::sa.SparseVector, shots)
+function sample(state::sa.SparseVector, shots)
 
     N=get_N(state)
 
@@ -36,25 +36,25 @@ function sample_outcomes(state::sa.SparseVector, shots)
 end
 
 """
-    get_probabilities_from_sample(sample_outcomes::Vector, N::Int) -> (Vector, Vector)
+    get_probabilities_from_sample(sample::Vector, N::Int) -> (Vector, Vector)
 
 Convert a sample of outcomes into probabilities.
 
-- `sample_outcomes`: A vector of sampled outcomes.
+- `sample`: A vector of sampled outcomes.
 - `N`: Number of qubits.
 
 Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
 """
-function get_probabilities_from_sample(sample_outcomes::Vector, N::Int)
+function get_probabilities_from_sample(sample::Vector, N::Int)
     # Preallocate the frequency array
     freq = zeros(Int, 2^N)
 
     # Increment frequencies
-    for outcome in sample_outcomes
+    for outcome in sample
         freq[outcome + 1] += 1  # +1 because Julia arrays are 1-indexed
     end
 
-    total_samples = length(sample_outcomes)
+    total_samples = length(sample)
 
     # Convert frequencies to probabilities
     probabilities = freq ./ total_samples
@@ -72,7 +72,7 @@ function sort_vectors(vector1::Vector,vector2::Vector)
     return (vector1[sorted_pos],vector2[sorted_pos])
 end
 
-sample_state(state::sa.SparseVector, shots::Int)=get_probabilities_from_sample(sample_outcomes(state, shots),get_N(state))
+sample_state(state::sa.SparseVector, shots::Int)=get_probabilities_from_sample(sample(state, shots),get_N(state))
 
 function sample_exact(state::sa.SparseVector)
     a,b=sa.findnz(abs2.(state))
@@ -112,7 +112,7 @@ function shadow(circuit::Circuit,number_of_experiment::Int)
             measurement_basis[qubit]=rOp
         end
 
-        classical_state=sample_outcomes(state,1)#shot=1 #this should stay as 1 for noisy experiments
+        classical_state=sample(state,1)#shot=1 #this should stay as 1 for noisy experiments
 
         classical_bit=int2bin(classical_state[1],N)
         rho_single_list=[]
@@ -149,13 +149,17 @@ function get_stats(ops::Vector{<:QuantumOps})
     two_qubit_count=0
     mid_measurement_count=0
 
+    ops=filter(op -> !isa(op, OpF), ops)
+
     for op in ops
 
         len+=1
         oname=uppercase(op.name)
 
         if isa(op, ifOp)
-            current_max=op.qubit
+            current_max = op.qubit
+        elseif isa(op, OpQC)
+            current_max = max(op.qubit, op.target_qubit)
         else
             current_max = max(op.qubit, op.target_qubit, op.control)
         end
@@ -177,6 +181,7 @@ function get_stats(ops::Vector{<:QuantumOps})
         if op.type=="🔬"
             mid_measurement_count+=1
         end
+
     end
 
     return (N=max_index,len=len,depth=_calculate_circuit_depth(ops),cx_count=cx_count,swap_count=swap_count,two_qubit_count=two_qubit_count,mid_measurement_count=mid_measurement_count)
@@ -196,6 +201,7 @@ function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
     circuit_depth = 0
 
     for op in ops
+
         # Initialize max_layer based on the control qubit
         max_layer = get(qubit_layers, op.qubit, 0)
 
@@ -213,6 +219,7 @@ function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
         if op.q == 2
             qubit_layers[op.target_qubit] = current_layer
         end
+
     end
 
     return circuit_depth
@@ -225,19 +232,35 @@ function get_layers(ops::Vector{<:QuantumOps})
     layers = Vector{Vector{QuantumOps}}()
     qubit_layers = Dict{Int, Int}()
 
+    # Determine the maximum qubit index
+    max_q = maximum([max(o.qubit, _target_find(o), _control_find(o)) for o in ops if !isa(o, OpF)])
+
     for op in ops
+        if isa(op, OpF)
+            # Create a new layer for OpF
+            push!(layers, [op])
+            
+            # Reset all qubit layers to ensure separation
+            for q in 1:max_q
+                qubit_layers[q] = length(layers)
+            end
+
+            continue
+        end
+
         # Determine the first possible layer for the operation
         op_layer = 0
         if op.q == 2
             op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.target_qubit, 0), get(qubit_layers, op.control, 0)) + 1
         elseif op.q == 1
-            if isa(op,ifOp)
+            if isa(op, ifOp)
                 op_layer = get(qubit_layers, op.qubit, 0) + 1
             else
                 op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.control, 0)) + 1
             end
         end
 
+        # Ensure there is enough space for the new layer
         while length(layers) < op_layer
             push!(layers, Vector{QuantumOps}())
         end
@@ -250,10 +273,9 @@ function get_layers(ops::Vector{<:QuantumOps})
             qubit_layers[op.target_qubit] = op_layer
         end
 
-        if isa(op,Op) && op.control != -2
+        if isa(op, Op) && op.control != -2
             qubit_layers[op.control] = op_layer
         end
-        
     end
 
     return layers
@@ -358,9 +380,24 @@ function measure(state::sa.SparseVector,number_of_experiment::Int=-1;label="stat
 
     fock=int2bin.(bitstr,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments=[get_mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
 
-    return Measurement(bitstr,avg_prob,expect,mag_moments,"0",number_of_experiment,label,N,rho_construct)
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",number_of_experiment,label,N,rho_construct)
+    
+end
+
+
+function measure(sample::Vector{Int},N::Int)
+
+    rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
+
+    bitstr,avg_prob=get_probabilities_from_sample(sample,N)
+
+    fock=int2bin.(bitstr,N)
+    expect=[BlueTangle._sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
+
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",length(sample),"sample to measurement",N,rho_construct)
     
 end
 
@@ -375,7 +412,7 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
         state=to_state(circuit,0)# id=0 no noise no zne
         state=_final_measurement(state,circuit.options)#notice how state is changed
-        classical_state=sample_outcomes(state,number_of_experiment) #shots=number_of_experiment
+        classical_state=sample(state,number_of_experiment) #shots=number_of_experiment
         append!(all_sample,classical_state)
         if circuit.options.density_matrix==true
             rho_construct = state*state'
@@ -388,7 +425,7 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
             state=to_state(circuit,id)
             state=_final_measurement(state,circuit.options)#notice how state is changed
 
-            classical_state=sample_outcomes(state,1)#shot=1 #this should stay as 1 for noisy experiments
+            classical_state=sample(state,1)#shot=1 #this should stay as 1 for noisy experiments
             append!(all_sample,classical_state)
 
             if circuit.options.density_matrix==true
@@ -407,9 +444,9 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
     fock=int2bin.(bitstr,N)
     expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments=[get_mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12] #fix this
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12] #fix this
 
-    return Measurement(bitstr,avg_prob,expect,mag_moments,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
     
 end
 
@@ -487,6 +524,11 @@ function to_state(circuit::Circuit,id::Int=0)
         # else_final_measurement
 
             for op=vcat(circuit.layers...)
+
+                if isa(op,OpF)
+                    state=apply(state,op;noise=nm)
+                    continue
+                end
 
                 if id>0 && op.q==2 && (uppercase(op.name)=="CNOT" || uppercase(op.name)=="CX") #apply ZNE
                 
@@ -653,7 +695,7 @@ Expand multiple quantum operators over a specified set of qubits.
 
 Returns a matrix representing the expanded operators.
 """
-function expand_multi_op(list_of_operators::String,qubits_applied::Vector,N::Int)
+function expand_multi_op(list_of_operators::String,qubits_applied::Vector{Int},N::Int)
 
     ops_str =String.(split(list_of_operators,","))
     result = ["I" for _ in 1:N]
@@ -685,5 +727,8 @@ function string_to_matrix(list_of_operators::String)
     return foldl(kron,sa.sparse.(gates.(ops_str)))
 end
 
-
+"""
+    hamming_distance(v1::Vector{Int}, v2::Vector{Int})
+"""
+hamming_distance(v1::Vector{Int}, v2::Vector{Int})=sum(v1 .⊻ v2)
 

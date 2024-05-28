@@ -497,7 +497,7 @@ for o=ops
 end
 
 ancilla=1
-pr_0,pr_1=sample(state,num_shots,ancilla) # Estimate the probabilities
+pr_0,pr_1=prob(state,num_shots,ancilla) # Estimate the probabilities
 
 # Compute the expectation value
 expectation_value = pr_0 - pr_1
@@ -577,7 +577,7 @@ end
 # Estimate the probability
 num_shots = 1000
 ancilla=1
-pr_0,pr_1 = sample(state,num_shots,ancilla)
+pr_0,pr_1 = prob(state,num_shots,ancilla)
 
 # Compute the overlap
 overlap = 1 - 2 * pr_1
