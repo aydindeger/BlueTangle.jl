@@ -374,7 +374,7 @@ struct Op <: QuantumOps
         return new(q,name,f,qubit,target_qubit,control,noisy,"f",new_expand)
     end
     # Inner-constructor for gates defined from a built-in or matrix 
-    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;noisy::Bool=true,control::Int=-2)
+    function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
 
         q = _get_op_num_qubits(qubit, target_qubit, control)
 
@@ -744,7 +744,7 @@ end
 sa.sparse(circ) = sa.sparse(ComplexF64, circ)
 function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
     N = circ.stats.N
-    return prod(o.expand(N) for o=vcat(circ.layers...))
+    return prod(o.expand(N) for o=reverse(vcat(circ.layers...)))
 end
 
 hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
