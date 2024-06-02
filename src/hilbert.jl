@@ -255,7 +255,7 @@ apply(op::QuantumOps,state::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e
 
 function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
     
-    M=get_N(psi)
+    M=get_M(psi)
 
     if op.q!=1 && abs(op.qubit-op.target_qubit)>1
         throw("non-local gate $(op.name) is not supported.")

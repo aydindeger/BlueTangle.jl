@@ -5,7 +5,8 @@
 get_N(state::sa.SparseVector)=Int(log(2,length(state)))
 get_N(rho::sa.SparseMatrixCSC)=Int(log(2,size(rho,1)))
 
-get_N(state::it.MPS)=it.siteinds(state)
+get_M(state::it.MPS)=it.siteinds(state)
+get_N(psi::it.MPS)=length(get_M(psi))
 
 """
     sample(state::sa.SparseVector, shots::Int) -> Vector
@@ -75,7 +76,7 @@ function sort_vectors(vector1::Vector,vector2::Vector)
 end
 
 sample_state(state::sa.SparseVector, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
-sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),length(get_N(psi)))
+sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),get_N(psi))
 
 function sample_exact(state::sa.SparseVector)
     a,b=sa.findnz(abs2.(state))
@@ -396,7 +397,7 @@ end
 
 this creates a measurement object from state vector.
 """
-function measure(state::sa.SparseVector,number_of_experiment::Int=-1;label="state to measurement")
+function measure(state::Union{sa.SparseVector,it.MPS},number_of_experiment::Int=-1;label="state to measurement")
 
     N=get_N(state)
     rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
