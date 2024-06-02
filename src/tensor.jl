@@ -82,6 +82,37 @@ function tensor_to_matrix(tensor::it.ITensor)
     end
 end
 
+
+
+"""
+    amplitude(psi::it.MPS,config::Vector)
+
+this will give amplitude of given configuration
+
+Example:
+N=3
+config=[0,0,0] or [1,1,1]
+"""
+function amplitude(psi::it.MPS,config::Vector)
+
+    M=it.siteinds(psi)
+    N=length(M)
+
+    if length(config) != N
+        throw("config must be same size as system size")
+    end
+
+    config=config .+1
+  
+    V = it.ITensor(1.)
+    for j=1:N
+      V *= (psi[j]*it.state(M[j],config[j]))
+    end
+  
+    return it.scalar(V)
+
+end
+
 """
     prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
 this gives probability of measuring 0 and 1 on select_qubit after shots
@@ -96,14 +127,23 @@ function prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qu
     return P0,P1
 end
 
+
+"""
+sample state/MPS
+"""
 sample_bit(state::sa.SparseVector,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
 sample_bit(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
 
+"""
 inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
 inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)
 inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=ψ'ψ2
 inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
-
+"""
+inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
+inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)
+inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=ψ'ψ2
+inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
 
 
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
@@ -114,6 +154,11 @@ _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it
     fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)
 """
 fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)=abs2(ψ'ψ2)
+
+"""
+    fidelity(ψ::it.ITensors.MPS,ψ::sa.SparseVector)=abs2(inner(ψ,MPS))
+"""
+fidelity(ψ::it.ITensors.MPS,ψ2::it.ITensors.MPS)=abs2(inner(ψ,ψ2))
 
 # inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
 # inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))

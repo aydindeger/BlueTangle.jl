@@ -35,8 +35,10 @@ function sample(state::sa.SparseVector, shots)
     return sampled_outcomes
 end
 
+sample(psi::it.MPS, shots)=bin2int.(sample_bit(psi,shots))
+
 """
-    get_probabilities_from_sample(sample::Vector, N::Int) -> (Vector, Vector)
+    get_probs_from_sample(sample::Vector, N::Int) -> (Vector, Vector)
 
 Convert a sample of outcomes into probabilities.
 
@@ -45,7 +47,7 @@ Convert a sample of outcomes into probabilities.
 
 Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
 """
-function get_probabilities_from_sample(sample::Vector, N::Int)
+function get_probs_from_sample(sample::Vector, N::Int)
     # Preallocate the frequency array
     freq = zeros(Int, 2^N)
 
@@ -72,12 +74,39 @@ function sort_vectors(vector1::Vector,vector2::Vector)
     return (vector1[sorted_pos],vector2[sorted_pos])
 end
 
-sample_state(state::sa.SparseVector, shots::Int)=get_probabilities_from_sample(sample(state, shots),get_N(state))
+sample_state(state::sa.SparseVector, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
+sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),length(get_N(psi)))
 
 function sample_exact(state::sa.SparseVector)
     a,b=sa.findnz(abs2.(state))
     return a .- 1,b
 end
+
+"""
+    sample_exact(psi::it.MPS)
+"""
+function sample_exact(psi::it.MPS)
+
+    M=it.siteinds(psi)
+    N=length(M)
+
+    probs=[]
+    bitstr=collect(0:2^N-1)
+    for a=bitstr
+
+        config=BlueTangle.int2bin(a,N) .+ 1
+  
+        V = it.ITensor(1.)
+        for j=1:N
+        V *= (psi[j]*it.state(M[j],config[j]))
+        end
+  
+        push!(probs,abs2(it.scalar(V)))
+    end
+
+    return bitstr,probs
+end
+
 
 function sample_exact(rho::sa.SparseMatrixCSC)
     a,b=sa.findnz(real(sa.diag(rho)))
@@ -391,7 +420,7 @@ function measure(sample::Vector{Int},N::Int)
 
     rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
 
-    bitstr,avg_prob=get_probabilities_from_sample(sample,N)
+    bitstr,avg_prob=get_probs_from_sample(sample,N)
 
     fock=int2bin.(bitstr,N)
     expect=[BlueTangle._sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
@@ -435,7 +464,7 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
         end
     end
 
-    bitstr,avg_prob=get_probabilities_from_sample(all_sample,N)
+    bitstr,avg_prob=get_probs_from_sample(all_sample,N)
 
     if circuit.options.measurement_mitigate==true && isa(circuit.options.readout_noise,QuantumChannel)
         println("measurement error mitigation applied")

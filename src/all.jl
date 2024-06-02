@@ -22,7 +22,18 @@ include("linalg.jl")
 
 import Base: *
 *(o::QuantumOps, state::sa.SparseVector) = apply(state,o)
+*(o::QuantumOps, psi::it.MPS) = apply(psi,o)
+*(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi)
 
 fields(m)=fieldnames(typeof(m))
 attributes(m)=fields(m)
+
+"""
 ro3(x)=round(x,sigdigits=3)
+"""
+ro3(x)=round(x,sigdigits=3)
+
+"""
+ro10(x)=round(x,digits=10)
+"""
+ro10(x)=round(x,digits=10)

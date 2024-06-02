@@ -171,6 +171,42 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
+
+"""
+    apply noise on qubit or target_qubit of a given state and noise model
+"""
+function apply_noise(state::sa.SparseVector,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q1.apply(state,op.qubit)
+        else
+            return noise.q2.apply(state,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(state,op.qubit,op.target_qubit)
+    end
+
+end
+
+
+"""
+apply noise on qubit or target_qubit of a given density matrix and noise model
+"""
+function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q2.apply(rho,op.qubit)
+        else
+            return noise.q1.apply(rho,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(rho,op.qubit,op.target_qubit)
+    end
+
+end
+
 # apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
 
 """
@@ -215,54 +251,6 @@ function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
-
-"""
-    apply noise on qubit or target_qubit of a given state and noise model
-"""
-function apply_noise(state::sa.SparseVector,op::QuantumOps,noise::NoiseModel)
-    
-    if op.q==1
-        if op.control == -2 
-            return noise.q1.apply(state,op.qubit)
-        else
-            return noise.q2.apply(state,op.control,op.qubit)
-        end
-    elseif op.q==2
-        return noise.q2.apply(state,op.qubit,op.target_qubit)
-    end
-
-end
-
-
-
-"""
-apply noise on qubit or target_qubit of a given density matrix and noise model
-"""
-function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
-    
-    if op.q==1
-        if op.control == -2 
-            return noise.q2.apply(rho,op.qubit)
-        else
-            return noise.q1.apply(rho,op.control,op.qubit)
-        end
-    elseif op.q==2
-        return noise.q2.apply(rho,op.qubit,op.target_qubit)
-    end
-
-end
-
-
-
-
-function apply(ops::Vector,psi::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
-    for o=ops
-        psi=apply(o,psi;noise=noise,cutoff=cutoff,maxdim=maxdim)
-    end
-
-    return psi
-end
-
 apply(op::QuantumOps,state::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)=apply(state,op;noise=noise,cutoff=cutoff,maxdim=maxdim)
 
 function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
@@ -270,26 +258,30 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
     M=get_N(psi)
 
     if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-        throw("non-local gate $(op.name) is not allowed!")
+        throw("non-local gate $(op.name) is not supported.")
     end
 
-    if op.type=="🔬"
+    if isa(op,OpF)
+        psi=op.apply(psi)
+    elseif isa(op,OpQC)
+        throw("Quantum Channel MPS is not supported")
+        # psi=op.apply(psi)
+    elseif op.type=="🔬"
         if isa(op,ifOp)
-            throw("MPS ifOp measurements does not work yet.")
-            # state,ind=op.born_apply(state,noise) #fix
+            throw("MPS ifOp measurement is not supported")
+            # psi,ind=op.born_apply(psi,noise)
         else
             psi,ind=_born_measure(psi,op;cutoff=cutoff,maxdim=maxdim)
         end
-    else
+        # println("measurement result=$(ind)")
+    else #good old gates
         psi=it.apply(op.expand(M),psi;cutoff=cutoff,maxdim=maxdim)
     end
 
+    ##aply noise.
     if isa(noise, NoiseModel) && op.noisy
-        throw("Noisy MPS does not work yet.")
-    #     selected_noise = op.q == 1 ? noise.q1 : noise.q2
-    #     if isa(selected_noise, QuantumChannel)
-    #         psi = apply_noise(psi, op, selected_noise)
-    #     end
+        throw("Noisy MPS is not supported")
+        # state=apply_noise(state,op,noise)
     end
     
     return psi

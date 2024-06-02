@@ -6,7 +6,7 @@ Detailed explanations or additional notes about all functions.
 
 ```@docs
 sample
-get_probabilities_from_sample
+get_probs_from_sample
 expect
 correlation
 ```
