@@ -90,6 +90,7 @@ struct AnsatzOptions
     N::Int
     ops::Vector{<:QuantumOps}
     args::Vector{Int}
+    loss::Function
     noise::Union{NoiseModel,Bool}
     dim::Int
     pars_initial::Vector
@@ -104,6 +105,7 @@ struct AnsatzOptions
     function AnsatzOptions(;
         N::Int,
         ops::Union{Vector{String},Vector{<:QuantumOps}},
+        loss::Union{Function,sa.SparseMatrixCSC}, #input state returns number
         noise=false,
         init::Union{sa.SparseVector,Circuit}=sa.sparse([]),
         model::String="lbfgs",
@@ -171,7 +173,13 @@ struct AnsatzOptions
             optimizer = OptimKit.LBFGS(; maxiter=number_of_iterations)
         end
 
-        return new(N,ops_final,op_args_list,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,deep_circuit,optimizer,history)
+        if isa(loss,sa.SparseMatrixCSC)
+            loss_new(state)=real(state' * loss * state)
+        else
+            loss_new=loss
+        end
+
+        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,deep_circuit,optimizer,history)
     end
 
 end
@@ -302,12 +310,11 @@ end
 
 
 """
-    VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+    VQE(opt::AnsatzOptions)
 
-Performs the Variational Quantum Eigensolver (VQE) algorithm to find the ground state energy of a given Hamiltonian using the variational quantum circuit defined by the `AnsatzOptions`.
+Performs the Variational Quantum Eigensolver (VQE) algorithm to find the optimal state of a given loss function using the variational quantum circuit defined by the `AnsatzOptions`.
 
 # Arguments
-- `H::sa.SparseMatrixCSC`: The Hamiltonian matrix as a sparse matrix.
 - `opt::AnsatzOptions`: The `AnsatzOptions` object containing the configuration for the variational quantum circuit.
 
 # Returns
@@ -316,11 +323,11 @@ Performs the Variational Quantum Eigensolver (VQE) algorithm to find the ground 
     - The optimized parameters for the variational circuit.
     - The final state obtained from the optimized parameters.
 """
-function VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+function VQE(opt::AnsatzOptions)
 
-    function loss_func(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+    function loss_func(pars::Vector, opt::AnsatzOptions)
         state = variational_apply(pars, opt)
-        return real(state' * H * state)
+        return opt.loss(state)
     end
 
     N=opt.N
@@ -331,13 +338,13 @@ function VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
 
     if lowercase(opt.model)=="lbfgs"
 
-        function loss_func_and_grad(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+        function loss_func_and_grad(pars::Vector, opt::AnsatzOptions)
             state = variational_apply(pars, opt)
-            gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
-            return (real(state' * H * state),gr)
+            gr=ForwardDiff.gradient(p -> loss_func(p,opt), pars)
+            return (opt.loss(state),gr)
         end
 
-        pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, H, opt), pars, optimizer)
+        pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, opt), pars, optimizer)
 
         if opt.history==false
             return res,pars,variational_apply(pars, opt)
@@ -349,23 +356,78 @@ function VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
 
         for i in 1:opt.number_of_iterations
             
-            gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
+            gr=ForwardDiff.gradient(p -> loss_func(p,opt), pars)
 
             # pars -= learning_rate * gr
             optimizer, pars = Optimisers.update(optimizer, pars, gr)
 
             if opt.history==true# && mod(i,Int(opt.number_of_iterations/100))==0
-                push!(energy_history,loss_func(pars, H, opt))
+                push!(energy_history,loss_func(pars, opt))
             end
 
         end
 
         if opt.history==false
-            return loss_func(pars, H, N),pars,variational_apply(pars, opt)
+            return loss_func(pars, N),pars,variational_apply(pars, opt)
         else
             return energy_history,pars,variational_apply(pars, opt)
         end
 
-end
+    end
 
 end
+# function VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+
+#     function loss_func(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+#         state = variational_apply(pars, opt)
+#         return real(state' * H * state)
+#     end
+
+#     N=opt.N
+#     pars = opt.pars_initial
+#     # learning_rate=opt.learning_rate
+#     energy_history = Vector{Float64}()#(undef,en_size)
+#     optimizer = opt.optimizer
+
+#     if lowercase(opt.model)=="lbfgs"
+
+#         function loss_func_and_grad(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
+#             state = variational_apply(pars, opt)
+#             gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
+#             return (real(state' * H * state),gr)
+#         end
+
+#         pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, H, opt), pars, optimizer)
+
+#         if opt.history==false
+#             return res,pars,variational_apply(pars, opt)
+#         else
+#             return normgradhistory[:,1],pars,variational_apply(pars, opt)
+#         end
+
+#     else
+
+#         for i in 1:opt.number_of_iterations
+            
+#             gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
+
+#             # pars -= learning_rate * gr
+#             optimizer, pars = Optimisers.update(optimizer, pars, gr)
+
+#             if opt.history==true# && mod(i,Int(opt.number_of_iterations/100))==0
+#                 push!(energy_history,loss_func(pars, H, opt))
+#             end
+
+#         end
+
+#         if opt.history==false
+#             return loss_func(pars, H, N),pars,variational_apply(pars, opt)
+#         else
+#             return energy_history,pars,variational_apply(pars, opt)
+#         end
+
+#     end
+
+# end
+
+

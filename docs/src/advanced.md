@@ -629,6 +629,7 @@ ansatz = AnsatzOptions(
     N = N,
     deep_circuit = true, # Use a deep circuit ansatz
     ops = gate_list,
+    loss = H,
     model = "lbfgs" # Using the momentum optimiser
 )
 
@@ -640,7 +641,7 @@ plotq(ansatz)
 VQE algorithm can be run as following
 
 ```julia
-en, pars = VQE(H, ansatz) # Running the VQE algorithm
+en, pars = VQE(ansatz) # Running the VQE algorithm
 ```
 
 We can plot the convergence of the VQE algorithm:
