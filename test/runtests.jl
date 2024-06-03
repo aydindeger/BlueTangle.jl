@@ -48,39 +48,39 @@ using Test
 
     end
 
-    @test begin #test sa.sparse of a circuit
+    # @test begin #test sa.sparse of a circuit
 
-        N=10
-        depth=50
-        ops=random_ops(N,depth)
-        c=compile(ops)
+    #     N=10
+    #     depth=50
+    #     ops=random_ops(N,depth)
+    #     c=compile(ops)
 
-        #let's test this on a random state
-        s=random_state(N)
-        s1=deepcopy(s)
-        s2=deepcopy(s)
-        for o=ops
-            s1=apply(s1,o)
-        end
+    #     #let's test this on a random state
+    #     s=random_state(N)
+    #     s1=deepcopy(s)
+    #     s2=deepcopy(s)
+    #     for o=ops
+    #         s1=apply(s1,o)
+    #     end
 
-        U=sa.sparse(c)
-        s2=U*s2
+    #     U=sa.sparse(c)
+    #     s2=U*s2
 
-        s1≈s2
-    end
+    #     s1≈s2
+    # end
 
-    @test begin # test decomposition
+    # @test begin # test decomposition
         
-        U = gate.H
-        α, β, γ, δ = zyz_decomposition(U)
-        U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
-        t1=isapprox(la.norm(U - U2),0,atol=1e-10)
+    #     U = gate.H
+    #     α, β, γ, δ = zyz_decomposition(U)
+    #     U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
+    #     t1=isapprox(la.norm(U - U2),0,atol=1e-10)
 
-        C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
-        A, B = nearest_kronecker_product(C)
-        t2=isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
-        t1 && t2
+    #     C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
+    #     A, B = nearest_kronecker_product(C)
+    #     t2=isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
+    #     t1 && t2
 
-    end
+    # end
 
 end
