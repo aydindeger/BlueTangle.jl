@@ -456,6 +456,8 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
         else
             rv = hilbert(N,mat,qubit,target_qubit;control=control)
         end
+
+        return rv
     end
 
     function new_expand(sites::Vector{it.Index{Int64}})
@@ -464,38 +466,43 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
         end
 
         if target_qubit == -1
-            _mat_to_tensor(sites,mat,qubit)
+            rv = _mat_to_tensor(sites,mat,qubit)
         elseif target_qubit > 0
             if abs(qubit-target_qubit)>1
                 throw("nonlocal tensor is not supported")
             end
-            size(mat,1)==4 ? _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("target_qubit is not defined")
+            size(mat,1)==4 ? rv = _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("target_qubit is not defined")
         end
+
+        return rv
     end
 
     return new_expand
 end
 
 function _get_new_expand(f::Function, qubit::Int, target_qubit::Int, control::Int)
+    
     function new_expand(N::Int,pars...)
         if target_qubit == -1
             rv = hilbert(N,f(pars...),qubit;control=control)
         else
             rv = hilbert(N,f(pars...),qubit,target_qubit;control=control)
         end
-        return rv 
+        return rv
     end
 
-    function new_expand(sites::Vector{it.Index{Int64}})
-        if abs(qubit-target_qubit)>1 || control!=-2
+    function new_expand(sites::Vector{it.Index{Int64}},pars...)
+        if (target_qubit > 0 && abs(qubit-target_qubit)>1) || control!=-2
             throw("nonlocal tensor is not supported")
         end
 
         if target_qubit == -1
-            _mat_to_tensor(sites,f(pars...),qubit)
+            rv = _mat_to_tensor(sites,f(pars...),qubit)
         else
-            _mat_to_tensor(sites,f(pars...),qubit,target_qubit)
+            rv = _mat_to_tensor(sites,f(pars...),qubit,target_qubit)
         end
+
+        return rv
     end
 
     return new_expand

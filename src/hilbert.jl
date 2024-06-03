@@ -275,7 +275,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
         end
         # println("measurement result=$(ind)")
     else #good old gates
-        psi=it.apply(op.expand(M),psi;cutoff=cutoff,maxdim=maxdim)
+        psi=it.normalize(it.apply(op.expand(M),psi;cutoff=cutoff,maxdim=maxdim))
     end
 
     ##aply noise.
@@ -384,9 +384,9 @@ end
 function _born_measure(psi::it.MPS,o::QuantumOps;cutoff=1e-10,maxdim=500)
 
     M=it.siteinds(psi)
-    psi=it.apply(o.expand(M),psi;cutoff=cutoff,maxdim=maxdim) #rotate
+    psi=it.normalize(it.apply(o.expand(M),psi;cutoff=cutoff,maxdim=maxdim)) #rotate
     psi,ind=born_measure_Z(psi,o.qubit)
-    psi=it.apply(it.op(o.mat',M[o.qubit]),psi;cutoff=cutoff,maxdim=maxdim)#rotate back
+    psi=it.normalize(it.apply(it.op(o.mat',M[o.qubit]),psi;cutoff=cutoff,maxdim=maxdim))#rotate back
     return psi,ind
 
 end

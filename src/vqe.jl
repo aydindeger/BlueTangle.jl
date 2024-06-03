@@ -94,7 +94,7 @@ struct AnsatzOptions
     noise::Union{NoiseModel,Bool}
     dim::Int
     pars_initial::Vector
-    init::Union{sa.SparseVector,Circuit}
+    init::Union{sa.SparseVector,it.MPS,Circuit}
     number_of_iterations::Int
     model::String
     learning_rate::Float64
@@ -107,7 +107,7 @@ struct AnsatzOptions
         ops::Union{Vector{String},Vector{<:QuantumOps}},
         loss::Union{Function,sa.SparseMatrixCSC}, #input state returns number
         noise=false,
-        init::Union{sa.SparseVector,Circuit}=sa.sparse([]),
+        init::Union{sa.SparseVector,it.MPS,Circuit}=sa.sparse([]),
         model::String="lbfgs",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,
@@ -174,7 +174,7 @@ struct AnsatzOptions
         end
 
         if isa(loss,sa.SparseMatrixCSC)
-            loss_new(state)=real(state' * loss * state)
+            loss_new(state)=isa(state,it.MPS) ? throw("loss is not MPO.") : real(state' * loss * state)
         else
             loss_new=loss
         end
@@ -267,8 +267,8 @@ Applies the variational quantum circuit defined by the `AnsatzOptions` to the in
 """
 function variational_apply(pars::Vector,opt::AnsatzOptions)
 
-    N=opt.N
     state=opt.init
+    N=isa(state,it.MPS) ? get_M(state) : opt.N
     noise=opt.noise
 
     if isa(noise, NoiseModel)
@@ -376,58 +376,4 @@ function VQE(opt::AnsatzOptions)
     end
 
 end
-# function VQE(H::sa.SparseMatrixCSC, opt::AnsatzOptions)
-
-#     function loss_func(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
-#         state = variational_apply(pars, opt)
-#         return real(state' * H * state)
-#     end
-
-#     N=opt.N
-#     pars = opt.pars_initial
-#     # learning_rate=opt.learning_rate
-#     energy_history = Vector{Float64}()#(undef,en_size)
-#     optimizer = opt.optimizer
-
-#     if lowercase(opt.model)=="lbfgs"
-
-#         function loss_func_and_grad(pars::Vector, H::sa.SparseMatrixCSC, opt::AnsatzOptions)
-#             state = variational_apply(pars, opt)
-#             gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
-#             return (real(state' * H * state),gr)
-#         end
-
-#         pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, H, opt), pars, optimizer)
-
-#         if opt.history==false
-#             return res,pars,variational_apply(pars, opt)
-#         else
-#             return normgradhistory[:,1],pars,variational_apply(pars, opt)
-#         end
-
-#     else
-
-#         for i in 1:opt.number_of_iterations
-            
-#             gr=ForwardDiff.gradient(p -> loss_func(p,H,opt), pars)
-
-#             # pars -= learning_rate * gr
-#             optimizer, pars = Optimisers.update(optimizer, pars, gr)
-
-#             if opt.history==true# && mod(i,Int(opt.number_of_iterations/100))==0
-#                 push!(energy_history,loss_func(pars, H, opt))
-#             end
-
-#         end
-
-#         if opt.history==false
-#             return loss_func(pars, H, N),pars,variational_apply(pars, opt)
-#         else
-#             return energy_history,pars,variational_apply(pars, opt)
-#         end
-
-#     end
-
-# end
-
 

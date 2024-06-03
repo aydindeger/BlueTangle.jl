@@ -23,7 +23,7 @@ include("linalg.jl")
 import Base: *
 *(o::QuantumOps, state::sa.SparseVector) = apply(state,o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi,o)
-*(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi)
+*(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
 
 fields(m)=fieldnames(typeof(m))
 attributes(m)=fields(m)
