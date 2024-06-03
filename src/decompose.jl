@@ -93,3 +93,87 @@ function pauli_reconstruction(coefficients::sa.SparseVector,qubit::Int;distance:
     sum(coefficients[i] * pauli_nonlocal_tensors[i] for i in 1:length(coefficients))
 end
 
+
+##
+##========== decomposition ==========
+
+"""
+zyz_decomposition(U::Union{AbstractMatrix,sa.SparseMatrixCSC})
+
+U = gate.H
+α, β, γ, δ = zyz_decomposition(U)
+U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
+isapprox(la.norm(U - U2),0,atol=1e-10)
+"""
+function zyz_decomposition(U::Union{AbstractMatrix,sa.SparseMatrixCSC})
+
+    # https://quantumcomputing.stackexchange.com/a/16263
+
+    if !isunitary(U)
+        throw("U is not unitary!")
+    end
+
+    a, b = U[1, 1], U[1, 2]
+    c, d = U[2, 1], U[2, 2]
+
+    # Determine γ
+    if a != 0
+        γ = 2 * atan(abs(b) / abs(a))
+    else
+        γ = π
+    end
+
+    # Determine β and δ
+    if γ == 0
+        β_plus_δ = angle(d) - angle(a)
+        β = 0
+        δ = β_plus_δ
+    elseif γ == π
+        β_minus_δ = angle(-b) - angle(c)
+        β = 0
+        δ = -β_minus_δ
+    else
+        β = angle(c) - angle(a)
+        δ = angle(-b) - angle(a)
+    end
+
+    # Determine α
+    if a != 0
+        α = angle(a) + (β + δ) / 2
+    else
+        α = angle(c) + (-β + δ) / 2
+    end
+
+    return (α, β, γ, δ) # = exp(im*α)*Rz(β) * Ry(γ) * Rz(δ)
+end
+
+
+"""
+kronecker_decomposition(C::Union{AbstractMatrix,sa.SparseMatrixCSC})
+
+C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
+A, B = nearest_kronecker_product(C)
+isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
+"""
+function kronecker_decomposition(C::Union{AbstractMatrix,sa.SparseMatrixCSC})
+
+    #after Eq. 87 from https://github.com/gecrooks/on_gates
+
+    # Reshape C from a 4x4 matrix into a 2x2x2x2 tensor
+    C = reshape(C, 2, 2, 2, 2)
+    
+    # Permute the dimensions of C to match the outer product structure
+    C = permutedims(C, (1, 3, 2, 4))
+    
+    # Flatten C back into a 4x4 matrix
+    C = reshape(C, 4, 4)
+
+    U, S, V = svd(C)
+
+    A = sqrt(S[1]) * reshape(V[:, 1]', 2, 2)  # Transpose V with ' for correct dimensions in Julia
+    B = sqrt(S[1]) * reshape(U[:, 1], 2, 2)
+
+    return A,B
+end
+
+##========== decomposition ==========

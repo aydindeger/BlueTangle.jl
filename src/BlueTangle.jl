@@ -10,6 +10,7 @@ export pauli_decomposition,pauli_reconstruction, pauli_decomposition_names, paul
 export gate,gates,random_ops,random_clifford,Noise1,Noise2,apply_noise,U1,U2,U3,is_valid_quantum_channel,apply_twirl,custom_noise,cnot_amplifier!,op_amplifier!,linear_fit,quadratic_fit,error_mitigate_data
 export plotq, savefigure
 export fock_basis_create, int2bin, isunitary, sparsevector, hamming_distance, born_measure_Z
+export zyz_decomposition, kronecker_decomposition
 export dim, _born_measure
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude

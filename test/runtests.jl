@@ -33,18 +33,53 @@ using Test
 
     @test begin #test stinespring_dilation
 
-    kraus_ops=OpQC("amplitude_damping",.2,2,3).kraus
-    mat = stinespring_dilation(kraus_ops);
-    
-    N=2
-    state=random_state(N)
-    rho=state*state'
-    zero=zero_state(N)   
-    rho_zero=zero*zero'
-    a=sum(kraus * rho * kraus' for kraus=kraus_ops)
-    b=mat * kron(rho_zero,rho) * mat'
-    c=partial_trace(sa.sparse(b),[4,4],[1])
-    a==c
+        kraus_ops=OpQC("amplitude_damping",.2,2,3).kraus
+        mat = stinespring_dilation(kraus_ops);
+        
+        N=2
+        state=random_state(N)
+        rho=state*state'
+        zero=zero_state(N)   
+        rho_zero=zero*zero'
+        a=sum(kraus * rho * kraus' for kraus=kraus_ops)
+        b=mat * kron(rho_zero,rho) * mat'
+        c=partial_trace(sa.sparse(b),[4,4],[1])
+        a==c
+
+    end
+
+    @test begin #test sa.sparse of a circuit
+
+        N=10
+        depth=50
+        ops=random_ops(N,depth)
+        c=compile(ops)
+
+        #let's test this on a random state
+        s=random_state(N)
+        s1=deepcopy(s)
+        s2=deepcopy(s)
+        for o=ops
+            s1=apply(s1,o)
+        end
+
+        U=sa.sparse(c)
+        s2=U*s2
+
+        s1≈s2
+    end
+
+    @test begin # test decomposition
+        
+        U = gate.H
+        α, β, γ, δ = zyz_decomposition(U)
+        U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
+        t1=isapprox(la.norm(U - U2),0,atol=1e-10)
+
+        C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
+        A, B = nearest_kronecker_product(C)
+        t2=isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
+        t1 && t2
 
     end
 
