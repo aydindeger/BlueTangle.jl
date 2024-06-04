@@ -1,7 +1,6 @@
 using BlueTangle
 using Test
 using LinearAlgebra
-using Statistics
 
 @testset "BlueTangle.jl" begin
 
