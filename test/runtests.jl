@@ -126,7 +126,7 @@ using LinearAlgebra
             rho_n=apply(rho_n,o;noise=nm)
         end
 
-        b3=isapprox(sum(expect(rho_n,sym)),mean(mag_list),atol=10/exp_no)
+        b3=isapprox(sum(expect(rho_n,sym)),sum(mag_list)/length(mag_list),atol=10/exp_no)
 
         b1 && b2 && b3
     end
