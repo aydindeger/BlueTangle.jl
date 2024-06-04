@@ -1,7 +1,10 @@
 using BlueTangle
 using Test
+using LinearAlgebra
+using Statistics
 
 @testset "BlueTangle.jl" begin
+
     @test BlueTangle.int2bin(2,4)==[0,0,1,0]
 
     @test begin #this checks nonlocal hilbert construction
@@ -48,39 +51,85 @@ using Test
 
     end
 
-    # @test begin #test sa.sparse of a circuit
+    @test begin #test sa.sparse of a circuit
 
-    #     N=10
-    #     depth=50
-    #     ops=random_ops(N,depth)
-    #     c=compile(ops)
+        N=10
+        depth=50
+        ops=random_ops(N,depth)
+        c=compile(ops)
 
-    #     #let's test this on a random state
-    #     s=random_state(N)
-    #     s1=deepcopy(s)
-    #     s2=deepcopy(s)
-    #     for o=ops
-    #         s1=apply(s1,o)
-    #     end
+        #let's test this on a random state
+        s=random_state(N)
+        s1=deepcopy(s)
+        s2=deepcopy(s)
+        for o=ops
+            s1=apply(s1,o)
+        end
 
-    #     U=sa.sparse(c)
-    #     s2=U*s2
+        U=sa.sparse(c)
+        s2=U*s2
 
-    #     s1≈s2
-    # end
+        isapprox(s1,s2,atol=1e-12)
+    end
 
-    # @test begin # test decomposition
+    @test begin # test decomposition
         
-    #     U = gate.H
-    #     α, β, γ, δ = zyz_decomposition(U)
-    #     U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
-    #     t1=isapprox(la.norm(U - U2),0,atol=1e-10)
+        U = gate.H
+        α, β, γ, δ = zyz_decomposition(U)
+        U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
+        t1=isapprox(la.norm(U - U2),0,atol=1e-10)
 
-    #     C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
-    #     A, B = nearest_kronecker_product(C)
-    #     t2=isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
-    #     t1 && t2
+        C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
+        A, B = kronecker_decomposition(C)
+        t2=isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
+        t1 && t2
 
-    # end
+    end
+
+    @test begin # density matrix
+
+        N=4
+        depth=20
+        ops=random_ops(N,depth);
+        nm=NoiseModel("depolarizing",.1)
+
+        #exact
+        sym="T"
+
+        state=zero_state(N)
+        for o=ops
+            state=apply(state,o)
+        end
+        mag_e=sum(expect(state,sym))
+
+        rho=zero_state(N)*zero_state(N)'
+        for o=ops
+            rho=apply(rho,o)
+        end
+        mag_r=sum(expect(state,sym))
+
+        b1=isapprox(mag_e,mag_r,atol=1e-10);
+        b2=isapprox(state*state',rho,atol=1e-10);
+
+
+        mag_list=[]
+        exp_no=1000
+        for experiment=1:exp_no
+            state_n=zero_state(N)
+            for o=ops
+                state_n=apply(state_n,o;noise=nm)
+            end
+            push!(mag_list,sum(expect(state_n,sym)))
+        end
+
+        rho_n=zero_state(N)*zero_state(N)'
+        for o=ops
+            rho_n=apply(rho_n,o;noise=nm)
+        end
+
+        b3=isapprox(sum(expect(rho_n,sym)),mean(mag_list),atol=10/exp_no)
+
+        b1 && b2 && b3
+    end
 
 end

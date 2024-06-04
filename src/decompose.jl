@@ -168,7 +168,7 @@ function kronecker_decomposition(C::Union{AbstractMatrix,sa.SparseMatrixCSC})
     # Flatten C back into a 4x4 matrix
     C = reshape(C, 4, 4)
 
-    U, S, V = svd(C)
+    U, S, V = la.svd(C)
 
     A = sqrt(S[1]) * reshape(V[:, 1]', 2, 2)  # Transpose V with ' for correct dimensions in Julia
     B = sqrt(S[1]) * reshape(U[:, 1], 2, 2)

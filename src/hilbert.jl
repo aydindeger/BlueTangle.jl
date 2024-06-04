@@ -197,9 +197,9 @@ function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
     
     if op.q==1
         if op.control == -2 
-            return noise.q2.apply(rho,op.qubit)
+            return noise.q1.apply(rho,op.qubit)
         else
-            return noise.q1.apply(rho,op.control,op.qubit)
+            return noise.q2.apply(rho,op.control,op.qubit)
         end
     elseif op.q==2
         return noise.q2.apply(rho,op.qubit,op.target_qubit)
@@ -302,28 +302,32 @@ Modifies the state vector directly.
 function apply(rho::sa.SparseMatrixCSC,op::QuantumOps;noise::Union{NoiseModel,Bool}=false)
 
     N=get_N(rho)
-    
-    if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-        throw("non-local gate $(op.name) is not allowed! Use different layout or compile circuit to add swaps")
-    end
 
-    if op.type=="🔬"
-        isa(op,ifOp) ? rho=op.born_apply(rho,noise) : rho=_born_measure(rho,op)
-    else
+    if isa(op,OpF)
+        rho=op.apply(rho)
+    elseif isa(op,OpQC)
+        rho=op.apply(rho)
+    elseif op.type=="🔬"
+        if isa(op,ifOp)
+            rho,ind=op.born_apply(rho,noise)
+        else
+            rho,ind=_born_measure(rho,op)
+        end
+        # println("measurement result=$(ind)")
+    else #good old gates
         e_op=op.expand(N)
         rho=e_op*rho*e_op'
     end
 
+    ##aply noise
     if isa(noise, NoiseModel) && op.noisy
-        selected_noise = op.q == 1 ? noise.q1 : noise.q2
-        if isa(selected_noise, QuantumChannel)
-            rho = apply_noise(rho, op, selected_noise)
-        end
+        rho=apply_noise(rho,op,noise)
     end
 
     return rho
     
 end
+
 
 function _born_measure(state::sa.SparseVector,o::QuantumOps)
 

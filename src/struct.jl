@@ -46,6 +46,7 @@ function __calc_prob3(state::sa.SparseVector,kraus_vec::Vector,first_qubit::Int)
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
 end
+
 function __QuantumChannel_new_apply3(state::sa.SparseVector,kraus_ops::Vector,first_qubit::Int)
     N=get_N(state)
     ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob3(state,kraus_ops,first_qubit))
@@ -645,14 +646,12 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,f::Function)
 
-        new_apply(state::sa.SparseVector;kwargs...)=f(state;kwargs...)
+        new_apply(state::Union{sa.SparseVector,sa.SparseMatrixCSC};kwargs...)=f(state;kwargs...)
 
         return new([1],name,new_apply)
     end
     
 end
-
-
 
 _target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
 
