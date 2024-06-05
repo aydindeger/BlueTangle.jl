@@ -170,7 +170,7 @@ struct OpQC <: QuantumOps
 
             new_prob_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit)
             new_apply_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
-            new_apply_op(rho::sa.SparseMatrixCSC)=throw("fix")
+            new_apply_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
 
             return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob_op,new_apply_op)
 
@@ -178,7 +178,7 @@ struct OpQC <: QuantumOps
 
             new_prob2_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
-            new_apply2_op(rho::sa.SparseMatrixCSC)=throw("fix")
+            new_apply2_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
 
             return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob2_op,new_apply2_op)
 

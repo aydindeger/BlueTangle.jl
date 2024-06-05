@@ -155,6 +155,16 @@ _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it
 """
 fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)=abs2(ψ'ψ2)
 
+
+fidelity(rho::sa.SparseMatrixCSC, sigma::sa.SparseMatrixCSC)=fidelity(Matrix(rho),Matrix(sigma))
+function fidelity(rho::AbstractMatrix, sigma::AbstractMatrix)
+    a = sqrt(rho) * sigma * sqrt(rho)
+    b = sqrt(a)
+    fidelity_value = la.tr(b)^2
+    
+    return real(fidelity_value)
+end
+
 """
     fidelity(ψ::it.ITensors.MPS,ψ::sa.SparseVector)=abs2(inner(ψ,MPS))
 """

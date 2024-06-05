@@ -131,4 +131,64 @@ using LinearAlgebra
         b1 && b2 && b3
     end
 
+
+    @test begin 
+
+        # test between OpQC, NoiseModel, depolarizing channel
+
+        N=1
+        depth=20
+        ops=random_ops(N,depth);
+        p=0.01
+        nm=NoiseModel("depolarizing",p)
+        rs=random_state(N)
+        rho0=rs*rs'
+
+        rho1=deepcopy(rho0)
+        rho2=deepcopy(rho0)
+        rho3=deepcopy(rho0)
+
+        for o=ops
+
+            rho1=apply(rho1,o)
+
+            c= o.q==1 ? OpQC("depolarizing",p,o.qubit) : OpQC("depolarizing",p,o.qubit,o.target_qubit)
+            rho1=apply(rho1,c)
+
+            rho2=apply(rho2,o;noise=nm)
+
+            rho3=apply(rho3,o) #normal ops
+            if rand()<=p #depolarizing channel
+                rho3=apply(rho3,rand([Op("X",o.qubit),Op("Y",o.qubit),Op("Z",o.qubit)]))
+            end
+
+        end
+
+        t1=la.norm(rho1-rho2) ≈ 0
+
+        avg_fidelity=0
+        experiment_no=1000
+        for experiment=1:experiment_no
+
+            rho3=deepcopy(rho0)
+
+            for o=ops
+
+                rho3=apply(rho3,o) #normal ops
+                if rand()<=p #depolarizing channel
+                    rho3=apply(rho3,rand([Op("X",o.qubit),Op("Y",o.qubit),Op("Z",o.qubit)]))
+                end
+
+            end
+
+            avg_fidelity+=fidelity(rho3,rho0)/experiment_no
+
+        end
+
+        t2=isapprox(fidelity(rho1,rho0),avg_fidelity,atol=10/experiment_no)
+
+        t1 && t2
+
+    end
+
 end
