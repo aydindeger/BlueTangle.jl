@@ -217,6 +217,7 @@ struct StabilizerCode #alpha version
     logicals::Dict
     codestates::Vector
     codewords::Vector
+    encoding_ops::Vector
     stabilizer_matrix::Vector
     info::NamedTuple
     ops::Function
@@ -239,7 +240,7 @@ struct StabilizerCode #alpha version
         generator_standard, logicals, logical_XZ_vecs, r = standard_form_logicals(generator, logicals)
         encoding_ops=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
         e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
-        codestates = [sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
+        codestates = [-sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
         len_codestates=length(codestates)
         codewords=[get_codeword(code_s) for code_s=codestates]
         if length(codestates) != 2^k
@@ -354,12 +355,11 @@ struct StabilizerCode #alpha version
             len_logical=length(keys(logicals)),
             len_codestates=len_codestates,
             logical_XZ_vecs=logical_XZ_vecs,
-            encoding_ops=encoding_ops,
             r=r,
             m=m #len_stabilizers
         )
 
-        return new(n,k,d,stabilizers,generator,generator_standard,logicals,codestates,codewords,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
+        return new(n,k,d,stabilizers,generator,generator_standard,logicals,codestates,codewords,encoding_ops,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
 
     end
 
