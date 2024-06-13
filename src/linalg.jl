@@ -249,6 +249,93 @@ end
 
 ##========== partial trace  ==========
 
+"""
+reduced_row_echelon(generator::AbstractMatrix)
+"""
+function reduced_row_echelon(generator::AbstractMatrix)
+    num_rows, num_cols = size(generator)
+    transform_rows = Matrix{Int}(la.I, num_rows, num_rows)
+    transform_cols = Matrix{Int}(la.I, num_cols, num_cols)
+    rank = 0
+
+    for i in 1:num_rows
+        # Find the pivot row
+        pivot_row = i
+        while pivot_row <= num_rows && generator[pivot_row, i] == 0
+            pivot_row += 1
+        end
+
+        if pivot_row > num_rows
+            continue
+        end
+
+        rank += 1
+
+        # Swap rows if necessary
+        if pivot_row != i
+            generator[i, :], generator[pivot_row, :] = generator[pivot_row, :], generator[i, :]
+            transform_rows[i, :], transform_rows[pivot_row, :] = transform_rows[pivot_row, :], transform_rows[i, :]
+        end
+
+        # Reduce the rows above and below the pivot
+        for j in 1:num_rows
+            if j != i && generator[j, i] == 1
+                generator[j, :] .= mod.(generator[j, :] .+ generator[i, :], 2)
+                transform_rows[j, :] .= mod.(transform_rows[j, :] .+ transform_rows[i, :], 2)
+            end
+        end
+
+        # Swap columns if necessary
+        if generator[i, i] == 0
+            for j in (i+1):num_cols
+                if generator[i, j] == 1
+                    generator[:, i], generator[:, j] = generator[:, j], generator[:, i]
+                    transform_cols[:, i], transform_cols[:, j] = transform_cols[:, j], transform_cols[:, i]
+                    break
+                end
+            end
+        end
+    end
+
+    return generator, rank, transform_rows, transform_cols
+end
+
+# function gaussian_elimination_mod2(generator::AbstractMatrix)
+#     B = deepcopy(generator)
+#     rows, cols = size(B)
+#     row = 1
+
+#     for col = 1:cols
+#         # Find a row with a non-zero element in the current column
+#         pivot = findfirst(==(1), B[row:rows, col])
+        
+#         # Continue only if a pivot is found
+#         if pivot !== nothing
+#             pivot += row - 1
+
+#             # Swap the current row with the pivot row if necessary
+#             if pivot != row
+#                 B[row, :], B[pivot, :] = B[pivot, :], B[row, :]
+#             end
+
+#             # Eliminate all other 1's in this column
+#             for other_row = 1:rows
+#                 if other_row != row && B[other_row, col] == 1
+#                     B[other_row, :] = (B[other_row, :] .⊻ B[row, :]) .% 2
+#                 end
+#             end
+
+#             row += 1
+#         end
+    
+#         if row > rows
+#             break
+#         end
+#     end
+
+#     return B
+# end
+
 ##
 ##========== fit  ==========
 

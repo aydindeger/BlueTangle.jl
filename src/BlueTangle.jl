@@ -12,7 +12,7 @@ export plotq, savefigure
 export fock_basis_create, int2bin, isunitary, sparsevector, hamming_distance, born_measure_Z
 export zyz_decomposition, kronecker_decomposition
 export dim, _born_measure
-export get_codeword, StabilizerCode
+export get_codeword, StabilizerCode, stabilizers_to_generator
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude
 export it, sa, plt, la, sb
