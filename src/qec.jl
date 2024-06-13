@@ -180,11 +180,7 @@ end
 
 
 """
-    StabilizerCode(n::Int,k::Int,d::Int,stabilizers::Vector,logicals::Dict)
-
-    n=4
-    k=2
-    d=2
+    StabilizerCode(stabilizers::Vector,logicals::Dict)
 
     logicals=Dict()
 
@@ -203,7 +199,7 @@ end
         ("Z,Z,Z,Z")
     ]
 
-    code422=StabilizerCode(n,k,d,stabilizers,logicals)
+    code422=StabilizerCode(stabilizers,logicals)
 
     fields(code422)
 """
