@@ -28,9 +28,9 @@ function stabilizers_to_generator(stabilizers::Vector)
 end
 
 """
-standard_form_logicals(G::AbstractMatrix)
+get_standard_form(G::AbstractMatrix)
 """
-function standard_form_logicals(G::AbstractMatrix,logical_XZ_ops::Dict)
+function get_standard_form(G::AbstractMatrix)
     n, m = size(G, 2) ÷ 2, size(G, 1)
     k = n - m
     
@@ -59,18 +59,42 @@ function standard_form_logicals(G::AbstractMatrix,logical_XZ_ops::Dict)
         G_standard = vcat(G_row_1, G_row_2)
     end
 
-    id, A1, A2, B, C1, C2, D, E2 = _extract_blocks(G_standard,r)
+    return G_standard, r
+end
+
+
+function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
+
+    n, m = size(G_standard, 2) ÷ 2, size(G_standard, 1)
+    k = n - m
+
+    id, A1, A2, B, C1, C2, D, E = _extract_blocks(G_standard,r)
 
     logical_XZ_vecs=Dict()
 
-    for ki=1:k
-        logical_XZ_vecs["logZ",ki]=[fill(0,n)...,A2'[ki,:]...,fill(0,m-r)...,fill(1,k)...]
-        logical_XZ_vecs["logX",ki]=[fill(0,r)...,E2'[ki,:]...,fill(1,k)...,((E2' * C1') + C2')[ki,:]...,fill(0,m-r)...,fill(0,k)...]
-        logical_XZ_ops["logZ",ki]=logical_vec_2_ops(logical_XZ_vecs["logZ",ki])
-        logical_XZ_ops["logX",ki]=logical_vec_2_ops(logical_XZ_vecs["logX",ki])
+    if k>1
+        println("something is wrong with logicals for k>1")
     end
 
-    return G_standard, logical_XZ_ops, logical_XZ_vecs, r
+    U0=zeros(k,r)
+    U2=E'
+    U3=la.I(k)
+    V1=(E'*C1')+C2'
+    U1=zeros(k,m-r)
+    V3=zeros(k,k)
+    #size: r m-r k
+    X_vecs=[U0 U2 U3 V1 U1 V3]
+    Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
+
+    for ki=1:k
+        logical_XZ_vecs["logZ",ki]=Z_vecs[ki,:]
+        logical_XZ_vecs["logX",ki]=X_vecs[ki,:]
+        logical_XZ_ops["logZ",ki]=logical_vec_2_ops(Z_vecs[ki,:])
+        logical_XZ_ops["logX",ki]=logical_vec_2_ops(X_vecs[ki,:])
+    end
+
+    return logical_XZ_ops, logical_XZ_vecs
+
 end
 
 
@@ -94,47 +118,23 @@ function logical_vec_2_ops(logical_vec::Vector)
     return ops
     end
 
-
 function _extract_blocks(G_standard_form,r::Int) #r=rank
     #block sizes: r, m-r, k
     n, m = size(G_standard_form, 2) ÷ 2, size(G_standard_form, 1)
     k = n - m
 
-    left=r+1
-    block_size=(m-r)
-    A1 = G_standard_form[1:r, left:left+block_size-1]
+    id=G_standard_form[1:r,1:r]
+    A1=G_standard_form[1:r,r+1:n-k]
+    A2=G_standard_form[1:r,n-k+1:n]
+    B=G_standard_form[1:r,n+1:n+r]
+    C1=G_standard_form[1:r,n+r+1:2n-k]
+    C2=G_standard_form[1:r,2n-k+1:2n]
+    
+    D=G_standard_form[r+1:m,n+1:n+r]
+    id2=G_standard_form[r+1:m,n+r+1:2n-k]
+    E=G_standard_form[r+1:m,2n-k+1:2n]
 
-    left+=block_size
-    block_size=k
-    A2 = G_standard_form[1:r, left:left+block_size-1]
-
-    left+=block_size
-    block_size=r
-    B = G_standard_form[1:r, left:left+block_size-1]
-
-    left+=block_size
-    block_size=(m-r)
-    C1 = G_standard_form[1:r, left:left+block_size-1]
-
-    left+=block_size
-    block_size=k
-    C2 = G_standard_form[1:r, left:left+block_size-1]
-
-    #row2
-
-    left=n+1
-    block_size=r
-    D = G_standard_form[(r+1):end, left:left+block_size-1]
-
-    left+=block_size
-    block_size=(m-r)
-    id = G_standard_form[(r+1):end, left:left+block_size-1]
-
-    left+=block_size
-    block_size=k
-    E2 = G_standard_form[(r+1):end, left:left+block_size-1]
-
-    return id, A1, A2, B, C1, C2, D, E2
+    return id, A1, A2, B, C1, C2, D, E
 end
 
 function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,r::Int)
@@ -233,7 +233,8 @@ struct StabilizerCode #alpha version
         ##find init from stabilizers
         stabilizer_matrix=string_to_matrix.(stabilizers)
         generator=stabilizers_to_generator(stabilizers)
-        generator_standard, logicals, logical_XZ_vecs, r = standard_form_logicals(generator, logicals)
+        generator_standard, r = get_standard_form(generator)
+        logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r)
         encoding_ops=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
         e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
         codestates = [-sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
@@ -246,6 +247,10 @@ struct StabilizerCode #alpha version
         ##
 
         function new_encode(state_init::sa.SparseVector)
+
+            if k>1
+                println("something is wrong with logicals for k>1")
+            end        
 
             N=get_N(state_init)
             if N!=k
