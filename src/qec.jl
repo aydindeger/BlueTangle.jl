@@ -72,10 +72,6 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
 
     logical_XZ_vecs=Dict()
 
-    if k>1
-        println("something is wrong with logicals for k>1")
-    end
-
     U0=zeros(k,r)
     U2=E'
     U3=la.I(k)
@@ -213,7 +209,7 @@ struct StabilizerCode #alpha version
     logicals::Dict
     codestates::Vector
     codewords::Vector
-    encoding_ops::Vector
+    ops_encoding::Vector
     stabilizer_matrix::Vector
     info::NamedTuple
     ops::Function
@@ -235,7 +231,7 @@ struct StabilizerCode #alpha version
         generator=stabilizers_to_generator(stabilizers)
         generator_standard, r = get_standard_form(generator)
         logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r)
-        encoding_ops=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
+        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
         e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
         codestates = [-sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
         len_codestates=length(codestates)
@@ -246,11 +242,7 @@ struct StabilizerCode #alpha version
 
         ##
 
-        function new_encode(state_init::sa.SparseVector)
-
-            if k>1
-                println("something is wrong with logicals for k>1")
-            end        
+        function new_encode(state_init::sa.SparseVector) #encoded state is last  
 
             N=get_N(state_init)
             if N!=k
@@ -259,7 +251,7 @@ struct StabilizerCode #alpha version
 
             state=kron(zero_state(n-k),state_init)
 
-            for o=encoding_ops
+            for o=ops_encoding
                 state=apply(state,o)
             end
 
@@ -269,7 +261,7 @@ struct StabilizerCode #alpha version
 
         function new_decode(state::sa.SparseVector)
 
-            for o=encoding_ops'
+            for o=ops_encoding'
                 state=apply(state,o)
             end
 
@@ -282,7 +274,7 @@ struct StabilizerCode #alpha version
             throw("fix")
         end
 
-        function new_correct(state::sa.SparseVector)
+        function new_correct(state::sa.SparseVector,syndrome)
 
             throw("fix")
         end
@@ -360,7 +352,7 @@ struct StabilizerCode #alpha version
             m=m #len_stabilizers
         )
 
-        return new(n,k,d,stabilizers,generator,generator_standard,logicals,codestates,codewords,encoding_ops,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
+        return new(n,k,d,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
 
     end
 
