@@ -347,11 +347,11 @@ function born_measure_Z(N::Int,state::sa.SparseVector,qubit::Int)
     born_ops=[gate.P0, gate.P1]
 
     #according to benchmark
-    if N<=12
-        prob0=sum(abs2.(hilbert(N,born_ops[1],qubit)*state))
-    else
+    # if N<=12
+        # prob0=sum(abs2.(hilbert(N,born_ops[1],qubit)*state))
+    # else
         prob0=real(BlueTangle.partial_trace(state,qubit))[1,1]
-    end
+    # end
 
     ind=rand() < prob0 ? 0 : 1
     return sa.normalize(hilbert(N,born_ops[ind+1],qubit)*state),ind

@@ -174,6 +174,75 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
     return encoding_circuit
 end
 
+function get_ops_syndrome(generator_standard::AbstractMatrix)
+
+    m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
+
+    standard_generators_x=generator_standard[:,1:n]
+    standard_generators_z=generator_standard[:,n+1:end]
+
+    syndrome_circuit = Vector{Op}()
+
+    for i in 1:m
+        push!(syndrome_circuit, Op("H", n + i))
+    end
+
+    for i in 1:m
+        for j in 1:n
+            if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1)
+                push!(syndrome_circuit, Op("CX", n + i, j))
+                push!(syndrome_circuit, Op("CZ", n + i, j))
+            elseif standard_generators_x[i, j]==1
+                push!(syndrome_circuit, Op("CX", n + i, j))
+            elseif standard_generators_z[i, j]==1
+                push!(syndrome_circuit, Op("CZ", n + i, j))
+            end
+        end
+    end
+
+    for i in 1:m
+        push!(syndrome_circuit, Op("H", n + i))
+    end
+
+    for i in 1:m
+        push!(syndrome_circuit, Op("MZ", n + i))
+    end
+
+    return syndrome_circuit
+end
+
+"""
+    identify_error(syndrome::AbstractVector, generator_standard)
+
+    Simple decoder will return the erroneous op
+"""
+function identify_error(syndrome::AbstractVector, generator_standard::AbstractMatrix)
+
+    if length(syndrome) != size(generator_standard, 1)
+        throw("Syndrome length mismatch: expected $(size(generator_standard, 1)), got $(length(syndrome))")
+    end
+
+    n = size(generator_standard, 2) ÷ 2
+    # Iterate through all possible single qubit errors
+    for qubit in 1:n
+        for error_op in ["X", "Z", "Y"]
+            # Create an error vector
+            error_vec = zeros(Int, 2 * n)
+            error_vec[qubit] = (error_op in ["Z", "Y"]) * 1  # Set Z or Y error
+            error_vec[n + qubit] = (error_op in ["X", "Y"]) * 1  # Set X or Y error
+            
+            # Calculate the syndrome for this error_op
+            calculated_syndrome = mod.(generator_standard * error_vec, 2)
+            
+            # Check if the calculated syndrome matches the provided syndrome
+            if all(calculated_syndrome .== syndrome)
+                println("Error on qubit $(qubit): $(error_op)")
+                return Op(error_op,qubit)
+            end
+        end
+    end
+    return "No single-qubit error matches this syndrome"
+end
 
 """
     StabilizerCode(stabilizers::Vector,logicals::Dict)
@@ -203,13 +272,15 @@ struct StabilizerCode #alpha version
     n::Int
     k::Int
     d::Int
+    m::Int
     stabilizers::Vector
     generator::AbstractMatrix
     generator_standard::AbstractMatrix
     logicals::Dict
     codestates::Vector
     codewords::Vector
-    ops_encoding::Vector
+    ops_encoding::Vector #encoding circuit
+    ops_syndrome::Vector #syndrome circuit
     stabilizer_matrix::Vector
     info::NamedTuple
     ops::Function
@@ -232,6 +303,7 @@ struct StabilizerCode #alpha version
         generator_standard, r = get_standard_form(generator)
         logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r)
         ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
+        ops_syndrome=get_ops_syndrome(generator_standard)
         e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
         codestates = [-sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
         len_codestates=length(codestates)
@@ -249,7 +321,7 @@ struct StabilizerCode #alpha version
                 throw(ArgumentError("init state cannot be larger than k=$(k) of the code."))
             end
 
-            state=kron(zero_state(n-k),state_init)
+            state=la.kron(zero_state(n-k),state_init)
 
             for o=ops_encoding
                 state=apply(state,o)
@@ -265,18 +337,46 @@ struct StabilizerCode #alpha version
                 state=apply(state,o)
             end
 
-            return sa.sparse(sa.findnz(state)[2])
+            return state
 
         end
 
-        function new_syndrome(state::sa.SparseVector)
+        function new_syndrome(state_encoded::sa.SparseVector)
 
-            throw("fix")
+            if get_N(state_encoded)!=n
+                throw("input state must be encoded in the code")
+            end
+
+            state_encoded_ancillas=la.kron(state_encoded,zero_state(m)) #add m ancillas to the end
+
+            for o=ops_syndrome
+                state_encoded_ancillas=apply(state_encoded_ancillas,o)
+            end
+
+            syndrome_vec=sample_bit(state_encoded_ancillas,1)[1][n+1:end]
+            # syndrome_pos=findall(!=(0),syndrome_vec)
+
+            if sum(syndrome_vec)==0 #isempty(syndrome_pos)
+                println("No errors detected!")
+                op_error=Op("I",1;noisy=false)
+            else
+                op_error=identify_error(syndrome_vec, generator_standard)
+            end
+
+            return state_encoded_ancillas,syndrome_vec,op_error
         end
 
-        function new_correct(state::sa.SparseVector,syndrome)
+        function new_correct(state_encoded_ancillas::sa.SparseVector,syndrome_vec::Vector)
 
-            throw("fix")
+            op_error=identify_error(syndrome_vec, generator_standard)
+            final_state=apply(state_encoded_ancillas,op_error)
+            print("error is corrected!")
+            for i=n+1:n+m #reset ancilla
+                final_state=Op("RES",i)*final_state
+            end
+
+            return final_state
+
         end
 
         function new_circuit(state::sa.SparseVector)
@@ -348,11 +448,10 @@ struct StabilizerCode #alpha version
             len_logical=length(keys(logicals)),
             len_codestates=len_codestates,
             logical_XZ_vecs=logical_XZ_vecs,
-            r=r,
-            m=m #len_stabilizers
+            r=r
         )
 
-        return new(n,k,d,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
 
     end
 

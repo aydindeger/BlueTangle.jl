@@ -118,7 +118,7 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
 
     if isa(op, OpF)
         # Draw a full vertical line for OpF operations
-        ax.plot([pos, pos], [-.2, qubit_lines-.8], "black", linewidth=2)
+        ax.plot([pos, pos], [-.2, qubit_lines-.8], "black", linewidth=2, markersize=gate_width)
         ax.text(pos, qubit_lines - 0.6, op.name, color="black", ha="center", va="center")
         return
     end
@@ -133,33 +133,33 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
 
     if control != -2
         # Draw a line for the control-target connection
-        ax.plot([pos, pos], [qubit - 1, control - 1], c)
-        ax.plot(pos, control - 1, "o", color=c, markersize=gate_width * 20)
+        ax.plot([pos, pos], [qubit - 1, control - 1], c, markersize=gate_width)
+        ax.plot(pos, control - 1, "o", color=c, markersize=gate_width)
 
         # Draw the control dot
         if op.q == 1
-            ax.plot(pos, qubit - 1, "x", color=c, markersize=gate_width * 20)
+            ax.plot(pos, qubit - 1, "x", color=c, markersize=gate_width)
             if control > qubit
                 ax.text(pos, qubit - 1.4, "c-" * op.name, color=c_t, ha="center")
             else
                 ax.text(pos, qubit - 0.7, "c-" * op.name, color=c_t, ha="center")
             end
         elseif op.q == 2
-            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
-            ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width * 20)
-            ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c)
+            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
+            ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width)
+            ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width)
             ax.text(pos, target_qubit - 0.8, "c-" * op.name, color=c_t, ha="center")
         end
 
     # Single qubit gate
     elseif op.q == 1
-        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
+        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
         ax.text(pos, qubit - 0.7, op.name, color=c_t, ha="center", va="center")
 
     elseif op.q == 2
-        ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width * 20)
-        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width * 20)
-        ax.plot(pos, target_qubit - 1, marker2, color=c, markersize=gate_width * 20)
+        ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width)
+        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
+        ax.plot(pos, target_qubit - 1, marker2, color=c, markersize=gate_width)
         if target_qubit < qubit
             ax.text(pos, target_qubit - 1.4, op.name, color=c_t, ha="center")
         else
@@ -196,7 +196,7 @@ function plotq(layers::Vector; labels::Vector{String} = [""])
     ax.axis("off")  # Turn off the axis
     
     # Drawing constants
-    gate_width = 0.4
+    gate_width = 8
 
     # Set plot limits
     ax.set_ylim(-1, qubit_lines)
