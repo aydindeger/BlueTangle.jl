@@ -289,12 +289,14 @@ end
 
     #error correction
 
-    init_state=one_state(code.k)
+    init_state=zero_state(code.k)
     code_zero=code.encode(init_state)
-    code_zero_err=apply(code_zero,Op("Y",1))
+    code_zero_err=apply(code_zero,Op("Y",1)) #error on first qubit
     code_zero_ancilla,syndrome,op=code.syndrome(code_zero_err)
     code_final=code.correct(code_zero_ancilla,syndrome)
     code_decoded=code.decode(code_final)
+
+    expect(init_state,"Z")[1] ≈ expect(code_decoded,"Z")[1]
 """
 struct StabilizerCode #alpha version
     n::Int
