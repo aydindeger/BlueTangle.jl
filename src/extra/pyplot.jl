@@ -17,6 +17,9 @@
 
 using PyPlot
 
+const AbstractVectorS = Union{AbstractVector, sa.SparseVector}
+const AbstractMatrixS = Union{AbstractMatrix, sa.SparseMatrixCSC}
+
 """
 `plot(sample_probs::Vector; rep::Symbol=:int, basis::String="Z")`
 
@@ -89,7 +92,7 @@ Creates a bar plot showing the probabilities of the most likely outcomes from th
 """
 plotq(m::Measurement)=plotq([m])
 
-plotq(state::sa.SparseVector)=plotq([measure(state)])
+plotq(state::AbstractVectorS)=plotq([measure(state)])
 plotq(states::Vector{<:sa.SparseVector})=plotq(measure.([states...]))
 
 ## circuit drawing

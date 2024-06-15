@@ -59,16 +59,16 @@ sparsevector(vec::AbstractArray)=sa.SparseVector(vec)
 ##========== partial trace  ==========
 
 """
-    partial_trace(ρ::sa.SparseVector, dims::Vector, keep_qubits::Vector)
+    partial_trace(ρ::AbstractVectorS, dims::Vector, keep_qubits::Vector)
 
     This function can handle nonlocal operations.
 """
-function partial_trace(state::sa.SparseVector, keep_qubits::Vector)
+function partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
     N=get_N(state)
     return partial_trace(state*state', fill(2,N),setdiff(1:N,keep_qubits))
 end
 
-function partial_trace(ρ::Union{AbstractMatrix,sa.SparseMatrixCSC}, dims::Vector, trace_out::Vector)
+function partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
     # julia version of algorithm: https://copyprogramming.com/howto/how-to-take-partial-trace
 
     # Calculate the total dimension of the system and initialize the reduced density matrix
@@ -131,7 +131,7 @@ Computes the partial trace of a density matrix.
 
 Returns the resulting matrix after performing the partial trace.
 """
-function bipartition_trace(rho::Union{AbstractMatrix,sa.SparseMatrixCSC})
+function bipartition_trace(rho::AbstractMatrixS)
     dim=Int(get_N(rho)/2)
     d=2^dim
     ptr = zeros(Complex{Float64}, d, d)
@@ -144,7 +144,7 @@ function bipartition_trace(rho::Union{AbstractMatrix,sa.SparseMatrixCSC})
 end
 
 
-function partial_trace(state::sa.SparseVector,keep_index1::Int)
+function partial_trace(state::AbstractVectorS,keep_index1::Int)
 
     N=get_N(state)
 
@@ -172,10 +172,10 @@ function partial_trace(state::sa.SparseVector,keep_index1::Int)
 end
 
 """
-    partial_trace(state::sa.SparseVector,keep_index1::Int,keep_index2::Int)
+    partial_trace(state::AbstractVectorS,keep_index1::Int,keep_index2::Int)
     index1 and index2 are local
 """
-function partial_trace(state::sa.SparseVector,keep_index1::Int,keep_index2::Int)
+function partial_trace(state::AbstractVectorS,keep_index1::Int,keep_index2::Int)
 
     N=get_N(state)
 

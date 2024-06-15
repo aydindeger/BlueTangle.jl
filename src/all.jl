@@ -6,6 +6,9 @@ import Pkg
 
 using ForwardDiff, Optimisers, OptimKit
 
+const AbstractVectorS = Union{AbstractVector, sa.SparseVector}
+const AbstractMatrixS = Union{AbstractMatrix, sa.SparseMatrixCSC}
+
 include("struct.jl")
 include("decompose.jl")
 include("hilbert.jl")
@@ -22,7 +25,7 @@ include("vqe.jl")
 include("linalg.jl")
 
 import Base: *
-*(o::QuantumOps, state::sa.SparseVector) = apply(state,o)
+*(o::QuantumOps, state::AbstractVectorS) = apply(state,o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi,o)
 *(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
 

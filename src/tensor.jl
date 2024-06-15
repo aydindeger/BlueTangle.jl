@@ -62,14 +62,14 @@ end
 # to_MPS(vec::Vector,M::Vector{it.Index{Int64}},maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
 to_MPS(vec::Vector,M::Vector{it.Index{Int64}})=it.MPS(vec,M)|>reflectMPS
 
-# to_MPS(vec::sa.SparseVector,M::Vector{it.Index{Int64}},maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
+# to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}},maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
 
 """
-    to_MPS(vec::sa.SparseVector,M::Vector{it.Index{Int64}})
+    to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}})
 
     Convert state vector to MPS
 """
-to_MPS(vec::sa.SparseVector,M::Vector{it.Index{Int64}})=to_MPS(Vector(vec),M)
+to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}})=to_MPS(Vector(vec),M)
 
 function tensor_to_matrix(tensor::it.ITensor)
     a=tensor.tensor.storage
@@ -131,18 +131,18 @@ end
 """
 sample state/MPS
 """
-sample_bit(state::sa.SparseVector,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
+sample_bit(state::AbstractVectorS,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
 sample_bit(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
 
 """
-inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
-inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)
-inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=ψ'ψ2
+inner(ψ::AbstractVectorS,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
+inner(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
+inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
 inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
 """
-inner(ψ::sa.SparseVector,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
-inner(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=inner(ψ,MPS)
-inner(ψ::sa.SparseVector,ψ2::sa.SparseVector)=ψ'ψ2
+inner(ψ::AbstractVectorS,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
+inner(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
+inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
 inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
 
 
@@ -151,9 +151,9 @@ _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it
 
 
 """
-    fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)
+    fidelity(ψ::AbstractVectorS,ψ2::AbstractVectorS)
 """
-fidelity(ψ::sa.SparseVector,ψ2::sa.SparseVector)=abs2(ψ'ψ2)
+fidelity(ψ::AbstractVectorS,ψ2::AbstractVectorS)=abs2(ψ'ψ2)
 
 
 fidelity(rho::sa.SparseMatrixCSC, sigma::sa.SparseMatrixCSC)=fidelity(Matrix(rho),Matrix(sigma))
@@ -166,12 +166,12 @@ function fidelity(rho::AbstractMatrix, sigma::AbstractMatrix)
 end
 
 """
-    fidelity(ψ::it.ITensors.MPS,ψ::sa.SparseVector)=abs2(inner(ψ,MPS))
+    fidelity(ψ::it.ITensors.MPS,ψ::AbstractVectorS)=abs2(inner(ψ,MPS))
 """
 fidelity(ψ::it.ITensors.MPS,ψ2::it.ITensors.MPS)=abs2(inner(ψ,ψ2))
 
-# inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
-# inner_slow(MPS::it.ITensors.MPS,ψ::sa.SparseVector)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))
+# inner_slow(MPS::it.ITensors.MPS,ψ::AbstractVectorS,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
+# inner_slow(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))
 
 # function entanglement_entropy(psi::it.MPS, b::Int)
 #     s = it.siteinds(psi)  

@@ -1,7 +1,7 @@
 """
-get_codeword(codestate::sa.SparseVector)
+get_codeword(codestate::AbstractVectorS)
 """
-get_codeword(codestate::sa.SparseVector)=fock_basis.(findall(x->!isapprox(x,0;atol=1000eps()),codestate).-1,get_N(codestate))
+get_codeword(codestate::AbstractVectorS)=fock_basis.(findall(x->!isapprox(x,0;atol=1000eps()),codestate).-1,get_N(codestate))
 
 
 function stabilizers_to_generator(stabilizers::Vector)
@@ -264,9 +264,37 @@ end
         ("Z,Z,Z,Z")
     ]
 
-    code422=StabilizerCode(stabilizers,logicals)
+    stabilizers=[
+        ("X,X,X,X,I,I,I"),
+        ("X,X,I,I,X,X,I"),
+        ("X,I,X,I,X,I,X"),
+        ("Z,Z,Z,Z,I,I,I"),
+        ("Z,Z,I,I,Z,Z,I"),
+        ("Z,I,Z,I,Z,I,Z")
+    ]
 
-    fields(code422)
+    code=StabilizerCode(stabilizers,logicals)
+
+    fields(code)
+
+
+    EXAMPLES:
+
+    #this encodes and decodes
+
+    a=random_state(code.k)
+    b=code.decode(code.encode(a))
+    #a and b are same up to a global phase
+    expect(a,"Z")[1] ≈ expect(b,"Z")[1]
+
+    #error correction
+
+    init_state=one_state(code.k)
+    code_zero=code.encode(init_state)
+    code_zero_err=apply(code_zero,Op("Y",1))
+    code_zero_ancilla,syndrome,op=code.syndrome(code_zero_err)
+    code_final=code.correct(code_zero_ancilla,syndrome)
+    code_decoded=code.decode(code_final)
 """
 struct StabilizerCode #alpha version
     n::Int
@@ -289,7 +317,6 @@ struct StabilizerCode #alpha version
     decode::Function
     syndrome::Function
     correct::Function
-    circuit::Function
 
     function StabilizerCode(stabilizers::Vector{String},logicals::Dict;d::Int=-1)
 
@@ -314,7 +341,7 @@ struct StabilizerCode #alpha version
 
         ##
 
-        function new_encode(state_init::sa.SparseVector) #encoded state is last  
+        function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false) #encoded state is last  
 
             N=get_N(state_init)
             if N!=k
@@ -324,24 +351,27 @@ struct StabilizerCode #alpha version
             state=la.kron(zero_state(n-k),state_init)
 
             for o=ops_encoding
-                state=apply(state,o)
+                state=apply(state,o;noise=noise)
             end
 
             return state
 
         end
 
-        function new_decode(state::sa.SparseVector)
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false)
 
             for o=ops_encoding'
-                state=apply(state,o)
+                state=apply(state,o;noise=noise)
             end
 
-            return state
+            state_partial=partial_trace(state,collect(n-k+1:n))
+            e,v=la.eigen(state_partial)
+
+            return sa.sparse(v[:,findfirst(isapprox(1), e)])
 
         end
 
-        function new_syndrome(state_encoded::sa.SparseVector)
+        function new_syndrome(state_encoded::AbstractVectorS;noise::Union{Bool,NoiseModel}=false)
 
             if get_N(state_encoded)!=n
                 throw("input state must be encoded in the code")
@@ -350,7 +380,7 @@ struct StabilizerCode #alpha version
             state_encoded_ancillas=la.kron(state_encoded,zero_state(m)) #add m ancillas to the end
 
             for o=ops_syndrome
-                state_encoded_ancillas=apply(state_encoded_ancillas,o)
+                state_encoded_ancillas=apply(state_encoded_ancillas,o;noise=noise)
             end
 
             syndrome_vec=sample_bit(state_encoded_ancillas,1)[1][n+1:end]
@@ -363,25 +393,41 @@ struct StabilizerCode #alpha version
                 op_error=identify_error(syndrome_vec, generator_standard)
             end
 
+            for i=n+1:n+m #reset ancilla
+                state_encoded_ancillas=Op("RES",i)*state_encoded_ancillas
+            end
+
             return state_encoded_ancillas,syndrome_vec,op_error
         end
 
-        function new_correct(state_encoded_ancillas::sa.SparseVector,syndrome_vec::Vector)
+        function new_correct(state_encoded_ancillas::AbstractVectorS,syndrome_vec::Vector;noise::Union{Bool,NoiseModel}=false)
+
+            if sum(syndrome_vec)==0 #isempty(syndrome_pos)
+                println("No errors detected!")
+                return state_encoded_ancillas
+            end
 
             op_error=identify_error(syndrome_vec, generator_standard)
-            final_state=apply(state_encoded_ancillas,op_error)
+            final_state=apply(state_encoded_ancillas,op_error;noise=noise)
             print("error is corrected!")
-            for i=n+1:n+m #reset ancilla
-                final_state=Op("RES",i)*final_state
-            end
 
             return final_state
 
         end
 
-        function new_circuit(state::sa.SparseVector)
+        function new_correct(state_encoded::AbstractVectorS;noise::Union{Bool,NoiseModel}=false) #firstly measure syndromes
 
-            throw("fix")
+            state_encoded_ancillas,syndrome_vec,op_error=new_syndrome(state_encoded::AbstractVectorS)
+            
+            if sum(syndrome_vec)==0 #isempty(syndrome_pos)
+                println("No errors detected!")
+                return state_encoded_ancillas
+            end
+
+            final_state=apply(state_encoded_ancillas,op_error;noise=noise)
+            print("error is corrected!")
+
+            return final_state
 
         end
 
@@ -397,12 +443,12 @@ struct StabilizerCode #alpha version
         end
 
         #one qubit
-        function new_apply(state::Union{sa.SparseVector,sa.SparseMatrixCSC}, name::String, qubit::Int;noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::AbstractVectorS, name::String, qubit::Int;noise::Union{Bool,NoiseModel}=false)
             ops=new_ops(name, qubit)
             N=get_N(state)
 
-            if qubit > N
-                throw("qubit cannot be larger than N=$(N)")
+            if qubit > N+m
+                throw("qubit cannot be larger than system+ancilla qubits: $(N+m)")
             end
 
             for o=ops
@@ -413,14 +459,14 @@ struct StabilizerCode #alpha version
         end
 
         #two qubit
-        function new_apply(state::Union{sa.SparseVector,sa.SparseMatrixCSC}, name::String, logical_qubit::Int, logical_target::Int;noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::AbstractVectorS, name::String, logical_qubit::Int, logical_target::Int;noise::Union{Bool,NoiseModel}=false)
             N=get_N(state)
             max_qt=max(logical_qubit,logical_target)
             min_qt=min(logical_qubit,logical_target)
             distance=abs(logical_qubit-logical_target)
 
-            if max_qt > N
-                throw("qubit or target_qubit cannot be larger than N=$(N)")
+            if max_qt > N+m
+                throw("qubit or target_qubit cannot be larger than system+ancilla qubits: $(N+m)")
             elseif distance==0
                 throw("qubit and target cannot be same")
             elseif abs(logical_qubit-logical_target)>1
@@ -442,7 +488,7 @@ struct StabilizerCode #alpha version
             return state
         end
 
-        new_apply(state::Union{sa.SparseVector,sa.SparseMatrixCSC}, op::Op; noise::Union{Bool,NoiseModel}=false)=op.q==1 ? new_apply(state, op.name, op.qubit;noise=noise) : new_apply(state, op.name, op.qubit, op.target_qubit;noise=noise)
+        new_apply(state::AbstractVectorS, op::Op; noise::Union{Bool,NoiseModel}=false)=op.q==1 ? new_apply(state, op.name, op.qubit;noise=noise) : new_apply(state, op.name, op.qubit, op.target_qubit;noise=noise)
         
         info=(
             len_logical=length(keys(logicals)),
@@ -451,7 +497,7 @@ struct StabilizerCode #alpha version
             r=r
         )
 
-        return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct,new_circuit);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 

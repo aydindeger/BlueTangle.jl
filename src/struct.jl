@@ -5,7 +5,8 @@ Abstract type representing quantum operations.
 """
 abstract type QuantumOps end
 
-function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int)
+
+function __calc_prob(state::AbstractVectorS,kraus_vec::Vector,qubit::Int)
 
     pA=partial_trace(state,qubit)
     
@@ -13,7 +14,7 @@ function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int)
 
 end
 
-function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int,target_qubit::Int)
+function __calc_prob(state::AbstractVectorS,kraus_vec::Vector,qubit::Int,target_qubit::Int)
 
     distance=abs(qubit-target_qubit)
 
@@ -27,27 +28,27 @@ function __calc_prob(state::sa.SparseVector,kraus_vec::Vector,qubit::Int,target_
 
 end
 
-function __QuantumChannel_new_apply(state::sa.SparseVector,kraus_ops::Vector,qubit::Int)
+function __QuantumChannel_new_apply(state::AbstractVectorS,kraus_ops::Vector,qubit::Int)
     N=get_N(state)
     ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(state,kraus_ops,qubit))
     return sa.normalize(hilbert(N,kraus_ops[ind],qubit)*state)
 end
 
-function __QuantumChannel_new_apply(state::sa.SparseVector,kraus_ops::Vector,qubit::Int,target_qubit::Int)
+function __QuantumChannel_new_apply(state::AbstractVectorS,kraus_ops::Vector,qubit::Int,target_qubit::Int)
     N=get_N(state)
     ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob(state,kraus_ops,qubit,target_qubit))
     return sa.normalize(hilbert(N,kraus_ops[ind],qubit,target_qubit)*state)
 end
 
 
-function __calc_prob3(state::sa.SparseVector,kraus_vec::Vector,first_qubit::Int)
+function __calc_prob3(state::AbstractVectorS,kraus_vec::Vector,first_qubit::Int)
 
     pA=partial_trace(state,[first_qubit,first_qubit+1,first_qubit+2])
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
 end
 
-function __QuantumChannel_new_apply3(state::sa.SparseVector,kraus_ops::Vector,first_qubit::Int)
+function __QuantumChannel_new_apply3(state::AbstractVectorS,kraus_ops::Vector,first_qubit::Int)
     N=get_N(state)
     ind=BlueTangle._weighted_sample(BlueTangle.__calc_prob3(state,kraus_ops,first_qubit))
     return sa.normalize(hilbert3(N,kraus_ops[ind],first_qubit)*state)
@@ -105,16 +106,16 @@ struct QuantumChannel
 
         if q==1
 
-            new_prob(state::sa.SparseVector,first_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit)
-            new_apply(state::sa.SparseVector,first_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit)
+            new_prob(state::AbstractVectorS,first_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit)
+            new_apply(state::AbstractVectorS,first_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit)
             new_apply(rho::sa.SparseMatrixCSC,first_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit)
 
             return new(q,model,p,kraus_ops,new_prob,new_apply)
 
         elseif q==2
 
-            new_prob2(state::sa.SparseVector,first_qubit::Int,second_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit,second_qubit)
-            new_apply2(state::sa.SparseVector,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit,second_qubit)
+            new_prob2(state::AbstractVectorS,first_qubit::Int,second_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit,second_qubit)
+            new_apply2(state::AbstractVectorS,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit,second_qubit)
             new_apply2(rho::sa.SparseMatrixCSC,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit,second_qubit)
 
             return new(q,model,p,kraus_ops,new_prob2,new_apply2)
@@ -137,6 +138,40 @@ struct QuantumChannel
     end
 
 end
+
+const AbstractQuantumChannel = Union{QuantumChannel, Bool}
+
+"""
+    Create a NoiseModel
+"""
+struct NoiseModel
+    q1::AbstractQuantumChannel
+    q2::AbstractQuantumChannel
+
+    function NoiseModel(n1::AbstractQuantumChannel, n2::AbstractQuantumChannel)
+        if isa(n1, QuantumChannel) && isa(n2, QuantumChannel)
+            if n1.q != 1 || n2.q != 2
+                throw("size error in noise model (1|2)")
+            end
+        elseif isa(n1, QuantumChannel) && n1.q != 1
+            throw("size error in noise model (1)")
+        elseif isa(n2, QuantumChannel) && n2.q != 2
+            throw("size error in noise model (2)")
+        end
+        return new(n1, n2)
+    end
+
+    NoiseModel(q1str::Vector,q2str::Vector)=NoiseModel(Noise1(q1str[1],q1str[2]),Noise2(q2str[1],q2str[2]))
+
+    NoiseModel(q1str::String,val1::Float64,q2str::String,val2::Float64)=NoiseModel(Noise1(q1str,val1),Noise2(q2str,val2))
+
+    NoiseModel(q1str::Vector,q2bool::Bool)=NoiseModel(Noise1(q1str[1],q1str[2]),false)
+    NoiseModel(q1bool::Bool,q2str::Vector)=NoiseModel(false,Noise2(q2str[1],q2str[2]))
+
+    NoiseModel(model::String,p::Float64)=NoiseModel(Noise1(model,p),Noise2(model,p))
+
+end
+
 
 """
     OpQC=QuantumChannel but like Op
@@ -168,16 +203,16 @@ struct OpQC <: QuantumOps
 
         if q==1
 
-            new_prob_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit)
-            new_apply_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
+            new_prob_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit)
+            new_apply_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
             new_apply_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
 
             return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob_op,new_apply_op)
 
         elseif q==2
 
-            new_prob2_op(state::sa.SparseVector)=__calc_prob(state,kraus_ops,qubit,target_qubit)
-            new_apply2_op(state::sa.SparseVector)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
+            new_prob2_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit,target_qubit)
+            new_apply2_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
 
             return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob2_op,new_apply2_op)
@@ -186,8 +221,8 @@ struct OpQC <: QuantumOps
 
             # println("!!! note that 8x8 kraus operators will be applied to qubits: $(qubit),$(qubit+1),$(qubit+2) !!!")
 
-            new_prob3_op(state::sa.SparseVector)=__calc_prob3(state,kraus_ops,qubit)
-            new_apply3_op(state::sa.SparseVector)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
+            new_prob3_op(state::AbstractVectorS)=__calc_prob3(state,kraus_ops,qubit)
+            new_apply3_op(state::AbstractVectorS)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
 
             return new(q,name,kraus_ops,qubit,-1,-2,false,type,new_prob3_op,new_apply3_op)
 
@@ -204,38 +239,6 @@ struct OpQC <: QuantumOps
     end
 
 end
-
-"""
-    Create a NoiseModel
-"""
-struct NoiseModel
-    q1::Union{QuantumChannel, Bool}
-    q2::Union{QuantumChannel, Bool}
-
-    function NoiseModel(n1::Union{QuantumChannel, Bool}, n2::Union{QuantumChannel, Bool})
-        if isa(n1, QuantumChannel) && isa(n2, QuantumChannel)
-            if n1.q != 1 || n2.q != 2
-                throw("size error in noise model (1|2)")
-            end
-        elseif isa(n1, QuantumChannel) && n1.q != 1
-            throw("size error in noise model (1)")
-        elseif isa(n2, QuantumChannel) && n2.q != 2
-            throw("size error in noise model (2)")
-        end
-        return new(n1, n2)
-    end
-
-    NoiseModel(q1str::Vector,q2str::Vector)=NoiseModel(Noise1(q1str[1],q1str[2]),Noise2(q2str[1],q2str[2]))
-
-    NoiseModel(q1str::String,val1::Float64,q2str::String,val2::Float64)=NoiseModel(Noise1(q1str,val1),Noise2(q2str,val2))
-
-    NoiseModel(q1str::Vector,q2bool::Bool)=NoiseModel(Noise1(q1str[1],q1str[2]),false)
-    NoiseModel(q1bool::Bool,q2str::Vector)=NoiseModel(false,Noise2(q2str[1],q2str[2]))
-
-    NoiseModel(model::String,p::Float64)=NoiseModel(Noise1(model,p),Noise2(model,p))
-
-end
-
 
 """
 `custom_noise(q::Int, name_of_model::String, kraus::Vector{Matrix}) -> QuantumChannel`
@@ -534,7 +537,7 @@ function __measurement_hilbert(N::Int,name::String,qubit::Int)
     end
 end
 
-function __ifOp_apply(state::sa.SparseVector,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise::Union{Bool,QuantumChannel})
+function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise::Union{Bool,QuantumChannel})
 
     N=get_N(state)
     rotMat=__measurement_hilbert(N,name,qubit)
@@ -616,7 +619,7 @@ struct ifOp <: QuantumOps
     function ifOp(name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op})
 
         new_expand(N::Int)=__measurement_hilbert(N,name,qubit)
-        new_born_apply(state::sa.SparseVector,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
+        new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
         new_born_apply(rho::sa.SparseMatrixCSC,noise=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise)
 
         function new_expand(sites::Vector{it.Index{Int64}})
@@ -646,7 +649,7 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,f::Function)
 
-        new_apply(state::Union{sa.SparseVector,sa.SparseMatrixCSC};kwargs...)=f(state;kwargs...)
+        new_apply(state::AbstractVectorS;kwargs...)=f(state;kwargs...)
 
         return new([1],name,new_apply)
     end
@@ -740,7 +743,7 @@ mutable struct Options
     measurement_basis::String
     noise::Union{NoiseModel, Bool}
     twirl::Bool
-    readout_noise::Union{QuantumChannel, Bool}
+    readout_noise::AbstractQuantumChannel
     measurement_mitigate::Bool
     density_matrix::Bool
 

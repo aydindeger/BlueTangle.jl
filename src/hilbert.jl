@@ -117,7 +117,7 @@ end
 
 
 
-function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::sa.SparseVector) #todo #fix and implement control here
+function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::AbstractVectorS) #todo #fix and implement control here
     
     id = sa.sparse([1.0 0; 0im 1]);
     vec=fill(id,N)
@@ -175,7 +175,7 @@ end
 """
     apply noise on qubit or target_qubit of a given state and noise model
 """
-function apply_noise(state::sa.SparseVector,op::QuantumOps,noise::NoiseModel)
+function apply_noise(state::AbstractVectorS,op::QuantumOps,noise::NoiseModel)
     
     if op.q==1
         if op.control == -2 
@@ -207,10 +207,10 @@ function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
 
 end
 
-# apply(op::QuantumOps,state::sa.SparseVector;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+# apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
 
 """
-`apply(state::sa.SparseVector, op::QuantumOps)`
+`apply(state::AbstractVectorS, op::QuantumOps)`
 
 Apply a quantum gate operation to a state vector in place.
 
@@ -219,7 +219,7 @@ Apply a quantum gate operation to a state vector in place.
 
 Modifies the state vector directly.
 """
-function apply(state::sa.SparseVector,op::QuantumOps;noise::Union{NoiseModel,Bool}=false)
+function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false)
     
     N=get_N(state)
 
@@ -329,7 +329,7 @@ function apply(rho::sa.SparseMatrixCSC,op::QuantumOps;noise::Union{NoiseModel,Bo
 end
 
 
-function _born_measure(state::sa.SparseVector,o::QuantumOps)
+function _born_measure(state::AbstractVectorS,o::QuantumOps)
 
     N=get_N(state)
     rotMat=o.expand(N)
@@ -342,7 +342,7 @@ function _born_measure(state::sa.SparseVector,o::QuantumOps)
 end
 
 
-function born_measure_Z(N::Int,state::sa.SparseVector,qubit::Int)
+function born_measure_Z(N::Int,state::AbstractVectorS,qubit::Int)
 
     born_ops=[gate.P0, gate.P1]
 
@@ -360,12 +360,12 @@ end
 
 
 """
-    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
-    born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int)
+    born_measure_Z(N::Int,state::AbstractVectorS,qubit1::Int,qubit2::Int)
+    born_measure_Z(N::Int,state::AbstractVectorS,qubit1::Int)
 
     #todo test this!
 """
-function born_measure_Z(N::Int,state::sa.SparseVector,qubit1::Int,qubit2::Int)
+function born_measure_Z(N::Int,state::AbstractVectorS,qubit1::Int,qubit2::Int)
   
     slist=[expand_multi_op("P0,P0",[qubit1,qubit2],N)*state
     ,expand_multi_op("P1,P0",[qubit1,qubit2],N)*state

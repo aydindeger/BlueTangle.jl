@@ -66,9 +66,9 @@ function pauli_decomposition_names(n::Int)
 end
 
 """
-    pauli_decomposition(A::Union{AbstractMatrix,sa.SparseMatrixCSC})
+    pauli_decomposition(A::AbstractMatrixS)
 """
-function pauli_decomposition(A::Union{AbstractMatrix,sa.SparseMatrixCSC})
+function pauli_decomposition(A::AbstractMatrixS)
     n = Int(log2(size(A, 1)))
     pauli_tensors = pauli_decomposition_tensor(n)
     coefficients = [la.tr(A * P) / 2^n for P in pauli_tensors]
@@ -76,18 +76,18 @@ function pauli_decomposition(A::Union{AbstractMatrix,sa.SparseMatrixCSC})
 end
 
 """
-pauli_reconstruction(coefficients::sa.SparseVector, pauli_tensors::Vector)
+pauli_reconstruction(coefficients::AbstractVectorS, pauli_tensors::Vector)
 # Function to reconstruct the matrix from Pauli decomposition
 
-pauli_reconstruction(coefficients::sa.SparseVector,qubit::Int)
+pauli_reconstruction(coefficients::AbstractVectorS,qubit::Int)
     # nonlocal reconstruction #add id on qubit+1
 """
-function pauli_reconstruction(coefficients::sa.SparseVector, pauli_tensors::Vector)
+function pauli_reconstruction(coefficients::AbstractVectorS, pauli_tensors::Vector)
     sum(coefficients[i] * pauli_tensors[i] for i in 1:length(coefficients))
 end
 
 #nonlocal reconstruction
-function pauli_reconstruction(coefficients::sa.SparseVector,qubit::Int;distance::Int=2)
+function pauli_reconstruction(coefficients::AbstractVectorS,qubit::Int;distance::Int=2)
     n=Int(log(4,length(coefficients)))
     pauli_nonlocal_tensors=pauli_decomposition_tensor(n;qubit=qubit,distance=distance)
     sum(coefficients[i] * pauli_nonlocal_tensors[i] for i in 1:length(coefficients))
@@ -98,14 +98,14 @@ end
 ##========== decomposition ==========
 
 """
-zyz_decomposition(U::Union{AbstractMatrix,sa.SparseMatrixCSC})
+zyz_decomposition(U::AbstractMatrixS)
 
 U = gate.H
 α, β, γ, δ = zyz_decomposition(U)
 U2 = exp(im*α) * _RZ(β) * _RY(γ) * _RZ(δ)
 isapprox(la.norm(U - U2),0,atol=1e-10)
 """
-function zyz_decomposition(U::Union{AbstractMatrix,sa.SparseMatrixCSC})
+function zyz_decomposition(U::AbstractMatrixS)
 
     # https://quantumcomputing.stackexchange.com/a/16263
 
@@ -149,13 +149,13 @@ end
 
 
 """
-kronecker_decomposition(C::Union{AbstractMatrix,sa.SparseMatrixCSC})
+kronecker_decomposition(C::AbstractMatrixS)
 
 C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
 A, B = nearest_kronecker_product(C)
 isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
 """
-function kronecker_decomposition(C::Union{AbstractMatrix,sa.SparseMatrixCSC})
+function kronecker_decomposition(C::AbstractMatrixS)
 
     #after Eq. 87 from https://github.com/gecrooks/on_gates
 

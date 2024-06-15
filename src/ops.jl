@@ -1,15 +1,15 @@
 """
-    get_N(state::sa.SparseVector) -> Int
+    get_N(state::AbstractVectorS) -> Int
     get_N(rho::sa.SparseMatrixCSC) -> Int
 """
-get_N(state::sa.SparseVector)=Int(log(2,length(state)))
+get_N(state::AbstractVectorS)=Int(log(2,length(state)))
 get_N(rho::sa.SparseMatrixCSC)=Int(log(2,size(rho,1)))
 
 get_M(state::it.MPS)=it.siteinds(state)
 get_N(psi::it.MPS)=length(get_M(psi))
 
 """
-    sample(state::sa.SparseVector, shots::Int) -> Vector
+    sample(state::AbstractVectorS, shots::Int) -> Vector
 
 Sample outcomes from a quantum state vector based on the probability distribution.
 
@@ -18,7 +18,7 @@ Sample outcomes from a quantum state vector based on the probability distributio
 
 Returns a vector of sampled outcomes.
 """
-function sample(state::sa.SparseVector, shots)
+function sample(state::AbstractVectorS, shots)
 
     N=get_N(state)
 
@@ -75,10 +75,10 @@ function sort_vectors(vector1::Vector,vector2::Vector)
     return (vector1[sorted_pos],vector2[sorted_pos])
 end
 
-sample_state(state::sa.SparseVector, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
+sample_state(state::AbstractVectorS, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
 sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),get_N(psi))
 
-function sample_exact(state::sa.SparseVector)
+function sample_exact(state::AbstractVectorS)
     a,b=sa.findnz(abs2.(state))
     return a .- 1,b
 end
@@ -393,7 +393,7 @@ end
 
 
 """
-`measure(state::sa.SparseVector,number_of_experiment::Int)`
+`measure(state::AbstractVectorS,number_of_experiment::Int)`
 
 this creates a measurement object from state vector.
 """
@@ -532,7 +532,7 @@ end
 
 
 """
-`to_state(circuit::Circuit; init_state::sa.SparseVector=sa.sparse([])) -> sa.SparseVector`
+`to_state(circuit::Circuit; init_state::AbstractVectorS=sa.sparse([])) -> sa.SparseVector`
 
 Convert a quantum circuit to a state vector.
 
@@ -645,7 +645,7 @@ function to_rho(circuit::Circuit;id::Int=0)
 end
 
 """
-`_final_measurement(state::sa.SparseVector, options::Options)`
+`_final_measurement(state::AbstractVectorS, options::Options)`
 
 Performs the final measurement on a quantum state based on specified options.
 
@@ -654,7 +654,7 @@ Performs the final measurement on a quantum state based on specified options.
 
 Return the state vector to reflect the measurement outcome.
 """
-function _final_measurement(state::sa.SparseVector,options::Options)#todo parallel measurement use apply_all()
+function _final_measurement(state::AbstractVectorS,options::Options)#todo parallel measurement use apply_all()
 
     N=get_N(state)
     final_noise=options.readout_noise #measurement noise
