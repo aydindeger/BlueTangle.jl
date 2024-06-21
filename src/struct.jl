@@ -207,7 +207,7 @@ struct OpQC <: QuantumOps
             new_apply_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
             new_apply_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
 
-            return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob_op,new_apply_op)
+            return new(q,name,qubit,target_qubit,-2,kraus_ops,false,type,new_prob_op,new_apply_op)
 
         elseif q==2
 
@@ -215,7 +215,7 @@ struct OpQC <: QuantumOps
             new_apply2_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
 
-            return new(q,name,kraus_ops,qubit,target_qubit,-2,false,type,new_prob2_op,new_apply2_op)
+            return new(q,name,qubit,target_qubit,-2,kraus_ops,false,type,new_prob2_op,new_apply2_op)
 
         elseif q==3
 
@@ -224,7 +224,7 @@ struct OpQC <: QuantumOps
             new_prob3_op(state::AbstractVectorS)=__calc_prob3(state,kraus_ops,qubit)
             new_apply3_op(state::AbstractVectorS)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
 
-            return new(q,name,kraus_ops,qubit,-1,-2,false,type,new_prob3_op,new_apply3_op)
+            return new(q,name,qubit,-1,-2,kraus_ops,false,type,new_prob3_op,new_apply3_op)
 
         else
             throw("Noise models are available only for up to 3 qubits!")
@@ -358,13 +358,25 @@ Constructs an Op object representing a quantum operation with optional noise.
 struct Op <: QuantumOps
     q::Int
     name::String
-    mat::Union{AbstractMatrix, Function}
     qubit::Int
     target_qubit::Int
     control::Int
+    mat::Union{AbstractMatrix, Function}
     noisy::Bool
     type::String
     expand::Function
+
+    Op(q::Int,
+        name::String,
+        mat::Union{AbstractMatrix, Function},
+        qubit::Int,
+        target_qubit::Int,
+        control::Int,
+        noisy::Bool,
+        type::String,
+        expand_func::Function
+        )=new(q,name,qubit,target_qubit,control,mat,noisy,type,expand_func)
+
     # Inner-constructor for gates defined from a function
     function Op(name::String,f::Function,qubit::Int,target_qubit::Int;type=nothing,noisy::Bool=true,control::Int=-2)
         if !isnothing(type)
@@ -375,7 +387,7 @@ struct Op <: QuantumOps
 
         new_expand = _get_new_expand(f, qubit, target_qubit, control)
 
-        return new(q,name,f,qubit,target_qubit,control,noisy,"f",new_expand)
+        return new(q,name,qubit,target_qubit,control,f,noisy,"f",new_expand)
     end
     # Inner-constructor for gates defined from a built-in or matrix 
     function Op(name::String,mat::AbstractMatrix,qubit::Int,target_qubit::Int;type::String="",noisy::Bool=true,control::Int=-2)
@@ -403,7 +415,7 @@ struct Op <: QuantumOps
 
         new_expand = _get_new_expand(name, mat, qubit, target_qubit, control, ismeasure)
 
-        return new(q,name, mat, qubit,target_qubit,control,noisy,type,new_expand)
+        return new(q,name,qubit,target_qubit,control,mat,noisy,type,new_expand)
     end
 end
 
@@ -472,9 +484,9 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
         if target_qubit == -1
             rv = _mat_to_tensor(sites,mat,qubit)
         elseif target_qubit > 0
-            if abs(qubit-target_qubit)>1
-                throw("nonlocal tensor is not supported")
-            end
+            # if abs(qubit-target_qubit)>1
+            #     throw("nonlocal tensor is not supported")
+            # end
             size(mat,1)==4 ? rv = _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("target_qubit is not defined")
         end
 
@@ -496,7 +508,11 @@ function _get_new_expand(f::Function, qubit::Int, target_qubit::Int, control::In
     end
 
     function new_expand(sites::Vector{it.Index{Int64}},pars...)
-        if (target_qubit > 0 && abs(qubit-target_qubit)>1) || control!=-2
+        # if (target_qubit > 0 && abs(qubit-target_qubit)>1) || control!=-2
+        #     throw("nonlocal tensor is not supported")
+        # end
+
+        if control!=-2
             throw("nonlocal tensor is not supported")
         end
 

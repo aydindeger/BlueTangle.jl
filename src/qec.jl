@@ -404,6 +404,10 @@ struct StabilizerCode #alpha version
 
         function new_correct(state_encoded_ancillas::AbstractVectorS,syndrome_vec::Vector;noise::Union{Bool,NoiseModel}=false)
 
+            if 0<d<=2
+                throw("The code cannot correct errors!")
+            end
+                
             if sum(syndrome_vec)==0 #isempty(syndrome_pos)
                 println("No errors detected!")
                 return state_encoded_ancillas
@@ -419,6 +423,10 @@ struct StabilizerCode #alpha version
 
         function new_correct(state_encoded::AbstractVectorS;noise::Union{Bool,NoiseModel}=false) #firstly measure syndromes
 
+            if 0<d<=2
+                throw("The code cannot correct errors!")
+            end
+            
             state_encoded_ancillas,syndrome_vec,op_error=new_syndrome(state_encoded::AbstractVectorS)
             
             if sum(syndrome_vec)==0 #isempty(syndrome_pos)

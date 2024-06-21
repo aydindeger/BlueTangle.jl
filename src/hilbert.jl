@@ -171,6 +171,73 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
+# """
+# swap_relabel(ops::Vector)
+# """
+# function swap_relabel(ops::Vector{<:QuantumOps})
+#     N = maximum(maximum(args) for (op, args...) in ops if op == "SWAP")
+#     qubit_mapping = collect(1:N)
+#     relabeled_ops = []
+
+#     for (op, args...) in ops
+#         if op == "SWAP"
+#             i, j = args
+#             # relabel the SWAP operation
+#             new_i = findfirst(==(i), qubit_mapping)
+#             new_j = findfirst(==(j), qubit_mapping)
+#             qubit_mapping[new_i], qubit_mapping[new_j] = qubit_mapping[new_j], qubit_mapping[new_i]
+#         else
+#             # relabel the operation based on current mapping
+#             new_args = [findfirst(==(arg), qubit_mapping) for arg in args]
+#             push!(relabeled_ops, (op, new_args...))
+#         end
+#     end
+
+#     return relabeled_ops
+# end
+
+function swap_relabel(ops::Vector{Op})
+    N = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
+    qubit_mapping = collect(1:N)
+    relabeled_ops = Op[]
+
+    for op in ops
+        if op.name == "SWAP"
+
+            if op.control!=-2
+                throw("Swap relabeling doesn't work with the control qubit.")
+            end
+
+            i, j = op.qubit, op.target_qubit
+            # Relabel the SWAP operation
+            new_i = findfirst(==(i), qubit_mapping)
+            new_j = findfirst(==(j), qubit_mapping)
+
+            qubit_mapping[new_i], qubit_mapping[new_j] = qubit_mapping[new_j], qubit_mapping[new_i]
+
+        else
+            # Relabel the operation based on current mapping
+            new_qubit = findfirst(==(op.qubit), qubit_mapping)
+            new_target = op.target_qubit > 0 ? findfirst(==(op.target_qubit), qubit_mapping) : op.target_qubit
+            new_control = op.control > 0 ? findfirst(==(op.control), qubit_mapping) : op.control
+
+            new_op = Op(
+                op.q,
+                op.name,
+                op.mat,
+                new_qubit,
+                new_target,
+                new_control,
+                op.noisy,
+                op.type,
+                op.expand)
+
+            push!(relabeled_ops, new_op)
+        end
+    end
+
+    return relabeled_ops
+end
 
 """
     apply noise on qubit or target_qubit of a given state and noise model
@@ -257,9 +324,9 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
     
     M=get_M(psi)
 
-    if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-        throw("non-local gate $(op.name) is not supported.")
-    end
+    # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+    #     throw("non-local gate $(op.name) is not supported.")
+    # end
 
     if isa(op,OpF)
         psi=op.apply(psi)

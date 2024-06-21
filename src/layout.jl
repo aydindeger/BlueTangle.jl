@@ -91,7 +91,6 @@ function _make_swaps(op::QuantumOps,neighbors::Dict;noisy_swap::Bool=false, fswa
 end
 
 
-# Helper function: BFS to find shortest path between two qubits
 function _find_shortest_path(neighbors_dict, start_qubit, end_qubit)
     visited = Set{Int}()
     queue = [(start_qubit, [start_qubit])]  # (current_qubit, path_so_far)
@@ -111,24 +110,3 @@ function _find_shortest_path(neighbors_dict, start_qubit, end_qubit)
     
     return []  # Return an empty path if no path is found
 end
-
-
-# # Sample qubit grid definition
-# qubit_grid = sa.SparseMatrixCSC([
-#     1 0 1 1;
-#     0 1 0 1;
-#     1 1 1 0;
-#     0 1 1 1;
-# ])
-
-# # Sample qubit grid definition
-# qubit_grid = sa.SparseMatrixCSC([
-#     1 0 1 1
-# ])
-
-# # Enumerate qubits and generate the neighbors dictionary
-# qubit_num_to_pos, pos_to_qubit_num = enumerate_qubits(qubit_grid)
-# neighbors_dict = generate_neighbors_dict(qubit_grid, qubit_num_to_pos, pos_to_qubit_num)
-
-# # Check if qubits 1 and 4 are neighbors (example)
-# are_neighbors(2, 3, neighbors_dict)

@@ -36,6 +36,9 @@ dim(MPS::it.MPS)=it.maxlinkdim(MPS)
 dim(MPO::it.MPO)=it.maxlinkdim(MPO)
 
 
+expect(psi::it.MPS,op_str::String)=it.expect(psi, op_str)
+
+
 # ψ0 = MPS(s, n -> n == 1 ? "↓" : "↑")
 
 """
@@ -149,6 +152,7 @@ inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
 
+random_state(sites::Vector{it.Index{Int64}})=it.randomMPS(sites)
 
 """
     fidelity(ψ::AbstractVectorS,ψ2::AbstractVectorS)
