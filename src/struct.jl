@@ -182,10 +182,10 @@ end
 struct OpQC <: QuantumOps
     q::Int
     name::String
-    kraus::Vector{AbstractMatrix}
     qubit::Int
     target_qubit::Int
     control::Int
+    kraus::Vector{AbstractMatrix}
     noisy::Bool
     type::String
     prob::Function

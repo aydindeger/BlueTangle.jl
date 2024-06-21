@@ -30,6 +30,11 @@ create neel state 101010
 """
 neel_state10(M::Vector{it.Index{Int64}})=product_state(M,[isodd(i) ? 1 : 0 for i=1:length(M)])
 
+"""
+create random state
+"""
+random_state(sites::Vector{it.Index{Int64}},chi::Int=1)=it.randomMPS(sites,chi)
+
 ##========== state preparation ==========
 
 dim(MPS::it.MPS)=it.maxlinkdim(MPS)
@@ -152,8 +157,6 @@ inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
 
-random_state(sites::Vector{it.Index{Int64}})=it.randomMPS(sites)
-
 """
     fidelity(ψ::AbstractVectorS,ψ2::AbstractVectorS)
 """
@@ -205,4 +208,4 @@ function entanglement_entropy(psi::it.MPS) #fix
       S -= λ * log(λ + 1e-20)
     end
     return S
-  end
+end
