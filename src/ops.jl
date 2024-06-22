@@ -313,67 +313,83 @@ end
 
 
 """
-    delete_duplicates(layers::Vector{Vector{QuantumOps}})
+optimize_simple(layers::Vector{Vector{QuantumOps}})
 """
-function delete_duplicates(layers::Vector{Vector{QuantumOps}})
-    
-    len = 0  # Initialize len outside the loop
-    while len!=length(layers)
-        ##removes obvious repetitions
-
+function optimize_simple(layers::Vector{Vector{QuantumOps}})
+    len = 0 # Initialize len outside the loop
+    while len != length(layers) # Continue until no change in number of layers
         len = length(layers)
-        for (l,layer)=enumerate(layers)
-            for op=layer
+        println("len=$(len)")
 
-                if op.q==1 && op.control==-2 && (l<length(layers)) && (op.name=="X" || op.name=="Y" || op.name=="Z" || op.name=="H")
-        
-                    duplicate_pauli_pos1=findfirst(==(op),layer)
-                    duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+1])
-                
-                    if isa(duplicate_pauli_pos2,Number)
-                        popat!(layer,duplicate_pauli_pos1)
-                        popat!(layers[l+1],duplicate_pauli_pos2)
+        for (l, layer) in enumerate(layers)
+            i = 1
+            while i <= length(layer)
+                op = layer[i]
+                removed = false
+
+                if op.q == 1 && op.control == -2 && l < length(layers)
+                    if op.name in ["X", "Y", "Z", "H"]
+                        removed = _remove_duplicate(layers, l, i, 1)
+                    elseif (op.name in ["S", "SX", "Xsqrt"]) && l + 3 <= length(layers)
+                        removed = _remove_duplicate(layers, l, i, 3)
                     end
+                elseif op.q == 2 && op.control == -2 && l < length(layers) &&
+                       op.name in ["CX", "CNOT", "CY", "CZ", "ECR", "SWAP", "FSWAP"]
+                    removed = _remove_two_qubit_duplicate(layers, l, i)
+                end
 
-                elseif op.q==1 && op.control==-2 && (l-2<length(layers)) && (op.name=="S" || op.name=="SX" || op.name=="Xsqrt")
-        
-                        duplicate_pauli_pos1=findfirst(==(op),layer)
-                        duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+1])
-                        duplicate_pauli_pos3=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+2])
-                        duplicate_pauli_pos4=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+3])
-                    
-                        if isa(duplicate_pauli_pos2,Number) && isa(duplicate_pauli_pos3,Number) && isa(duplicate_pauli_pos4,Number)
-                            popat!(layer,duplicate_pauli_pos1)
-                            popat!(layers[l+1],duplicate_pauli_pos2)
-                            popat!(layers[l+2],duplicate_pauli_pos3)
-                            popat!(layers[l+3],duplicate_pauli_pos4)
-                        end
-        
-                elseif op.q==2 && op.control==-2 && (l<length(layers)) && (op.name=="CX" || op.name=="CNOT" || op.name=="CY" || op.name=="CZ" || op.name=="ECR"|| op.name=="SWAP"|| op.name=="FSWAP")
-        
-                    duplicate_pauli_pos1=findfirst(==(op),layer)
-                    duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.target_qubit==op.target_qubit && x.control==-2) for x=layers[l+1])
-                
-                    if isa(duplicate_pauli_pos2,Number)
-                        popat!(layer,duplicate_pauli_pos1)
-                        popat!(layers[l+1],duplicate_pauli_pos2)
-                    end
-
+                if !removed
+                    i += 1
                 end
             end
         end
 
-        layers=get_layers(vcat(layers...))
+        layers = get_layers(vcat(layers...))
+    end
+    return layers
+end
+
+function _remove_duplicate(layers, l, i, num_layers)
+    op = layers[l][i]
+    for j in 1:num_layers
+        next_layer = get(layers, l+j, nothing)
+        if isnothing(next_layer)
+            return false
+        end
+        duplicate_pos = findfirst(x -> x.name == op.name && x.qubit == op.qubit && x.control == -2, next_layer)
+        if !isa(duplicate_pos, Number)
+            return false
+        end
     end
 
-    return layers
+    # If we've found duplicates in all required layers, remove them
+    deleteat!(layers[l], i)
+    for j in 1:num_layers
+        deleteat!(layers[l+j], findfirst(x -> x.name == op.name && x.qubit == op.qubit && x.control == -2, layers[l+j]))
+    end
+    return true
+end
 
+function _remove_two_qubit_duplicate(layers, l, i)
+    op = layers[l][i]
+    next_layer = get(layers, l+1, nothing)
+    if isnothing(next_layer)
+        return false
+    end
+    duplicate_pos = findfirst(x -> x.name == op.name && x.qubit == op.qubit && 
+                              x.target_qubit == op.target_qubit && x.control == -2, next_layer)
+    if isa(duplicate_pos, Number)
+        deleteat!(layers[l], i)
+        deleteat!(layers[l+1], duplicate_pos)
+        return true
+    end
+    return false
 end
 
 """
     get_optimized_layers(ops::Vector{<:QuantumOps})
 """
-get_optimized_layers(ops::Vector{<:QuantumOps})=delete_duplicates(get_layers(ops))
+get_optimized_layers(ops::Vector{<:QuantumOps})=optimize_simple(get_layers(ops))
 
 """
     compile(ops::Vector{<: QuantumOps}, options::Options=Options()) -> Circuit
