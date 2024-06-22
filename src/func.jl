@@ -89,16 +89,16 @@ Calculate the expectation value for quantum states or density matrices given an 
 - The expectation value as a `Float64` or a vector of `Float64` for multiple qubits.
 """
 expect(state::AbstractVectorS,op::QuantumOps)=real(state'*op.expand(get_N(state))*state)
-expect(rho::sa.SparseMatrixCSC,op::QuantumOps)=real(la.tr(rho*op.expand(get_N(rho))))
+expect(rho::AbstractMatrixS,op::QuantumOps)=real(la.tr(rho*op.expand(get_N(rho))))
 
 # expect(state::AbstractVectorS,op_str::String,qubit::Int)=real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state)
 # expect(rho::sa.SparseMatrixCSC,op_str::String,qubit::Int)=real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho))))
 
 expect(state::AbstractVectorS,op_str::String)=[real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state) for qubit=1:get_N(state)]
-expect(rho::sa.SparseMatrixCSC,op_str::String)=[real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho)))) for qubit=1:get_N(rho)]
+expect(rho::AbstractMatrixS,op_str::String)=[real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho)))) for qubit=1:get_N(rho)]
 
-expect(state::AbstractVectorS,matrix::sa.SparseMatrixCSC)=real(state'*matrix*state)
-expect(rho::sa.SparseMatrixCSC,matrix::sa.SparseMatrixCSC)=real(la.tr(rho*matrix))
+expect(state::AbstractVectorS,matrix::AbstractMatrixS)=real(state'*matrix*state)
+expect(rho::AbstractMatrixS,matrix::AbstractMatrixS)=real(la.tr(rho*matrix))
 
 """
 Alias:
@@ -141,7 +141,7 @@ function correlation(state::AbstractVectorS,list_of_operators::String,qubits_app
     return real(state'*matrix*state)
 end
 
-function correlation(rho::sa.SparseMatrixCSC,list_of_operators::String,qubits_applied::Vector)
+function correlation(rho::AbstractMatrixS,list_of_operators::String,qubits_applied::Vector)
     matrix=expand_multi_op(list_of_operators,qubits_applied,get_N(rho))
     return real(la.tr(rho*matrix))
 end

@@ -1,9 +1,9 @@
 """
     get_N(state::AbstractVectorS) -> Int
-    get_N(rho::sa.SparseMatrixCSC) -> Int
+    get_N(rho::AbstractMatrixS) -> Int
 """
 get_N(state::AbstractVectorS)=Int(log(2,length(state)))
-get_N(rho::sa.SparseMatrixCSC)=Int(log(2,size(rho,1)))
+get_N(rho::AbstractMatrixS)=Int(log(2,size(rho,1)))
 
 get_M(state::it.MPS)=it.siteinds(state)
 get_N(psi::it.MPS)=length(get_M(psi))

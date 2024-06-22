@@ -410,7 +410,12 @@ struct StabilizerCode #alpha version
             state_partial=partial_trace(state,collect(n-k+1:n))
             e,v=la.eigen(state_partial)
 
-            return sa.sparse(v[:,findfirst(isapprox(1), e)])
+            e_pos=findfirst(isapprox(1), e)
+            if isa(e_pos,Number)
+                return sa.sparse(v[:,e_pos])
+            else
+                return state_partial
+            end
 
         end
 
