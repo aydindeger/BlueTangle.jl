@@ -366,17 +366,6 @@ struct Op <: QuantumOps
     type::String
     expand::Function
 
-    Op(q::Int,
-        name::String,
-        mat::Union{AbstractMatrix, Function},
-        qubit::Int,
-        target_qubit::Int,
-        control::Int,
-        noisy::Bool,
-        type::String,
-        expand_func::Function
-        )=new(q,name,qubit,target_qubit,control,mat,noisy,type,expand_func)
-
     # Inner-constructor for gates defined from a function
     function Op(name::String,f::Function,qubit::Int,target_qubit::Int;type=nothing,noisy::Bool=true,control::Int=-2)
         if !isnothing(type)

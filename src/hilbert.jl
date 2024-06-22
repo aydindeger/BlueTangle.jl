@@ -18,7 +18,7 @@ swap is performed before applying `mat`.
 function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
 
     distance=abs(qubit-target_qubit)
-
+    # println("N=$(N), qubit=$(qubit), target_qubit=$(target_qubit)")
     if N < qubit || N < target_qubit || N < control
         throw("N must be larger than qubits")
     elseif size(mat,1)>4
@@ -221,16 +221,7 @@ function swap_relabel(ops::Vector{Op})
             new_target = op.target_qubit > 0 ? findfirst(==(op.target_qubit), qubit_mapping) : op.target_qubit
             new_control = op.control > 0 ? findfirst(==(op.control), qubit_mapping) : op.control
 
-            new_op = Op(
-                op.q,
-                op.name,
-                op.mat,
-                new_qubit,
-                new_target,
-                new_control,
-                op.noisy,
-                op.type,
-                op.expand)
+            new_op=Op(op.name,new_qubit,new_target;control=new_control,noisy=op.noisy)
 
             push!(relabeled_ops, new_op)
         end

@@ -13,7 +13,7 @@ export fock_basis_create, int2bin, isunitary, sparsevector, hamming_distance, bo
 export zyz_decomposition, kronecker_decomposition
 export dim, _born_measure
 export get_codeword, StabilizerCode, stabilizers_to_generator, swap_relabel
-export entanglement_entropy, shadow, mag_moments
+export entanglement_entropy, shadow, mag_moments, delete_duplicates
 export to_MPS, to_state, inner, amplitude
 export it, sa, plt, la, sb
 export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, variational_apply, get_stats, get_layers, measure_ZNE, fidelity

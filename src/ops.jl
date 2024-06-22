@@ -313,6 +313,30 @@ end
 
 
 """
+    delete_duplicates(layers::Vector{Vector{QuantumOps}})
+"""
+function delete_duplicates(layers::Vector{Vector{QuantumOps}})
+    
+    ##removes obvious repetitions
+    for (l,layer)=enumerate(layers)
+        for op=layer
+            if (op.name=="I" || op.name=="X" || op.name=="Y" || op.name=="Z") && (l<length(layers))
+    
+                duplicate_pauli_pos=findfirst((x.name==op.name && x.qubit==op.qubit) for x=layers[l+1])
+            
+                if isa(duplicate_pauli_pos,Number)
+                    popat!(layers[l+1],duplicate_pauli_pos)
+                end
+    
+            end
+        end
+    end
+
+    return get_layers(vcat(layers...))
+
+end
+
+"""
     compile(ops::Vector{<: QuantumOps}, options::Options=Options()) -> Circuit
 
 Compile a set of quantum operations into a circuit.
@@ -397,7 +421,7 @@ end
 
 this creates a measurement object from state vector.
 """
-function measure(state::Union{sa.SparseVector,it.MPS},number_of_experiment::Int=-1;label="state to measurement")
+function measure(state::Union{AbstractVectorS,it.MPS},number_of_experiment::Int=-1;label="state to measurement")
 
     N=get_N(state)
     rho_construct=sa.spzeros(ComplexF64,2^N,2^N)

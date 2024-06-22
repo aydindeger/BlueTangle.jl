@@ -244,6 +244,31 @@ function identify_error(syndrome::AbstractVector, generator_standard::AbstractMa
     return "No single-qubit error matches this syndrome"
 end
 
+code_ops(name::String, logical_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit]]
+code_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit,target_qubit]]
+
+function code_ops(op::Op, logicals::Dict)
+    if op.q == 1
+        return [Op(x...) for x=logicals[op.name,op.qubit]]
+    elseif op.q == 2
+        return [Op(x...) for x=logicals[op.name,op.qubit,op.target_qubit]]
+    end
+end
+
+function code_ops(ops::Vector{Op}, logicals::Dict)
+    list_of_ops=Vector{Op}()
+    for op=ops
+        if op.q == 1
+            append!(list_of_ops,[Op(x...) for x=logicals[op.name,op.qubit]])
+        elseif op.q == 2
+            append!(list_of_ops,[Op(x...) for x=logicals[op.name,op.qubit,op.target_qubit]])
+        end
+    end
+
+    return list_of_ops
+end
+
+
 """
     StabilizerCode(stabilizers::Vector,logicals::Dict)
 
@@ -334,7 +359,7 @@ struct StabilizerCode #alpha version
         ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
         ops_syndrome=get_ops_syndrome(generator_standard)
         e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
-        codestates = [-sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
+        codestates = [sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
         len_codestates=length(codestates)
         codewords=[get_codeword(code_s) for code_s=codestates]
         if length(codestates) != 2^k
@@ -343,7 +368,12 @@ struct StabilizerCode #alpha version
 
         ##
 
-        function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false) #encoded state is last  
+        new_ops(name::String, logical_qubit::Int)=code_ops(name,logical_qubit,logicals)
+        new_ops(name::String, logical_qubit::Int, target_qubit::Int)=code_ops(name,logical_qubit,target_qubit,logicals)
+        new_ops(op::Op)=code_ops(op,logicals)
+        new_ops(ops::Vector{Op})=code_ops(ops,logicals)
+
+        function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
 
             N=get_N(state_init)
             if N!=k
@@ -352,7 +382,8 @@ struct StabilizerCode #alpha version
 
             state=la.kron(zero_state(n-k),state_init)
 
-            for o=ops_encoding
+            ops=isempty(encoding) ? ops_encoding : encoding
+            for o=ops
                 state=apply(state,o;noise=noise)
             end
 
@@ -360,9 +391,19 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false)
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[])
 
-            for o=ops_encoding'
+            if isempty(encoding) && isempty(decoding)
+                ops=ops_encoding'
+            elseif !isempty(encoding) && isempty(decoding)
+                ops=encoding'
+            elseif isempty(encoding) && !isempty(decoding)
+                ops=decoding
+            else
+                throw("Error! How did you get here?")
+            end
+
+            for o=ops
                 state=apply(state,o;noise=noise)
             end
 
@@ -441,20 +482,9 @@ struct StabilizerCode #alpha version
 
         end
 
-        new_ops(name::String, logical_qubit::Int)=[Op(x...) for x=logicals[name,logical_qubit]]
-        new_ops(name::String, logical_qubit::Int, target_qubit::Int)=[Op(x...) for x=logicals[name,logical_qubit,target_qubit]]
-
-        function new_ops(op::Op)
-            if op.q == 1
-                return [Op(x...) for x=logicals[op.name,op.qubit]]
-            elseif op.q == 2
-                return [Op(x...) for x=logicals[op.name,op.qubit,op.target_qubit]]
-            end
-        end
-
         #one qubit
         function new_apply(state::AbstractVectorS, name::String, qubit::Int;noise::Union{Bool,NoiseModel}=false)
-            ops=new_ops(name, qubit)
+            ops=code_ops(name, qubit, logicals)
             N=get_N(state)
 
             if qubit > N+m
@@ -469,24 +499,24 @@ struct StabilizerCode #alpha version
         end
 
         #two qubit
-        function new_apply(state::AbstractVectorS, name::String, logical_qubit::Int, logical_target::Int;noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::AbstractVectorS, name::String, logical_qubit::Int, target_qubit::Int;noise::Union{Bool,NoiseModel}=false)
             N=get_N(state)
-            max_qt=max(logical_qubit,logical_target)
-            min_qt=min(logical_qubit,logical_target)
-            distance=abs(logical_qubit-logical_target)
+            max_qt=max(logical_qubit,target_qubit)
+            min_qt=min(logical_qubit,target_qubit)
+            distance=abs(logical_qubit-target_qubit)
 
             if max_qt > N+m
                 throw("qubit or target_qubit cannot be larger than system+ancilla qubits: $(N+m)")
             elseif distance==0
                 throw("qubit and target cannot be same")
-            elseif abs(logical_qubit-logical_target)>1
+            elseif abs(logical_qubit-target_qubit)>1
                 throw("nonlocal logical operations are not supported")
             end
 
-            keyexist=(name, logical_qubit, logical_target) ∈ keys(logicals)
+            keyexist=(name, logical_qubit, target_qubit) ∈ keys(logicals)
 
             if keyexist
-                ops=new_ops(name, logical_qubit, logical_target)
+                ops=code_ops(name,logical_qubit,target_qubit,logicals)
             else
                 throw("logical does not exist")
             end
