@@ -22,7 +22,8 @@ Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates l
 const gate = (
     I = [1. 0; 0 1],
     X  = [0 1.; 1 0],
-    SX  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# ==RX(pi/2)*exp(1im*pi/4)
+    SX  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
+    Xsqrt  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
     Y  = [0 -im; im 0],
     Z  = [1.0 0; 0 -1],
     H  = (1/sqrt(2)) * [1.0 1; 1 -1],

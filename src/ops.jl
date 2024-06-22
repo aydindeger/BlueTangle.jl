@@ -317,24 +317,63 @@ end
 """
 function delete_duplicates(layers::Vector{Vector{QuantumOps}})
     
-    ##removes obvious repetitions
-    for (l,layer)=enumerate(layers)
-        for op=layer
-            if (op.name=="I" || op.name=="X" || op.name=="Y" || op.name=="Z") && (l<length(layers))
-    
-                duplicate_pauli_pos=findfirst((x.name==op.name && x.qubit==op.qubit) for x=layers[l+1])
-            
-                if isa(duplicate_pauli_pos,Number)
-                    popat!(layers[l+1],duplicate_pauli_pos)
+    len = 0  # Initialize len outside the loop
+    while len!=length(layers)
+        ##removes obvious repetitions
+
+        len = length(layers)
+        for (l,layer)=enumerate(layers)
+            for op=layer
+
+                if op.q==1 && op.control==-2 && (l<length(layers)) && (op.name=="X" || op.name=="Y" || op.name=="Z" || op.name=="H")
+        
+                    duplicate_pauli_pos1=findfirst(==(op),layer)
+                    duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+1])
+                
+                    if isa(duplicate_pauli_pos2,Number)
+                        popat!(layer,duplicate_pauli_pos1)
+                        popat!(layers[l+1],duplicate_pauli_pos2)
+                    end
+
+                elseif op.q==1 && op.control==-2 && (l-2<length(layers)) && (op.name=="S" || op.name=="SX" || op.name=="Xsqrt")
+        
+                        duplicate_pauli_pos1=findfirst(==(op),layer)
+                        duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+1])
+                        duplicate_pauli_pos3=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+2])
+                        duplicate_pauli_pos4=findfirst((x.name==op.name && x.qubit==op.qubit && x.control==-2) for x=layers[l+3])
+                    
+                        if isa(duplicate_pauli_pos2,Number) && isa(duplicate_pauli_pos3,Number) && isa(duplicate_pauli_pos4,Number)
+                            popat!(layer,duplicate_pauli_pos1)
+                            popat!(layers[l+1],duplicate_pauli_pos2)
+                            popat!(layers[l+2],duplicate_pauli_pos3)
+                            popat!(layers[l+3],duplicate_pauli_pos4)
+                        end
+        
+                elseif op.q==2 && op.control==-2 && (l<length(layers)) && (op.name=="CX" || op.name=="CNOT" || op.name=="CY" || op.name=="CZ" || op.name=="ECR"|| op.name=="SWAP"|| op.name=="FSWAP")
+        
+                    duplicate_pauli_pos1=findfirst(==(op),layer)
+                    duplicate_pauli_pos2=findfirst((x.name==op.name && x.qubit==op.qubit && x.target_qubit==op.target_qubit && x.control==-2) for x=layers[l+1])
+                
+                    if isa(duplicate_pauli_pos2,Number)
+                        popat!(layer,duplicate_pauli_pos1)
+                        popat!(layers[l+1],duplicate_pauli_pos2)
+                    end
+
                 end
-    
             end
         end
+
+        layers=get_layers(vcat(layers...))
     end
 
-    return get_layers(vcat(layers...))
+    return layers
 
 end
+
+"""
+    get_optimized_layers(ops::Vector{<:QuantumOps})
+"""
+get_optimized_layers(ops::Vector{<:QuantumOps})=delete_duplicates(get_layers(ops))
 
 """
     compile(ops::Vector{<: QuantumOps}, options::Options=Options()) -> Circuit
