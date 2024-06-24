@@ -129,7 +129,7 @@ function shadow(circuit::Circuit,number_of_experiment::Int)
 
     N=circuit.stats.N
     rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
-    m_list=[gate.H,gate.HSp,gate.I]
+    m_list=[gate.H,gate.HSP,gate.I]
     
     for _ =1:number_of_experiment
         state=to_state(circuit)
@@ -330,7 +330,7 @@ function optimize_simple(layers::Vector{Vector{QuantumOps}})
                 if op.q == 1 && op.control == -2 && l < length(layers)
                     if op.name in ["X", "Y", "Z", "H"]
                         removed = _remove_duplicate(layers, l, i, 1)
-                    elseif (op.name in ["S", "SX", "Xsqrt"]) && l + 3 <= length(layers)
+                    elseif (op.name in ["S", "SX", "XSQRT"]) && l + 3 <= length(layers)
                         removed = _remove_duplicate(layers, l, i, 3)
                     end
                 elseif op.q == 2 && op.control == -2 && l < length(layers) &&
@@ -764,7 +764,7 @@ function _final_measurement(state::AbstractVectorS,options::Options)#todo parall
     elseif options.measurement_basis=="Y"
         for qubit=1:N
 
-            o=Op("YBasis",gate.HSp,qubit)
+            o=Op("YBasis",gate.HSP,qubit)
             state=o.expand(N)*state
 
             if isa(final_noise,QuantumChannel)
@@ -777,7 +777,7 @@ function _final_measurement(state::AbstractVectorS,options::Options)#todo parall
         for qubit=1:N
             rOp=rand(1:3)
 
-            o=Op("RBasis",[gate.H,gate.HSp,gate.I][rOp],qubit)
+            o=Op("RBasis",[gate.H,gate.HSP,gate.I][rOp],qubit)
             state=o.expand(N)*state
 
             if isa(final_noise,QuantumChannel)

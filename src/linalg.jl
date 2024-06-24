@@ -55,6 +55,23 @@ isunitary(mat::AbstractMatrix)=isapprox(mat'mat,Matrix(la.I, size(mat,1),size(ma
 """
 sparsevector(vec::AbstractArray)=sa.SparseVector(vec)
 
+##
+
+
+"""
+    same_up_to_global_phase(psi::AbstractVectorS, phi::AbstractVectorS)
+
+checks if following true:
+psi==exp(im*θ)*phi
+"""
+function same_up_to_global_phase(psi::AbstractVectorS, phi::AbstractVectorS)
+    inner_product = la.dot(phi,psi)
+    global_phase = la.angle(inner_product)
+    is_same = abs(inner_product) ≈ 1
+    return is_same, global_phase
+end
+
+
 ## 
 ##========== partial trace  ==========
 
@@ -144,6 +161,9 @@ function bipartition_trace(rho::AbstractMatrixS)
 end
 
 
+"""
+    partial_trace(state::AbstractVectorS,keep_index1::Int)
+"""
 function partial_trace(state::AbstractVectorS,keep_index1::Int)
 
     N=get_N(state)
@@ -250,7 +270,7 @@ end
 ##========== partial trace  ==========
 
 """
-reduced_row_echelon(generator::AbstractMatrix)
+    reduced_row_echelon(generator::AbstractMatrix)
 """
 function reduced_row_echelon(generator::AbstractMatrix)
     num_rows, num_cols = size(generator)
@@ -299,42 +319,6 @@ function reduced_row_echelon(generator::AbstractMatrix)
 
     return generator, rank, transform_rows, transform_cols
 end
-
-# function gaussian_elimination_mod2(generator::AbstractMatrix)
-#     B = deepcopy(generator)
-#     rows, cols = size(B)
-#     row = 1
-
-#     for col = 1:cols
-#         # Find a row with a non-zero element in the current column
-#         pivot = findfirst(==(1), B[row:rows, col])
-        
-#         # Continue only if a pivot is found
-#         if pivot !== nothing
-#             pivot += row - 1
-
-#             # Swap the current row with the pivot row if necessary
-#             if pivot != row
-#                 B[row, :], B[pivot, :] = B[pivot, :], B[row, :]
-#             end
-
-#             # Eliminate all other 1's in this column
-#             for other_row = 1:rows
-#                 if other_row != row && B[other_row, col] == 1
-#                     B[other_row, :] = (B[other_row, :] .⊻ B[row, :]) .% 2
-#                 end
-#             end
-
-#             row += 1
-#         end
-    
-#         if row > rows
-#             break
-#         end
-#     end
-
-#     return B
-# end
 
 ##
 ##========== fit  ==========

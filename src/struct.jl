@@ -528,7 +528,7 @@ function _measurement_mat(name::String)
     elseif uppercase_name=="M(X)" || uppercase_name=="MX"
         return BlueTangle.gate.H
     elseif uppercase_name=="M(Y)" || uppercase_name=="MY"
-        return BlueTangle.gate.HSp
+        return BlueTangle.gate.HSP
     end
 end
 

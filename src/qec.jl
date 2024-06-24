@@ -236,7 +236,7 @@ function identify_error(syndrome::AbstractVector, generator_standard::AbstractMa
             
             # Check if the calculated syndrome matches the provided syndrome
             if all(calculated_syndrome .== syndrome)
-                println("Error on qubit $(qubit): $(error_op)")
+                println("Error $(error_op) on qubit $(qubit)")
                 return Op(error_op,qubit)
             end
         end

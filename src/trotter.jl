@@ -86,7 +86,7 @@ function hamiltonian_exp(N::Int,total_time::Float64,string_of_ops::Vector;dt=0.0
                     if j==0
                         push!(all_ops,Op("RY($(angle))",i+j))
                     else
-                        # push!(all_ops,Op("HSp",gate.HSp,k)) 
+                        # push!(all_ops,Op("HSP",gate.HSP,k)) 
                         push!(all_ops,Op("HY",k)) 
                     end
     
@@ -119,7 +119,7 @@ function hamiltonian_exp(N::Int,total_time::Float64,string_of_ops::Vector;dt=0.0
                 if terms[en]=="X" && j>0
                     push!(all_ops,Op("H",k))
                 elseif terms[en]=="Y" && j>0
-                    # push!(all_ops,Op("HSp'",Matrix(gate.HSp'),k))
+                    # push!(all_ops,Op("HSP'",Matrix(gate.HSP'),k))
                     push!(all_ops,Op("HY",k))
                 end
             end

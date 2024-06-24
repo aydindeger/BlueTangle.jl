@@ -23,13 +23,14 @@ const gate = (
     I = [1. 0; 0 1],
     X  = [0 1.; 1 0],
     SX  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
-    Xsqrt  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
+    XSQRT  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
     Y  = [0 -im; im 0],
     Z  = [1.0 0; 0 -1],
     H  = (1/sqrt(2)) * [1.0 1; 1 -1],
     S  = [1. 0; 0 im],
+    SD  = [1. 0; 0 -im], #S†
     T  = [1. 0; 0 exp(im * π / 4)],
-    HSp = (1/sqrt(2)) * [1.0+0im  0-1im;1+0im  0+1im],
+    HSP = (1/sqrt(2)) * [1.0+0im  0-1im;1+0im  0+1im],
     HY = (1/sqrt(2)) * [1  -1im;1im -1.0],
     H2 = [0.5 0.5 0.5 0.5;0.5 -0.5 0.5 -0.5;0.5 0.5 -0.5 -0.5;0.5 -0.5 -0.5 0.5],
     # HS = (1/sqrt(2)) * [1.0  1;1im  -1im],
@@ -271,7 +272,7 @@ function _get_name_and_arguments(op_name0::String)
 
 end
 
-one_qubit_gates=["I","X","Y","Z","SX","H","T","S","P","U2","U3"]
+one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
 two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
 gates_with_phase=["P","RX","RY","RZ","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
 
@@ -355,7 +356,7 @@ function gates(op_name::String,param_bool=false)
     elseif uppercase_name=="M(X)" || uppercase_name=="MX"
         return BlueTangle.gate.H
     elseif uppercase_name=="M(Y)" || uppercase_name=="MY"
-        return BlueTangle.gate.HSp
+        return BlueTangle.gate.HSP
     else
         if haskey(BlueTangle.gate, Symbol(uppercase_name))
             return BlueTangle.gate[Symbol(uppercase_name)]
