@@ -67,6 +67,66 @@ return H
 end
 
 """
+    hamiltonian(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, string_of_ops::Vector, boundary::String="open")
+
+Constructs a 2D Hamiltonian matrix for a quantum system with `rows * cols` qubits, potentially with double counting.
+
+# Arguments
+- `rows_cols`: A tuple or vector specifying the dimensions of the 2D lattice (rows, columns).
+- `string_of_ops::Vector`: An alternating vector of coupling constants and operator strings.
+- `boundary::String`: The boundary condition of the system, either "open" or "periodic" (default is "open").
+
+# Returns
+- `SparseMatrixCSC`: The Hamiltonian matrix representing the specified 2D quantum system.
+"""
+function hamiltonian(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, string_of_ops::Vector, boundary::String="open")
+    rows, cols = rows_cols
+    N = rows * cols
+    couplings = string_of_ops[1:2:end]
+    ops = string_of_ops[2:2:end]
+    
+    H = sa.spzeros(ComplexF64, 2^N, 2^N)
+    
+    for (id, op) in enumerate(ops)
+        len_op = length(split(op, ","))
+        
+        # Horizontal connections
+        for row in 1:rows
+            if boundary == "open"
+                for col in 1:cols-(len_op-1)
+                    qubits = [(row-1)*cols + c for c in col:col+len_op-1]
+                    H += couplings[id] * expand_multi_op(op, qubits, N)
+                end
+            elseif boundary == "periodic"
+                for col in 1:cols
+                    qubits = [(row-1)*cols + mod1(c, cols) for c in col:col+len_op-1]
+                    H += couplings[id] * expand_multi_op(op, qubits, N)
+                end
+            end
+        end
+        
+        # Vertical connections (if len_op > 1)
+        if len_op > 1
+            for col in 1:cols
+                if boundary == "open"
+                    for row in 1:rows-(len_op-1)
+                        qubits = [((r-1)*cols + col) for r in row:row+len_op-1]
+                        H += couplings[id] * expand_multi_op(op, qubits, N)
+                    end
+                elseif boundary == "periodic"
+                    for row in 1:rows
+                        qubits = [(mod1(r, rows)-1)*cols + col for r in row:row+len_op-1]
+                        H += couplings[id] * expand_multi_op(op, qubits, N)
+                    end
+                end
+            end
+        end
+    end
+    
+    return H
+end
+
+"""
     AnsatzOptions(; N::Int, ops::Union{Vector{String},Vector{<:QuantumOps}}, noise=false, init::Union{sa.SparseVector,Circuit}=sa.sparse([]), model::String="lbfgs", number_of_iterations::Int=1000, learning_rate::Float64=0.01, pars_initial::Vector=[], deep_circuit::Bool=false, history::Bool=true)
 
 Constructs an `AnsatzOptions` object that contains the configuration for a variational quantum circuit ansatz.
