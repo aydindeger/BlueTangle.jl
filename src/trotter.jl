@@ -45,92 +45,202 @@ ops = hamiltonian_exp(N, total_time, string_of_ops)
 
 # ops will contain a sequence of quantum gates to apply.
 """
-function hamiltonian_exp(N::Int,total_time::Float64,string_of_ops::Vector;dt=0.01,full=true)
-
-    couplings=[]
-    ops=[]
-    for (i,op)=enumerate(string_of_ops)
-        if isodd(i)
-            push!(couplings,op)
-        else
-            push!(ops,op)
+function hamiltonian_exp(N::Int, total_time::Float64, string_of_ops::Vector; dt=0.01, full=true)
+    couplings = string_of_ops[1:2:end]
+    ops = string_of_ops[2:2:end]
+    
+    term_ops = [split(op, ",") for op in ops]
+    len_op = [length(split(op, ",")) for op in ops]
+    
+    trotter_step = round(Int, total_time/dt)
+    
+    all_ops = Vector{QuantumOps}()
+    
+    for term in 1:length(ops)
+        terms = term_ops[term]
+        j = len_op[term] - 1
+        angle = round(-2 * dt * couplings[term], sigdigits=6)
+        
+        for i in 1:N-j
+            _apply_term(all_ops, terms, angle, collect(i:i+j))
         end
     end
     
-    term_ops=[split(op,",") for op=ops]
-    len_op=[length(split(op,",")) for op=ops]
-    
-    trotter_step=round(Int,total_time/dt)
-    
-    all_ops=Vector{QuantumOps}()
-    
-    for term=1:length(ops)
-    
-        terms=term_ops[term]
-        j=len_op[term]-1
-        angle=round(-2*dt*couplings[term],sigdigits=6)
-    
-        for i=1:N-j
-    
-            for (en,k)=enumerate(i:i+j)
-                if terms[en]=="X"
-    
-                    if j==0
-                        push!(all_ops,Op("RX($(angle))",i+j))
-                    else
-                        push!(all_ops,Op("H",k))
-                    end
-    
-                elseif terms[en]=="Y"
-    
-                    if j==0
-                        push!(all_ops,Op("RY($(angle))",i+j))
-                    else
-                        # push!(all_ops,Op("HSP",gate.HSP,k)) 
-                        push!(all_ops,Op("HY",k)) 
-                    end
-    
-                elseif terms[en]=="Z"
-    
-                    if j==0
-                        push!(all_ops,Op("RZ($(angle))",i+j))
-                    end
+    return full ? vcat(fill(all_ops, trotter_step)...) : all_ops
+end
 
-                else
+function _apply_term(all_ops::Vector{QuantumOps}, terms::Vector{SubString{String}}, angle::Float64, qubits::Vector{Int})
 
-                    throw("Only X,Y,Z operations are allowed")
-                    
-                end
-            end
-    
-            for k=i:i+j-1
-                push!(all_ops,Op("CNOT",k,k+1))
-            end
-    
-            if j>0
-                push!(all_ops,Op("RZ($(angle))",i+j))
-            end
-    
-            for k=i+j-1:-1:i
-                push!(all_ops,Op("CNOT",k,k+1))
-            end
-    
-            for (en,k)=enumerate(i:i+j)
-                if terms[en]=="X" && j>0
-                    push!(all_ops,Op("H",k))
-                elseif terms[en]=="Y" && j>0
-                    # push!(all_ops,Op("HSP'",Matrix(gate.HSP'),k))
-                    push!(all_ops,Op("HY",k))
-                end
-            end
-    
+    for (en, qubit) in enumerate(qubits)
+        if terms[en] == "X"
+            push!(all_ops, Op("H", qubit))
+        elseif terms[en] == "Y"
+            push!(all_ops, Op("HY", qubit))
         end
-    
     end
     
-    return full ? vcat(fill(all_ops,trotter_step)...) : all_ops
+    # Apply CNOT ladder
+    for i in 1:length(qubits)-1
+        push!(all_ops, Op("CNOT", qubits[i], qubits[i+1]))
+    end
     
+    # Apply RZ rotation on the last qubit
+    push!(all_ops, Op("RZ($angle)", qubits[end]))
+    
+    # Apply reverse CNOT ladder
+    for i in length(qubits)-1:-1:1
+        push!(all_ops, Op("CNOT", qubits[i], qubits[i+1]))
+    end
+    
+    # Apply final basis change
+    for (en, qubit) in enumerate(qubits)
+        if terms[en] == "X"
+            push!(all_ops, Op("H", qubit))
+        elseif terms[en] == "Y"
+            push!(all_ops, Op("HY", qubit)')
+        end
+    end
+end
+
+function _get_qubit_index(rows::Int, cols::Int, row::Int, col::Int, style::Symbol)
+    if style == :rowwise
+        return (row - 1) * cols + col
+    elseif style == :colwise
+        return (col - 1) * rows + row
+    else
+        throw(ArgumentError("Unsupported enumeration style"))
+    end
+end
+
+function _create_lattice_map(rows::Int, cols::Int, enumeration_style::Symbol=:rowwise)
+    if enumeration_style == :rowwise
+        return [[(r-1)*cols + c for c in 1:cols] for r in 1:rows]
+    elseif enumeration_style == :colwise
+        return [[r + (c-1)*rows for r in 1:rows] for c in 1:cols]
+    else
+        throw(ArgumentError("Unsupported enumeration style. Use :rowwise or :colwise."))
+    end
+end
+
+"""
+    hamiltonian_exp(rows_cols::Union{Tuple{Int64, Int64}, Vector{Int64}}, total_time::Float64, string_of_ops::Vector;
+                    dt=0.01, full=true, enumeration_style::Symbol=:rowwise) -> Vector{QuantumOps}
+
+Generate a sequence of quantum operations to simulate a 2D lattice Hamiltonian using Trotterization.
+
+# Arguments
+- `rows_cols`: A tuple or vector specifying the dimensions of the 2D lattice (rows, columns).
+- `total_time`: The total simulation time.
+- `string_of_ops`: A vector alternating between coupling strengths and operator strings. 
+  Each operator string is a comma-separated list of Pauli operators (X, Y, Z) representing 
+  the terms in the Hamiltonian.
+
+# Keyword Arguments
+- `dt`: Time step for Trotterization (default: 0.01).
+- `full`: If true, repeats the operation sequence for each Trotter step (default: true).
+- `enumeration_style`: Specifies how qubits are indexed in the 2D lattice. 
+  Options are `:rowwise` (default) or `:colwise`.
+
+# Returns
+A vector of `QuantumOps` representing the sequence of quantum operations for the simulation.
+
+# Details
+This function implements a Trotterized evolution of a 2D lattice Hamiltonian. It supports
+arbitrary Pauli string operators and handles both horizontal and vertical nearest-neighbor 
+interactions in the lattice.
+
+The Hamiltonian terms are applied to all relevant qubit pairs in the lattice. For operators
+involving two qubits (e.g., "X,Y"), both horizontal and vertical applications are considered.
+Single-qubit operators are applied to each qubit individually.
+
+The function uses the `_apply_term` helper function to generate the specific quantum operations
+for each term in the Hamiltonian.
+
+# Example
+```julia
+rows, cols = 3, 4
+total_time = 2.0
+string_of_ops = [1.0, "X,Y", 0.5, "Z"]
+ops = hamiltonian_exp((rows, cols), total_time, string_of_ops)
+```
+"""
+function hamiltonian_exp(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, total_time::Float64, string_of_ops::Vector; dt=0.01, full=true, enumeration_style::Symbol=:rowwise)
+    rows, cols = rows_cols
+    N = rows * cols
+    
+    couplings = string_of_ops[1:2:end]
+    ops = string_of_ops[2:2:end]
+    
+    term_ops = [split(op, ",") for op in ops]
+    len_op = [length(split(op, ",")) for op in ops]
+    
+    trotter_step = round(Int, total_time/dt)
+    
+    all_ops = Vector{QuantumOps}()
+    
+    for term in 1:length(ops)
+        terms = term_ops[term]
+        j = len_op[term] - 1
+        angle = round(-2 * dt * couplings[term], sigdigits=6)
+        
+        # horizontal connections
+        for row in 1:rows
+            for col in 1:cols-j
+                qubits = [_get_qubit_index(rows, cols, row, c, enumeration_style) for c in col:col+j]
+                _apply_term(all_ops, terms, angle, qubits)
+            end
+        end
+        
+        # vertical connections if j == 1 (nearest neighbor)
+        if j == 1
+            for row in 1:rows-1
+                for col in 1:cols
+                    qubits = [_get_qubit_index(rows, cols, r, col, enumeration_style) for r in row:row+1]
+                    _apply_term(all_ops, terms, angle, qubits)
+                end
+            end
+        end
+    end
+    
+    return full ? vcat(fill(all_ops, trotter_step)...) : all_ops
+end
+
+"""
+test this then delete
+"""
+function hamiltonian_exp_test(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, total_time::Float64, string_of_ops::Vector; dt=0.01, full=true, enumeration_style::Symbol=:rowwise)
+    rows, cols = rows_cols
+    N = rows * cols
+    couplings = string_of_ops[1:2:end]
+    ops = string_of_ops[2:2:end]
+    term_ops = [split(op, ",") for op in ops]
+    len_op = [length(split(op, ",")) for op in ops]
+    trotter_step = round(Int, total_time/dt)
+    all_ops = Vector{QuantumOps}()
+
+    for term in 1:length(ops)
+        terms = term_ops[term]
+        j = len_op[term] - 1
+        angle = round(-2 * dt * couplings[term], sigdigits=6)
+
+        if j == 0  # Single-qubit terms
+            for row in 1:rows, col in 1:cols
+                qubit = _get_qubit_index(rows, cols, row, col, enumeration_style)
+                _apply_term(all_ops, terms, angle, [qubit])
+            end
+        else  # Two-qubit terms
+            # Horizontal connections
+            for row in 1:rows, col in 1:cols-1
+                qubits = [_get_qubit_index(rows, cols, row, c, enumeration_style) for c in col:col+1]
+                _apply_term(all_ops, terms, angle, qubits)
+            end
+            # Vertical connections
+            for row in 1:rows-1, col in 1:cols
+                qubits = [_get_qubit_index(rows, cols, r, col, enumeration_style) for r in row:row+1]
+                _apply_term(all_ops, terms, angle, qubits)
+            end
+        end
     end
 
-##
-
+    return full ? vcat(fill(all_ops, trotter_step)...) : all_ops
+end

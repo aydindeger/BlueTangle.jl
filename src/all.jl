@@ -29,6 +29,11 @@ import Base: *
 *(o::QuantumOps, psi::it.MPS) = apply(psi,o)
 *(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
 
+"""
+    ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron
+"""
+⊗(x::AbstractMatrixS,y::AbstractMatrixS)=foldl(kron,[x,y])
+
 fields(m)=fieldnames(typeof(m))
 attributes(m)=fields(m)
 
