@@ -171,31 +171,38 @@ function _swap_control_target(matrix::Matrix)
     return result
 end
 
-# """
-# swap_relabel(ops::Vector)
-# """
-# function swap_relabel(ops::Vector{<:QuantumOps})
-#     N = maximum(maximum(args) for (op, args...) in ops if op == "SWAP")
-#     qubit_mapping = collect(1:N)
-#     relabeled_ops = []
+"""
+    swap_relabel(ops::Vector{Op}) -> Tuple{Vector{Op}, Vector{Int}}
 
-#     for (op, args...) in ops
-#         if op == "SWAP"
-#             i, j = args
-#             # relabel the SWAP operation
-#             new_i = findfirst(==(i), qubit_mapping)
-#             new_j = findfirst(==(j), qubit_mapping)
-#             qubit_mapping[new_i], qubit_mapping[new_j] = qubit_mapping[new_j], qubit_mapping[new_i]
-#         else
-#             # relabel the operation based on current mapping
-#             new_args = [findfirst(==(arg), qubit_mapping) for arg in args]
-#             push!(relabeled_ops, (op, new_args...))
-#         end
-#     end
+Relabel qubit indices in a sequence of quantum operations, simulating the effect of SWAP gates without actually performing them.
 
-#     return relabeled_ops
-# end
+This function processes a list of quantum operations, updating qubit indices to reflect the effect of SWAP operations. It handles both SWAP gates and other quantum operations, adjusting their qubit references according to the cumulative effect of all SWAP operations.
 
+# Arguments
+- `ops::Vector{Op}`: A vector of `Op` objects representing quantum operations.
+
+# Returns
+- `Tuple{Vector{Op}, Vector{Int}}`: A tuple containing:
+  1. A vector of relabeled `Op` objects, excluding SWAP operations.
+  2. The final qubit mapping, where `mapping[i]` gives the final label of the qubit initially labeled `i`.
+
+# Details
+- SWAP operations are used to update the qubit mapping but are not included in the output operations.
+- For non-SWAP operations, qubit indices are updated based on the current mapping.
+- The function assumes qubit indices start from 1.
+
+# Example
+```julia
+ops = [
+    Op("H", 1, -1, -2, false),
+    Op("SWAP", 1, 2, -2, false),
+    Op("CNOT", 1, 2, -2, false),
+    Op("X", 2, -1, -2, false)
+]
+
+relabeled_ops, final_mapping = swap_relabel(ops)
+```
+"""
 function swap_relabel(ops::Vector{Op})
     N = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
     qubit_mapping = collect(1:N)
@@ -227,7 +234,7 @@ function swap_relabel(ops::Vector{Op})
         end
     end
 
-    return relabeled_ops
+    return relabeled_ops, qubit_mapping
 end
 
 """

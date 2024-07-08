@@ -196,6 +196,69 @@ end
 return opList
 end
 
+
+"""
+    random_ops_len(N::Int,len::Int;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
+
+random len not depth
+"""
+function random_ops_len(N::Int,len::Int;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
+    opList=Vector{QuantumOps}()#[]#Vector{QuantumOps}(undef,len)
+    
+    for _=1:len#layer
+    
+        c=rand(1:N)
+    
+        if c==N
+            s=uppercase(rand(one_qubit_gates))
+        else
+            s=uppercase(rand(union(one_qubit_gates,two_qubit_gates)))
+        end
+    
+        p1=round(randn()*pi,digits=2)
+        p2=round(randn()*pi,digits=2)
+        p3=round(randn()*pi,digits=2)
+        
+        if s ∈ one_qubit_gates#one qubit
+            if s ∈ gates_with_phase
+                if s=="U2"
+                    push!(opList,Op("$(s)($(p1),$(p2))",c))
+                elseif s=="U3"
+                    push!(opList,Op("$(s)($(p1),$(p2),$(p3))",c))
+                else
+                    push!(opList,Op([s,p1],c))
+                end
+            else
+                push!(opList,Op(s,c))
+            end
+    
+        elseif s ∈ two_qubit_gates #two qubit
+            c2=c==1 ? 1 : rand([1,-1])
+            
+            if s ∈ gates_with_phase
+                if s=="FSIM"
+                    push!(opList,Op("$(s)($(p1),$(p2))",c,c+c2))
+                else
+                    push!(opList,Op([s,p1],c,c+c2))
+                end
+            else
+                push!(opList,Op(s,c,c+c2))
+            end
+        end
+    
+        #measurement layer
+        for i=1:N #runs over all sites
+            if rand()<measure_prob
+                push!(opList,Op(rand(measure_basis),i))
+            end
+        end
+    
+    end
+    
+    return opList
+end
+
+
 """
 `random_clifford(N::Int, len::Int; measure_prob::Float64=0.0, measure_basis::Vector{String}=["MX","MY","MZ"]) -> Vector{QuantumOps}`
 

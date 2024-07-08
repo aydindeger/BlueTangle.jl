@@ -83,10 +83,10 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
     Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
 
     for ki=1:k
-        logical_XZ_vecs["logZ",ki]=Z_vecs[ki,:]
-        logical_XZ_vecs["logX",ki]=X_vecs[ki,:]
-        logical_XZ_ops["logZ",ki]=logical_vec_2_ops(Z_vecs[ki,:])
-        logical_XZ_ops["logX",ki]=logical_vec_2_ops(X_vecs[ki,:])
+        logical_XZ_vecs["Z̃",ki]=Z_vecs[ki,:]
+        logical_XZ_vecs["X̃",ki]=X_vecs[ki,:]
+        logical_XZ_ops["Z̃",ki]=logical_vec_2_ops(Z_vecs[ki,:])
+        logical_XZ_ops["X̃",ki]=logical_vec_2_ops(X_vecs[ki,:])
     end
 
     return logical_XZ_ops, logical_XZ_vecs
@@ -147,7 +147,7 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
     # First loop: Add CX gates based on logical_xs matrix
     for i in 1:k
         for j in r+1:n-k
-            if logical_XZ_vecs["logX",i][j]==1
+            if logical_XZ_vecs["X̃",i][j]==1
                 push!(encoding_circuit, Op("CX", n-k+i, j))
             end
         end
@@ -391,7 +391,7 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[])
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[],partial_trace_keep_index=[])
 
             if isempty(encoding) && isempty(decoding)
                 ops=ops_encoding'
@@ -407,13 +407,18 @@ struct StabilizerCode #alpha version
                 state=apply(state,o;noise=noise)
             end
 
-            state_partial=partial_trace(state,collect(n-k+1:n))
+            if isempty(partial_trace_keep_index)
+                partial_trace_keep_index=collect(n-k+1:n)
+            end
+
+            state_partial=partial_trace(state,partial_trace_keep_index)
             e,v=la.eigen(state_partial)
 
             e_pos=findfirst(isapprox(1), e)
             if isa(e_pos,Number)
                 return sa.sparse(v[:,e_pos])
             else
+                println("something is wrong!")
                 return state_partial
             end
 
