@@ -270,6 +270,45 @@ end
 
 
 """
+    reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
+
+k=code.k #number of logical qubits
+"""
+function reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
+
+    n=get_N(psi)
+    k=length(physical_qubits_keep)
+
+    if isempty(qubit_mapping)
+        qubit_mapping=collect(1:n)
+    end
+    
+    pos,amp=sa.findnz(psi)
+    new_basis = int2bin.(pos .-1,n)
+    # physical_qubits=collect(n-k+1:n) #this is where the logical info is encoded
+    
+    logical_fock_basis=Vector{Vector{Int}}()
+    for b=new_basis #each config
+        logical_basis=[]
+        for physical_qubit=physical_qubits_keep
+            physical_pos=findfirst(x->x==physical_qubit,qubit_mapping)
+            push!(logical_basis,b[physical_pos])
+        end
+        push!(logical_fock_basis,logical_basis)
+    end
+    
+    new_pos=bin2int.(logical_fock_basis) .+ 1
+
+    new_state=sa.spzeros(2^k)
+    for (a,i)=enumerate(new_pos)
+        new_state[i]=amp[a]
+    end
+
+    return new_state
+
+end
+
+"""
     StabilizerCode(stabilizers::Vector,logicals::Dict)
 
     logicals=Dict()
@@ -391,7 +430,7 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[],partial_trace_keep_index=[])
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[],physical_qubits_keep::Vector=[],qubit_mapping::Vector=[])
 
             if isempty(encoding) && isempty(decoding)
                 ops=ops_encoding'
@@ -407,20 +446,22 @@ struct StabilizerCode #alpha version
                 state=apply(state,o;noise=noise)
             end
 
-            if isempty(partial_trace_keep_index)
-                partial_trace_keep_index=collect(n-k+1:n)
+            if isempty(physical_qubits_keep)
+                physical_qubits_keep=collect(n-k+1:n)
             end
 
-            state_partial=partial_trace(state,partial_trace_keep_index)
-            e,v=la.eigen(state_partial)
+            return reduce_hilbert_space(state,physical_qubits_keep;qubit_mapping=qubit_mapping)
 
-            e_pos=findfirst(isapprox(1), e)
-            if isa(e_pos,Number)
-                return sa.sparse(v[:,e_pos])
-            else
-                println("something is wrong!")
-                return state_partial
-            end
+            # state_partial=partial_trace(state,physical_qubits_keep)
+            # e,v=la.eigen(state_partial)
+
+            # e_pos=findfirst(isapprox(1), e)
+            # if isa(e_pos,Number)
+            #     return sa.sparse(v[:,e_pos])
+            # else
+            #     println("something is wrong!")
+            #     return state_partial
+            # end
 
         end
 
