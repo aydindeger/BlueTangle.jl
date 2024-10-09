@@ -82,11 +82,18 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
     X_vecs=[U0 U2 U3 V1 U1 V3]
     Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
 
+    # for ki=1:k
+    #     logical_XZ_vecs["Z̃",ki]=Z_vecs[ki,:]
+    #     logical_XZ_vecs["X̃",ki]=X_vecs[ki,:]
+    #     logical_XZ_ops["Z̃",ki]=logical_vec_2_ops(Z_vecs[ki,:])
+    #     logical_XZ_ops["X̃",ki]=logical_vec_2_ops(X_vecs[ki,:])
+    # end
+
     for ki=1:k
-        logical_XZ_vecs["Z̃",ki]=Z_vecs[ki,:]
-        logical_XZ_vecs["X̃",ki]=X_vecs[ki,:]
-        logical_XZ_ops["Z̃",ki]=logical_vec_2_ops(Z_vecs[ki,:])
-        logical_XZ_ops["X̃",ki]=logical_vec_2_ops(X_vecs[ki,:])
+        logical_XZ_vecs["Z",ki]=Z_vecs[ki,:]
+        logical_XZ_vecs["X",ki]=X_vecs[ki,:]
+        logical_XZ_ops["Z",ki]=logical_vec_2_ops(Z_vecs[ki,:])
+        logical_XZ_ops["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
     end
 
     return logical_XZ_ops, logical_XZ_vecs
@@ -147,7 +154,8 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
     # First loop: Add CX gates based on logical_xs matrix
     for i in 1:k
         for j in r+1:n-k
-            if logical_XZ_vecs["X̃",i][j]==1
+            # if logical_XZ_vecs["X̃",i][j]==1
+            if logical_XZ_vecs["X",i][j]==1
                 push!(encoding_circuit, Op("CX", n-k+i, j))
             end
         end
@@ -247,26 +255,29 @@ end
 code_ops(name::String, logical_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit]]
 code_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit,target_qubit]]
 
-function code_ops(op::Op, logicals::Dict)
-    if op.q == 1
-        return [Op(x...) for x=logicals[op.name,op.qubit]]
+function code_ops(op::QuantumOps, logicals::Dict)
+    if isa(op,OpF)
+        vals=logicals[op.name]
+        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
+    elseif op.q == 1
+        vals=logicals[op.name,op.qubit]
+        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
     elseif op.q == 2
-        return [Op(x...) for x=logicals[op.name,op.qubit,op.target_qubit]]
+        vals=logicals[op.name,op.qubit,op.target_qubit]
+        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
     end
 end
 
-function code_ops(ops::Vector{Op}, logicals::Dict)
-    list_of_ops=Vector{Op}()
+function code_ops(ops::Vector{QuantumOps}, logicals::Dict)
+    list_of_ops=Vector{QuantumOps}()
     for op=ops
-        if op.q == 1
-            append!(list_of_ops,[Op(x...) for x=logicals[op.name,op.qubit]])
-        elseif op.q == 2
-            append!(list_of_ops,[Op(x...) for x=logicals[op.name,op.qubit,op.target_qubit]])
-        end
+        append!(list_of_ops,code_ops(op, logicals))
     end
 
     return list_of_ops
 end
+
+
 
 
 """
@@ -409,8 +420,8 @@ struct StabilizerCode #alpha version
 
         new_ops(name::String, logical_qubit::Int)=code_ops(name,logical_qubit,logicals)
         new_ops(name::String, logical_qubit::Int, target_qubit::Int)=code_ops(name,logical_qubit,target_qubit,logicals)
-        new_ops(op::Op)=code_ops(op,logicals)
-        new_ops(ops::Vector{Op})=code_ops(ops,logicals)
+        new_ops(op::QuantumOps)=code_ops(op,logicals)
+        new_ops(ops::Vector{QuantumOps})=code_ops(ops,logicals)
 
         function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
 

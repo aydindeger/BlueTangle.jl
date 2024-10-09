@@ -648,7 +648,7 @@ _find_argument_number(func::Function)=length(methods(func)[1].sig.parameters)-1
 f(state) -> return state
 """
 struct OpF <: QuantumOps
-    q::Vector{Int}
+    q::Int
     name::String
     apply::Function
 
@@ -656,15 +656,37 @@ struct OpF <: QuantumOps
 
         new_apply(state::AbstractVectorS;kwargs...)=f(state;kwargs...)
 
-        return new([1],name,new_apply)
+        return new(1,name,new_apply)
+    end
+
+    function OpF(name::String,mat::AbstractMatrixS)
+
+        new_apply_mat(state::AbstractVectorS)=mat*state
+
+        return new(1,name,new_apply_mat)
+    end
+    
+    function OpF(name::String,ops::Vector{QuantumOps})
+        
+        mat=sa.sparse(ops)
+        new_apply_mat2(state::AbstractVectorS)=mat*state
+
+        return new(1,name,new_apply_mat2)
     end
     
 end
 
-_target_find(op::QuantumOps)=typeof(op)==ifOp ? -1 : op.target_qubit
+function _target_find(op::T) where T<:QuantumOps
 
-function _control_find(op::QuantumOps)
-    if isa(op,ifOp) || isa(op,OpQC)
+    if isa(op,ifOp) || isa(op,OpF)
+        return -1
+    else
+        return op.target_qubit
+    end
+end
+
+function _control_find(op::T) where T<:QuantumOps
+    if isa(op,ifOp) || isa(op,OpQC) || isa(op,OpF)
         return -2
     else
         return op.control
@@ -783,10 +805,17 @@ struct Circuit
     layers::Vector{Vector{<:QuantumOps}}
 end
 
+
+
 sa.sparse(circ) = sa.sparse(ComplexF64, circ)
 function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
     N = circ.stats.N
     return prod(o.expand(N) for o=reverse(vcat(circ.layers...)))
+end
+
+function sa.sparse(ops::Vector{QuantumOps})
+    N=get_stats(ops).N
+    return prod(o.expand(N) for o=reverse(ops))
 end
 
 hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
