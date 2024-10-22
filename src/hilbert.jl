@@ -576,6 +576,16 @@ Returns a sparse vector representing the |000...> quantum state.
 zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
 one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
 
+plus_state(N::Int)=sa.SparseVector(fill((1.0+0im) / sqrt(2^N),2^N))
+
+function minus_state(N::Int)
+    state=one_state(N)
+    for i=1:N
+        state=Op("H",i)*state
+    end
+    return state
+end
+
 """
     random_state(N::Int) -> sa.SparseVector
 """

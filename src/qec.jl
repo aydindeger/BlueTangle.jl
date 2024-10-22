@@ -3,7 +3,6 @@ get_codeword(codestate::AbstractVectorS)
 """
 get_codeword(codestate::AbstractVectorS)=fock_basis.(findall(x->!isapprox(x,0;atol=1000eps()),codestate).-1,get_N(codestate))
 
-
 function stabilizers_to_generator(stabilizers::Vector)
 
     num_qubits = length(split(stabilizers[1],",")) #this is n
@@ -39,7 +38,7 @@ function get_standard_form(G::AbstractMatrix)
 
     generator_rref, r, generator_transform_rows, generator_transform_cols = reduced_row_echelon(generator)
     G = hcat(generator_rref, mod.(generator_transform_rows * G2 * generator_transform_cols, 2))
-    
+
     # Gaussian Elimination on E
     A = G[1:r, (r+1):n]
     B = G[1:r, n+1:(n+r)]
@@ -47,7 +46,7 @@ function get_standard_form(G::AbstractMatrix)
     D = G[(r+1):end, n+1:(n+r)]
     E = G[(r+1):end, (n+r+1):end]
     
-    if n - k - r != 0
+    # if n - k - r != 0
         E_rref, s, E_transform_rows, E_transform_cols = reduced_row_echelon(E)
         
         A = mod.(A * E_transform_cols, 2)
@@ -56,14 +55,22 @@ function get_standard_form(G::AbstractMatrix)
         
         G_row_1 = hcat(hcat(Matrix{Int}(la.I, r, r), A), hcat(B, C))
         G_row_2 = hcat(zeros(Int, n-k-r, n), hcat(D, E_rref))
-        G_standard = vcat(G_row_1, G_row_2)
-    end
+        G = vcat(G_row_1, G_row_2)
+    # else
+    #     G_standard=G
+    # end
+    
+    permute_matrix_E = Matrix{Int64}(la.I, n, n)
+    len_E=size(E_transform_cols,1)
+    permute_matrix_E[n-len_E+1:n, n-len_E+1:n] .= E_transform_cols
+    permute_matrix=permute_matrix_E*generator_transform_cols
 
-    return G_standard, r
+    G_permuted=hcat(G[:,1:n]*permute_matrix,G[:,n+1:end]*permute_matrix)
+
+    return G, G_permuted, r, permute_matrix
 end
 
-
-function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
+function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int,permute_matrix::AbstractMatrix)
 
     n, m = size(G_standard, 2) ÷ 2, size(G_standard, 1)
     k = n - m
@@ -82,16 +89,12 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
     X_vecs=[U0 U2 U3 V1 U1 V3]
     Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
 
-    # for ki=1:k
-    #     logical_XZ_vecs["Z̃",ki]=Z_vecs[ki,:]
-    #     logical_XZ_vecs["X̃",ki]=X_vecs[ki,:]
-    #     logical_XZ_ops["Z̃",ki]=logical_vec_2_ops(Z_vecs[ki,:])
-    #     logical_XZ_ops["X̃",ki]=logical_vec_2_ops(X_vecs[ki,:])
-    # end
+    # X_vecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
+    # Z_vecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
 
     for ki=1:k
-        logical_XZ_vecs["Z",ki]=Z_vecs[ki,:]
-        logical_XZ_vecs["X",ki]=X_vecs[ki,:]
+        logical_XZ_vecs["Z",ki]=sa.sparse(Z_vecs[ki,:])
+        logical_XZ_vecs["X",ki]=sa.sparse(X_vecs[ki,:])
         logical_XZ_ops["Z",ki]=logical_vec_2_ops(Z_vecs[ki,:])
         logical_XZ_ops["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
     end
@@ -99,7 +102,6 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int)
     return logical_XZ_ops, logical_XZ_vecs
 
 end
-
 
 function logical_vec_2_ops(logical_vec::Vector)
 
@@ -278,8 +280,6 @@ function code_ops(ops::Vector{QuantumOps}, logicals::Dict)
 end
 
 
-
-
 """
     reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
 
@@ -310,14 +310,30 @@ function reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::Abstrac
     
     new_pos=bin2int.(logical_fock_basis) .+ 1
 
-    new_state=sa.spzeros(2^k)
+    new_state=sa.spzeros(ComplexF64,2^k)
     for (a,i)=enumerate(new_pos)
         new_state[i]=amp[a]
     end
 
-    return new_state
+    return la.normalize(new_state) #fix this
 
 end
+
+function logical_string_to_dict(logical_string::String)
+    lines = split(chomp(logical_string), '\n')
+    dict = Dict()
+    for (line_index, line) in enumerate(lines)
+        for (char_index, char) in enumerate(collect(line))
+            if char != 'I'
+                key = (char, line_index)
+                values = [(char, pos) for (pos, c) in enumerate(collect(line)) if c == char]
+                dict[key] = values
+            end
+        end
+    end
+    return dict
+end
+
 
 """
     StabilizerCode(stabilizers::Vector,logicals::Dict)
@@ -381,12 +397,13 @@ struct StabilizerCode #alpha version
     stabilizers::Vector
     generator::AbstractMatrix
     generator_standard::AbstractMatrix
+    generator_permuted::AbstractMatrix
     logicals::Dict
-    codestates::Vector
-    codewords::Vector
+    # codestates::Vector
+    # codewords::Vector
     ops_encoding::Vector #encoding circuit
     ops_syndrome::Vector #syndrome circuit
-    stabilizer_matrix::Vector
+    # stabilizer_matrix::Vector
     info::NamedTuple
     ops::Function
     apply::Function
@@ -395,26 +412,42 @@ struct StabilizerCode #alpha version
     syndrome::Function
     correct::Function
 
-    function StabilizerCode(stabilizers::Vector{String},logicals::Dict;d::Int=-1)
+    function StabilizerCode(stabilizers::Union{Vector{String},String},logicals::Dict;d::Int=-1)
+
+        if isa(stabilizers,String)
+            stabilizers = [join(collect(line), ",") for line in split(chomp(stabilizers), '\n')]
+        end
+
+        print("stabilizers")
+        display(stabilizers)
 
         n=length(split.(stabilizers,",")[1])
         m=length(stabilizers)
         k=n-m
 
+        print("n=$(n), m=$(m)")
+
         ##find init from stabilizers
-        stabilizer_matrix=string_to_matrix.(stabilizers)
+        # stabilizer_matrix=string_to_matrix.(stabilizers)
         generator=stabilizers_to_generator(stabilizers)
-        generator_standard, r = get_standard_form(generator)
-        logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r)
+ 
+        # generator_standard, generator_permuted, r, permute_matrix = get_standard_form(generator)
+
+        _, generator_standard, r, permute_matrix = get_standard_form(generator)#fix: this needs to be fixed
+        generator_permuted=generator_standard
+        
+        logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r,permute_matrix)
         ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
         ops_syndrome=get_ops_syndrome(generator_standard)
-        e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
-        codestates = [sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
-        len_codestates=length(codestates)
-        codewords=[get_codeword(code_s) for code_s=codestates]
-        if length(codestates) != 2^k
-            throw("wrong stabilizers")
-        end
+
+        # below for codespace and codewords
+        # e,v=la.eigen(Matrix(sum(stabilizer_matrix)/m))
+        # codestates = [sa.sparse(v[:, i]) for i in 1:length(e) if abs(e[i] - 1) < 1000eps()];sa.droptol!.(codestates,1000eps());
+        # len_codestates=length(codestates)
+        # codewords=[get_codeword(code_s) for code_s=codestates]
+        # if length(codestates) != 2^k
+        #     throw("wrong stabilizers")
+        # end
 
         ##
 
@@ -594,12 +627,13 @@ struct StabilizerCode #alpha version
         
         info=(
             len_logical=length(keys(logicals)),
-            len_codestates=len_codestates,
+            # len_codestates=len_codestates,
             logical_XZ_vecs=logical_XZ_vecs,
             r=r
         )
 
-        return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        # return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,generator_permuted,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 

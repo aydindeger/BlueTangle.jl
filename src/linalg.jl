@@ -269,53 +269,105 @@ end
 
 ##========== partial trace  ==========
 
+# """
+#     reduced_row_echelon(generator::AbstractMatrix)
+# """
+# function reduced_row_echelon(generator::AbstractMatrix)
+#     num_rows, num_cols = size(generator)
+#     transform_rows = Matrix{Int}(la.I, num_rows, num_rows)
+#     transform_cols = Matrix{Int}(la.I, num_cols, num_cols)
+#     rank = 0
+
+#     for i in 1:num_rows
+#         # Find the pivot row
+#         pivot_row = i
+#         while pivot_row <= num_rows && generator[pivot_row, i] == 0
+#             pivot_row += 1
+#         end
+
+#         if pivot_row > num_rows
+#             continue
+#         end
+
+#         rank += 1
+
+#         # Swap rows if necessary
+#         if pivot_row != i
+#             generator[i, :], generator[pivot_row, :] = generator[pivot_row, :], generator[i, :]
+#             transform_rows[i, :], transform_rows[pivot_row, :] = transform_rows[pivot_row, :], transform_rows[i, :]
+#         end
+
+#         # Reduce the rows above and below the pivot
+#         for j in 1:num_rows
+#             if j != i && generator[j, i] == 1
+#                 generator[j, :] .= mod.(generator[j, :] .+ generator[i, :], 2)
+#                 transform_rows[j, :] .= mod.(transform_rows[j, :] .+ transform_rows[i, :], 2)
+#             end
+#         end
+
+#         # Swap columns if necessary
+#         if generator[i, i] == 0
+#             for j in (i+1):num_cols
+#                 if generator[i, j] == 1
+#                     generator[:, i], generator[:, j] = generator[:, j], generator[:, i]
+#                     transform_cols[:, i], transform_cols[:, j] = transform_cols[:, j], transform_cols[:, i]
+#                     break
+#                 end
+#             end
+#         end
+#     end
+
+#     return generator, rank, transform_rows, transform_cols
+# end
+
 """
     reduced_row_echelon(generator::AbstractMatrix)
 """
-function reduced_row_echelon(generator::AbstractMatrix)
+function reduced_row_echelon(generator::AbstractMatrix{Int})
     num_rows, num_cols = size(generator)
-    transform_rows = Matrix{Int}(la.I, num_rows, num_rows)
-    transform_cols = Matrix{Int}(la.I, num_cols, num_cols)
-    rank = 0
+    transform_rows = Matrix{Int}(la.I(num_rows))
+    transform_cols = Matrix{Int}(la.I(num_cols))
+    pivots = []
+    i = 1  # row index
+    j = 1  # column index
 
-    for i in 1:num_rows
-        # Find the pivot row
-        pivot_row = i
-        while pivot_row <= num_rows && generator[pivot_row, i] == 0
-            pivot_row += 1
-        end
-
-        if pivot_row > num_rows
-            continue
-        end
-
-        rank += 1
-
-        # Swap rows if necessary
-        if pivot_row != i
-            generator[i, :], generator[pivot_row, :] = generator[pivot_row, :], generator[i, :]
-            transform_rows[i, :], transform_rows[pivot_row, :] = transform_rows[pivot_row, :], transform_rows[i, :]
-        end
-
-        # Reduce the rows above and below the pivot
-        for j in 1:num_rows
-            if j != i && generator[j, i] == 1
-                generator[j, :] .= mod.(generator[j, :] .+ generator[i, :], 2)
-                transform_rows[j, :] .= mod.(transform_rows[j, :] .+ transform_rows[i, :], 2)
+    while i <= num_rows && j <= num_cols
+        # Find the pivot in column j starting from row i
+        pivot_row = findfirst(generator[i:end, j] .!= 0)
+        if pivot_row !== nothing
+            pivot_row += i - 1  # Adjust index because of slicing
+            # Swap rows if necessary
+            if pivot_row != i
+                generator[[i, pivot_row], :] = generator[[pivot_row, i], :]
+                transform_rows[[i, pivot_row], :] = transform_rows[[pivot_row, i], :]
             end
-        end
 
-        # Swap columns if necessary
-        if generator[i, i] == 0
-            for j in (i+1):num_cols
-                if generator[i, j] == 1
-                    generator[:, i], generator[:, j] = generator[:, j], generator[:, i]
-                    transform_cols[:, i], transform_cols[:, j] = transform_cols[:, j], transform_cols[:, i]
-                    break
+            # Record pivot position
+            push!(pivots, (i, j))
+
+            # Eliminate entries in other rows
+            for k in 1:num_rows
+                if k != i && generator[k, j] == 1
+                    generator[k, :] .= mod.(generator[k, :] .+ generator[i, :], 2)
+                    transform_rows[k, :] .= mod.(transform_rows[k, :] .+ transform_rows[i, :], 2)
                 end
+            end
+            i += 1
+            j += 1
+        else
+            # Attempt to swap columns
+            swap_col = findfirst(generator[i, j+1:end] .!= 0)
+            if swap_col !== nothing
+                swap_col += j  # Adjust index because of slicing
+                generator[:, [j, swap_col]] = generator[:, [swap_col, j]]
+                transform_cols[:, [j, swap_col]] = transform_cols[:, [swap_col, j]]
+            else
+                j += 1
             end
         end
     end
+
+    rank=length(pivots)
 
     return generator, rank, transform_rows, transform_cols
 end

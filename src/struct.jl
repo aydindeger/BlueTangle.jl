@@ -314,7 +314,6 @@ end
 #     sumk ≈ Matrix(sa.I, size(sumk, 1), size(sumk, 1))
 # end
 
-
 """
 `Noise1(model::String, p::Float64)`
 
@@ -651,29 +650,36 @@ struct OpF <: QuantumOps
     q::Int
     name::String
     apply::Function
+    data::Union{Function, AbstractMatrixS, Vector{<:QuantumOps}}
 
     function OpF(name::String,f::Function)
 
         new_apply(state::AbstractVectorS;kwargs...)=f(state;kwargs...)
 
-        return new(1,name,new_apply)
+        return new(1,name,new_apply,f)
     end
 
     function OpF(name::String,mat::AbstractMatrixS)
 
         new_apply_mat(state::AbstractVectorS)=mat*state
 
-        return new(1,name,new_apply_mat)
+        return new(1,name,new_apply_mat,mat)
     end
     
-    function OpF(name::String,ops::Vector{QuantumOps})
+    function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
         
-        mat=sa.sparse(ops)
-        new_apply_mat2(state::AbstractVectorS)=mat*state
+        function new_apply_mat2(state::AbstractVectorS)
+            for o=ops
+                state=o*state
+            end
 
-        return new(1,name,new_apply_mat2)
+            return state
+        end
+
+        return new(1,name,new_apply_mat2,ops)
     end
     
+    #fix: add noise
 end
 
 function _target_find(op::T) where T<:QuantumOps
