@@ -372,6 +372,12 @@ function reduced_row_echelon(generator::AbstractMatrix{Int})
     return generator, rank, transform_rows, transform_cols
 end
 
+function rank_of_rref(A::AbstractMatrix{Int})
+    len_cols=size(A,2)÷2
+    non_zero_rows = sum(any(A[i, 1:len_cols] .== 1) for i in 1:size(A, 1))
+    return non_zero_rows
+end
+
 ##
 ##========== fit  ==========
 

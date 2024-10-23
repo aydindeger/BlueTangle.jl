@@ -65,19 +65,37 @@ function get_standard_form(G::AbstractMatrix)
     permute_matrix_E[n-len_E+1:n, n-len_E+1:n] .= E_transform_cols
     permute_matrix=permute_matrix_E*generator_transform_cols
 
-    G_permuted=hcat(G[:,1:n]*permute_matrix,G[:,n+1:end]*permute_matrix)
+    # permute_matrix=reduced_row_echelon_inverse(generator_transform_cols)*reduced_row_echelon_inverse(permute_matrix_E)
 
-    return G, G_permuted, r, permute_matrix
+    # G_permuted=permute_standard_form(G,permute_matrix)
+
+    if r!=rank_of_rref(G)
+        throw("something's wrong with the rank or standard form")
+    end
+
+    return G, permute_matrix
 end
 
-function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int,permute_matrix::AbstractMatrix)
+function permute_standard_form(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix)
+    n=size(G_standard,2)÷2
+    hcat(G_standard[:,1:n]*permute_matrix',G_standard[:,n+1:end]*permute_matrix')
+end
 
+function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix)
+    get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix,Dict())
+end
+
+function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix,logical_XZ_ops::Dict)
+
+    r=rank_of_rref(G_standard)
     n, m = size(G_standard, 2) ÷ 2, size(G_standard, 1)
     k = n - m
 
     id, A1, A2, B, C1, C2, D, E = _extract_blocks(G_standard,r)
 
     logical_XZ_vecs=Dict()
+    # logical_XZ_ops_not_permuted=Dict()
+    # logical_XZ_vecs_not_permuted=Dict()
 
     U0=zeros(k,r)
     U2=E'
@@ -89,17 +107,25 @@ function get_XZ_logicals(G_standard::AbstractMatrix,logical_XZ_ops::Dict,r::Int,
     X_vecs=[U0 U2 U3 V1 U1 V3]
     Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
 
-    # X_vecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
-    # Z_vecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
+    # for ki=1:k
+    #     logical_XZ_vecs_not_permuted["Z",ki]=sa.sparse(Z_vecs[ki,:])
+    #     logical_XZ_vecs_not_permuted["X",ki]=sa.sparse(X_vecs[ki,:])
+    #     logical_XZ_ops_not_permuted["Z",ki]=logical_vec_2_ops(Z_vecs[ki,:])
+    #     logical_XZ_ops_not_permuted["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
+    # end
+
+    #permute
+    Xvecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
+    Zvecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
 
     for ki=1:k
-        logical_XZ_vecs["Z",ki]=sa.sparse(Z_vecs[ki,:])
-        logical_XZ_vecs["X",ki]=sa.sparse(X_vecs[ki,:])
-        logical_XZ_ops["Z",ki]=logical_vec_2_ops(Z_vecs[ki,:])
-        logical_XZ_ops["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
+        logical_XZ_vecs["Z",ki]=sa.sparse(Zvecs[ki,:])
+        logical_XZ_vecs["X",ki]=sa.sparse(Xvecs[ki,:])
+        logical_XZ_ops["Z",ki]=logical_vec_2_ops(Zvecs[ki,:])
+        logical_XZ_ops["X",ki]=logical_vec_2_ops(Xvecs[ki,:])
     end
 
-    return logical_XZ_ops, logical_XZ_vecs
+    return logical_XZ_ops, logical_XZ_vecs#, logical_XZ_ops_not_permuted, logical_XZ_vecs_not_permuted
 
 end
 
@@ -139,11 +165,17 @@ function _extract_blocks(G_standard_form,r::Int) #r=rank
     id2=G_standard_form[r+1:m,n+r+1:2n-k]
     E=G_standard_form[r+1:m,2n-k+1:2n]
 
-    return id, A1, A2, B, C1, C2, D, E
+    if (la.one(id) ≈ id) || (la.one(id2) ≈ id2)
+        return id, A1, A2, B, C1, C2, D, E
+    else
+        throw("something's wrong with the standard form")
+    end
+
 end
 
-function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,r::Int)
+function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict)
 
+    r=rank_of_rref(generator_standard)
     #stac ebook, gottesman's thesis
     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
     k=n-m
@@ -397,7 +429,7 @@ struct StabilizerCode #alpha version
     stabilizers::Vector
     generator::AbstractMatrix
     generator_standard::AbstractMatrix
-    generator_permuted::AbstractMatrix
+    permute_matrix::AbstractMatrix
     logicals::Dict
     # codestates::Vector
     # codewords::Vector
@@ -418,26 +450,17 @@ struct StabilizerCode #alpha version
             stabilizers = [join(collect(line), ",") for line in split(chomp(stabilizers), '\n')]
         end
 
-        print("stabilizers")
-        display(stabilizers)
-
         n=length(split.(stabilizers,",")[1])
         m=length(stabilizers)
         k=n-m
-
-        print("n=$(n), m=$(m)")
 
         ##find init from stabilizers
         # stabilizer_matrix=string_to_matrix.(stabilizers)
         generator=stabilizers_to_generator(stabilizers)
  
-        # generator_standard, generator_permuted, r, permute_matrix = get_standard_form(generator)
-
-        _, generator_standard, r, permute_matrix = get_standard_form(generator)#fix: this needs to be fixed
-        generator_permuted=generator_standard
-        
-        logicals, logical_XZ_vecs = get_XZ_logicals(generator_standard,logicals,r,permute_matrix)
-        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,r)
+        generator_standard, permute_matrix = get_standard_form(generator)
+        logicals, logical_XZ_vecs = get_XZ_logicals!(generator_standard,permute_matrix,logicals)
+        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs)
         ops_syndrome=get_ops_syndrome(generator_standard)
 
         # below for codespace and codewords
@@ -628,13 +651,53 @@ struct StabilizerCode #alpha version
         info=(
             len_logical=length(keys(logicals)),
             # len_codestates=len_codestates,
-            logical_XZ_vecs=logical_XZ_vecs,
-            r=r
+            logical_XZ_vecs=logical_XZ_vecs
         )
 
-        # return new(n,k,d,m,stabilizers,generator,generator_standard,logicals,codestates,codewords,ops_encoding,ops_syndrome,stabilizer_matrix,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
-        return new(n,k,d,m,stabilizers,generator,generator_standard,generator_permuted,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 
+end
+
+function reduced_row_echelon_inverse(matrix::AbstractMatrix{Int})
+    n = size(matrix, 1)
+    if n != size(matrix, 2)
+        error("Matrix must be square to compute its inverse.")
+    end
+
+    # Augment the matrix with the identity matrix
+    augmented = hcat(matrix, Matrix{Int}(I(n)))
+
+    # Perform Gauss-Jordan elimination over GF(2)
+    for col in 1:n
+        # Find the pivot in the current column
+        pivot_row = findfirst(augmented[col:end, col] .!= 0)
+        if pivot_row === nothing
+            error("Matrix is singular and cannot be inverted over GF(2).")
+        end
+        pivot_row += col - 1  # Adjust index due to slicing
+
+        # Swap rows if necessary
+        if pivot_row != col
+            augmented[[col, pivot_row], :] = augmented[[pivot_row, col], :]
+        end
+
+        # Eliminate entries in other rows
+        for row in 1:n
+            if row != col && augmented[row, col] == 1
+                augmented[row, :] .= mod.(augmented[row, :] .+ augmented[col, :], 2)
+            end
+        end
+    end
+
+    # Check if left half is identity
+    if any(augmented[:, 1:n] .!= Matrix{Int}(I(n)))
+        error("Matrix is singular and cannot be inverted over GF(2).")
+    end
+
+    # The inverse is the right half of the augmented matrix
+    inverse_matrix = augmented[:, n+1:end]
+
+    return inverse_matrix
 end
