@@ -46,7 +46,7 @@ function get_standard_form(G::AbstractMatrix)
     D = G[(r+1):end, n+1:(n+r)]
     E = G[(r+1):end, (n+r+1):end]
     
-    # if n - k - r != 0
+    if n - k - r != 0
         E_rref, s, E_transform_rows, E_transform_cols = reduced_row_echelon(E)
         
         A = mod.(A * E_transform_cols, 2)
@@ -56,29 +56,20 @@ function get_standard_form(G::AbstractMatrix)
         G_row_1 = hcat(hcat(Matrix{Int}(la.I, r, r), A), hcat(B, C))
         G_row_2 = hcat(zeros(Int, n-k-r, n), hcat(D, E_rref))
         G = vcat(G_row_1, G_row_2)
-    # else
-    #     G_standard=G
-    # end
+    end
     
     permute_matrix_E = Matrix{Int64}(la.I, n, n)
     len_E=size(E_transform_cols,1)
     permute_matrix_E[n-len_E+1:n, n-len_E+1:n] .= E_transform_cols
-    permute_matrix=permute_matrix_E*generator_transform_cols
+    permute_matrix=permute_matrix_E'*generator_transform_cols'
 
     # permute_matrix=reduced_row_echelon_inverse(generator_transform_cols)*reduced_row_echelon_inverse(permute_matrix_E)
-
-    # G_permuted=permute_standard_form(G,permute_matrix)
 
     if r!=rank_of_rref(G)
         throw("something's wrong with the rank or standard form")
     end
 
     return G, permute_matrix
-end
-
-function permute_standard_form(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix)
-    n=size(G_standard,2)÷2
-    hcat(G_standard[:,1:n]*permute_matrix',G_standard[:,n+1:end]*permute_matrix')
 end
 
 function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix)
@@ -114,18 +105,29 @@ function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMat
     #     logical_XZ_ops_not_permuted["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
     # end
 
-    #permute
-    Xvecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
-    Zvecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
+    # # #permute
+    # Xvecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
+    # Zvecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
+
+    # #permute
+    ip=permute_matrix#reduced_row_echelon_inverse()
+    Xvecs=hcat(X_vecs[:,1:n]*ip,X_vecs[:,n+1:end]*ip)
+    Zvecs=hcat(Z_vecs[:,1:n]*ip,Z_vecs[:,n+1:end]*ip)
+
+
+    #don't permute
+    # Xvecs=X_vecs
+    # Zvecs=Z_vecs
 
     for ki=1:k
-        logical_XZ_vecs["Z",ki]=sa.sparse(Zvecs[ki,:])
-        logical_XZ_vecs["X",ki]=sa.sparse(Xvecs[ki,:])
+        logical_XZ_vecs["Z",ki]=Zvecs[ki,:]
+        logical_XZ_vecs["X",ki]=Xvecs[ki,:]
         logical_XZ_ops["Z",ki]=logical_vec_2_ops(Zvecs[ki,:])
         logical_XZ_ops["X",ki]=logical_vec_2_ops(Xvecs[ki,:])
     end
 
     return logical_XZ_ops, logical_XZ_vecs#, logical_XZ_ops_not_permuted, logical_XZ_vecs_not_permuted
+    # return logical_XZ_ops, logical_XZ_vecs_not_permuted# #delete this after test
 
 end
 
@@ -173,7 +175,8 @@ function _extract_blocks(G_standard_form,r::Int) #r=rank
 
 end
 
-function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict)
+
+function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix::Union{AbstractMatrix,Bool}=false)
 
     r=rank_of_rref(generator_standard)
     #stac ebook, gottesman's thesis
@@ -181,15 +184,16 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
     k=n-m
 
     standard_generators_x=generator_standard[:,1:n]
-    standard_generators_z=generator_standard[:,n+1:end]
+    standard_generators_z=generator_standard[:,n+1:end]    
 
     encoding_circuit = Vector{Op}()
+
+    permuted_indices = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
 
     # First loop: Add CX gates based on logical_xs matrix
     for i in 1:k
         for j in r+1:n-k
-            # if logical_XZ_vecs["X̃",i][j]==1
-            if logical_XZ_vecs["X",i][j]==1
+            if logical_XZ_vecs["X",i][j]==1 #X̃
                 push!(encoding_circuit, Op("CX", n-k+i, j))
             end
         end
@@ -215,6 +219,50 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
 
     return encoding_circuit
 end
+
+# function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix::Union{AbstractMatrix,Bool}=false)
+
+#     r=rank_of_rref(generator_standard)
+#     #stac ebook, gottesman's thesis
+#     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
+#     k=n-m
+
+#     standard_generators_x=generator_standard[:,1:n]
+#     standard_generators_z=generator_standard[:,n+1:end]    
+
+#     encoding_circuit = Vector{Op}()
+
+#     permuted_indices = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
+
+#     # First loop: Add CX gates based on logical_xs matrix
+#     for i in 1:k
+#         for j in r+1:n-k
+#             if logical_XZ_vecs["X",i][j]==1 #X̃
+#                 push!(encoding_circuit, Op("CX", n-k+i, j))
+#             end
+#         end
+#     end
+
+#     # Second loop: Add H, CX, and CZ gates based on standard_generators_x and standard_generators_z matrices
+#     for i in 1:r
+#         push!(encoding_circuit, Op("H", i))
+#         for j in 1:n
+#             if i == j
+#                 continue
+#             end
+#             if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1)
+#                 push!(encoding_circuit, Op("CX", i, j))
+#                 push!(encoding_circuit, Op("CZ", i, j))
+#             elseif standard_generators_x[i, j]==1
+#                 push!(encoding_circuit, Op("CX", i, j))
+#             elseif standard_generators_z[i, j]==1
+#                 push!(encoding_circuit, Op("CZ", i, j))
+#             end
+#         end
+#     end
+
+#     return encoding_circuit
+# end
 
 function get_ops_syndrome(generator_standard::AbstractMatrix)
 
@@ -460,7 +508,7 @@ struct StabilizerCode #alpha version
  
         generator_standard, permute_matrix = get_standard_form(generator)
         logicals, logical_XZ_vecs = get_XZ_logicals!(generator_standard,permute_matrix,logicals)
-        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs)
+        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,permute_matrix) #delete this after test
         ops_syndrome=get_ops_syndrome(generator_standard)
 
         # below for codespace and codewords
@@ -667,7 +715,7 @@ function reduced_row_echelon_inverse(matrix::AbstractMatrix{Int})
     end
 
     # Augment the matrix with the identity matrix
-    augmented = hcat(matrix, Matrix{Int}(I(n)))
+    augmented = hcat(matrix, Matrix{Int}(la.I(n)))
 
     # Perform Gauss-Jordan elimination over GF(2)
     for col in 1:n
@@ -692,7 +740,7 @@ function reduced_row_echelon_inverse(matrix::AbstractMatrix{Int})
     end
 
     # Check if left half is identity
-    if any(augmented[:, 1:n] .!= Matrix{Int}(I(n)))
+    if any(augmented[:, 1:n] .!= Matrix{Int}(la.I(n)))
         error("Matrix is singular and cannot be inverted over GF(2).")
     end
 
@@ -700,4 +748,13 @@ function reduced_row_echelon_inverse(matrix::AbstractMatrix{Int})
     inverse_matrix = augmented[:, n+1:end]
 
     return inverse_matrix
+end
+
+function permutation_vector_from_matrix(permute_matrix::AbstractMatrix{Int})
+    n = size(permute_matrix, 1)
+    p = Vector{Int}(undef, n)
+    for i in 1:n
+        p[i] = findfirst(permute_matrix[:, i] .== 1)
+    end
+    return p
 end

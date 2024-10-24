@@ -269,64 +269,12 @@ end
 
 ##========== partial trace  ==========
 
-# """
-#     reduced_row_echelon(generator::AbstractMatrix)
-# """
-# function reduced_row_echelon(generator::AbstractMatrix)
-#     num_rows, num_cols = size(generator)
-#     transform_rows = Matrix{Int}(la.I, num_rows, num_rows)
-#     transform_cols = Matrix{Int}(la.I, num_cols, num_cols)
-#     rank = 0
-
-#     for i in 1:num_rows
-#         # Find the pivot row
-#         pivot_row = i
-#         while pivot_row <= num_rows && generator[pivot_row, i] == 0
-#             pivot_row += 1
-#         end
-
-#         if pivot_row > num_rows
-#             continue
-#         end
-
-#         rank += 1
-
-#         # Swap rows if necessary
-#         if pivot_row != i
-#             generator[i, :], generator[pivot_row, :] = generator[pivot_row, :], generator[i, :]
-#             transform_rows[i, :], transform_rows[pivot_row, :] = transform_rows[pivot_row, :], transform_rows[i, :]
-#         end
-
-#         # Reduce the rows above and below the pivot
-#         for j in 1:num_rows
-#             if j != i && generator[j, i] == 1
-#                 generator[j, :] .= mod.(generator[j, :] .+ generator[i, :], 2)
-#                 transform_rows[j, :] .= mod.(transform_rows[j, :] .+ transform_rows[i, :], 2)
-#             end
-#         end
-
-#         # Swap columns if necessary
-#         if generator[i, i] == 0
-#             for j in (i+1):num_cols
-#                 if generator[i, j] == 1
-#                     generator[:, i], generator[:, j] = generator[:, j], generator[:, i]
-#                     transform_cols[:, i], transform_cols[:, j] = transform_cols[:, j], transform_cols[:, i]
-#                     break
-#                 end
-#             end
-#         end
-#     end
-
-#     return generator, rank, transform_rows, transform_cols
-# end
-
 """
     reduced_row_echelon(generator::AbstractMatrix)
 """
 function reduced_row_echelon(generator::AbstractMatrix{Int})
     num_rows, num_cols = size(generator)
     transform_rows = Matrix{Int}(la.I(num_rows))
-    transform_cols = Matrix{Int}(la.I(num_cols))
     pivots = []
     i = 1  # row index
     j = 1  # column index
@@ -353,24 +301,81 @@ function reduced_row_echelon(generator::AbstractMatrix{Int})
                 end
             end
             i += 1
-            j += 1
-        else
-            # Attempt to swap columns
-            swap_col = findfirst(generator[i, j+1:end] .!= 0)
-            if swap_col !== nothing
-                swap_col += j  # Adjust index because of slicing
-                generator[:, [j, swap_col]] = generator[:, [swap_col, j]]
-                transform_cols[:, [j, swap_col]] = transform_cols[:, [swap_col, j]]
-            else
-                j += 1
-            end
         end
+        j += 1  # Always move to the next column
     end
 
-    rank=length(pivots)
+    rank = length(pivots)
 
-    return generator, rank, transform_rows, transform_cols
+    # Reorder columns to place pivot columns first
+    pivot_cols = [j for (i, j) in pivots]
+    non_pivot_cols = setdiff(1:num_cols, pivot_cols)
+    permuted_indices = vcat(pivot_cols, non_pivot_cols)
+
+    # Reorder generator and transform_cols accordingly
+    generator = generator[:, permuted_indices]
+    transform_cols = Matrix{Int}(la.I(num_cols))[:, permuted_indices]
+
+    return generator .% 2, rank, transform_rows .% 2, transform_cols
 end
+
+# """
+#     reduced_row_echelon(generator::AbstractMatrix)
+# """
+# function reduced_row_echelon(A::AbstractMatrix{Int})
+#     m, n = size(A)
+#     # Augment A with identity matrix to track transformations
+#     B = hcat(A .% 2, Matrix{Int}(la.I, m, m))
+#     pivots = Int[]
+#     r = 1  # Row index
+
+#     for c in 1:n  # Column index
+#         # Find pivot in column c at or below row r
+#         pivot_rows = findall(B[r:end, c] .% 2 .≠ 0) .+ (r - 1)
+#         if !isempty(pivot_rows)
+#             i = pivot_rows[1]
+#             # Swap row r and pivot row i
+#             if i ≠ r
+#                 B[[r, i], :] = B[[i, r], :]
+#             end
+#             # Record pivot
+#             push!(pivots, c)
+#             # Eliminate other entries in column c
+#             for k in 1:m
+#                 if k ≠ r && B[k, c] % 2 ≠ 0
+#                     B[k, :] = (B[k, :] .+ B[r, :]) .% 2
+#                 end
+#             end
+#             r += 1
+#             if r > m
+#                 break
+#             end
+#         end
+#     end
+
+#     # Determine columns not used as pivots
+#     all_columns = collect(1:n)
+#     pivot_set = Set(pivots)
+#     non_pivots = [col for col in all_columns if col ∉ pivot_set]
+
+#     # Combine pivot columns with non-pivot columns
+#     permuted_indices = vcat(pivots, non_pivots)
+
+#     # Extract H and U from the augmented matrix
+#     H = B[:, 1:n]
+#     U = B[:, n+1:end]
+
+#     # Reorder H columns based on pivot and non-pivot indices
+#     H = H[:, permuted_indices]
+
+#     # Construct permutation matrix P
+#     P = zeros(Int, n, n)
+#     for i in 1:n
+#         P[permuted_indices[i], i] = 1
+#     end
+
+#     return (H .% 2, length(pivots), U .% 2, P)
+# end
 
 function rank_of_rref(A::AbstractMatrix{Int})
     len_cols=size(A,2)÷2
