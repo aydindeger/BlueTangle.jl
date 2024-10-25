@@ -61,7 +61,7 @@ function get_standard_form(G::AbstractMatrix)
     permute_matrix_E = Matrix{Int64}(la.I, n, n)
     len_E=size(E_transform_cols,1)
     permute_matrix_E[n-len_E+1:n, n-len_E+1:n] .= E_transform_cols
-    permute_matrix=permute_matrix_E'*generator_transform_cols'
+    permute_matrix_inv=permute_matrix_E'*generator_transform_cols'
 
     # permute_matrix=reduced_row_echelon_inverse(generator_transform_cols)*reduced_row_echelon_inverse(permute_matrix_E)
 
@@ -69,14 +69,14 @@ function get_standard_form(G::AbstractMatrix)
         throw("something's wrong with the rank or standard form")
     end
 
-    return G, permute_matrix
+    return G, permute_matrix_inv
 end
 
-function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix)
-    get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix,Dict())
+function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix)
+    get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix,Dict())
 end
 
-function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMatrix,logical_XZ_ops::Dict)
+function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix,logical_XZ_ops::Dict)
 
     r=rank_of_rref(G_standard)
     n, m = size(G_standard, 2) ÷ 2, size(G_standard, 1)
@@ -110,7 +110,7 @@ function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix::AbstractMat
     # Zvecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
 
     # #permute
-    ip=permute_matrix#reduced_row_echelon_inverse()
+    ip=permute_matrix_inv#reduced_row_echelon_inverse(permute_matrix)
     Xvecs=hcat(X_vecs[:,1:n]*ip,X_vecs[:,n+1:end]*ip)
     Zvecs=hcat(Z_vecs[:,1:n]*ip,Z_vecs[:,n+1:end]*ip)
 
@@ -176,28 +176,28 @@ function _extract_blocks(G_standard_form,r::Int) #r=rank
 end
 
 
-function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix::Union{AbstractMatrix,Bool}=false)
+function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix_inv::Union{AbstractMatrix,Bool}=false)
 
     r=rank_of_rref(generator_standard)
     #stac ebook, gottesman's thesis
     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
     k=n-m
 
-    standard_generators_x=generator_standard[:,1:n]
-    standard_generators_z=generator_standard[:,n+1:end]    
+    standard_generators_x=generator_standard[:,1:n]#*permute_matrix_inv
+    standard_generators_z=generator_standard[:,n+1:end]#*permute_matrix_inv
 
     encoding_circuit = Vector{Op}()
 
-    permuted_indices = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
+    permuted_indices = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
 
-    # First loop: Add CX gates based on logical_xs matrix
-    for i in 1:k
-        for j in r+1:n-k
-            if logical_XZ_vecs["X",i][j]==1 #X̃
-                push!(encoding_circuit, Op("CX", n-k+i, j))
-            end
-        end
-    end
+    # # First loop: Add CX gates based on logical_xs matrix
+    # for i in 1:k
+    #     for j in r+1:n-k
+    #         if logical_XZ_vecs["X",i][j]==1 #X̃
+    #             push!(encoding_circuit, Op("CX", n-k+i, j))
+    #         end
+    #     end
+    # end
 
     # Second loop: Add H, CX, and CZ gates based on standard_generators_x and standard_generators_z matrices
     for i in 1:r
@@ -477,7 +477,7 @@ struct StabilizerCode #alpha version
     stabilizers::Vector
     generator::AbstractMatrix
     generator_standard::AbstractMatrix
-    permute_matrix::AbstractMatrix
+    permute_matrix_inv::AbstractMatrix
     logicals::Dict
     # codestates::Vector
     # codewords::Vector
@@ -506,9 +506,9 @@ struct StabilizerCode #alpha version
         # stabilizer_matrix=string_to_matrix.(stabilizers)
         generator=stabilizers_to_generator(stabilizers)
  
-        generator_standard, permute_matrix = get_standard_form(generator)
-        logicals, logical_XZ_vecs = get_XZ_logicals!(generator_standard,permute_matrix,logicals)
-        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,permute_matrix) #delete this after test
+        generator_standard, permute_matrix_inv = get_standard_form(generator)
+        logicals, logical_XZ_vecs = get_XZ_logicals!(generator_standard,permute_matrix_inv,logicals)
+        ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,permute_matrix_inv) #delete this after test
         ops_syndrome=get_ops_syndrome(generator_standard)
 
         # below for codespace and codewords
@@ -562,7 +562,9 @@ struct StabilizerCode #alpha version
             end
 
             if isempty(physical_qubits_keep)
-                physical_qubits_keep=collect(n-k+1:n)
+                permuted_indices = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
+                keep_qubits=collect(n-k+1:n)
+                physical_qubits_keep=permuted_indices[keep_qubits]
             end
 
             return reduce_hilbert_space(state,physical_qubits_keep;qubit_mapping=qubit_mapping)
@@ -702,7 +704,7 @@ struct StabilizerCode #alpha version
             logical_XZ_vecs=logical_XZ_vecs
         )
 
-        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix_inv,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 
