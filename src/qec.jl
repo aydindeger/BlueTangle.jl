@@ -85,8 +85,6 @@ function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::Abstrac
     id, A1, A2, B, C1, C2, D, E = _extract_blocks(G_standard,r)
 
     logical_XZ_vecs=Dict()
-    # logical_XZ_ops_not_permuted=Dict()
-    # logical_XZ_vecs_not_permuted=Dict()
 
     U0=zeros(k,r)
     U2=E'
@@ -98,36 +96,19 @@ function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::Abstrac
     X_vecs=[U0 U2 U3 V1 U1 V3]
     Z_vecs=[zeros(k,n) A2' U1 la.I(k)]
 
-    # for ki=1:k
-    #     logical_XZ_vecs_not_permuted["Z",ki]=sa.sparse(Z_vecs[ki,:])
-    #     logical_XZ_vecs_not_permuted["X",ki]=sa.sparse(X_vecs[ki,:])
-    #     logical_XZ_ops_not_permuted["Z",ki]=logical_vec_2_ops(Z_vecs[ki,:])
-    #     logical_XZ_ops_not_permuted["X",ki]=logical_vec_2_ops(X_vecs[ki,:])
-    # end
-
-    # # #permute
-    # Xvecs=hcat(X_vecs[:,1:n]*permute_matrix,X_vecs[:,n+1:end]*permute_matrix)
-    # Zvecs=hcat(Z_vecs[:,1:n]*permute_matrix,Z_vecs[:,n+1:end]*permute_matrix)
-
     # #permute
     ip=permute_matrix_inv#reduced_row_echelon_inverse(permute_matrix)
     Xvecs=hcat(X_vecs[:,1:n]*ip,X_vecs[:,n+1:end]*ip)
     Zvecs=hcat(Z_vecs[:,1:n]*ip,Z_vecs[:,n+1:end]*ip)
 
-
-    #don't permute
-    # Xvecs=X_vecs
-    # Zvecs=Z_vecs
-
     for ki=1:k
-        logical_XZ_vecs["Z",ki]=Zvecs[ki,:]
-        logical_XZ_vecs["X",ki]=Xvecs[ki,:]
+        logical_XZ_vecs["Z",ki]=sa.sparse(Zvecs[ki,:])
+        logical_XZ_vecs["X",ki]=sa.sparse(Xvecs[ki,:])
         logical_XZ_ops["Z",ki]=logical_vec_2_ops(Zvecs[ki,:])
         logical_XZ_ops["X",ki]=logical_vec_2_ops(Xvecs[ki,:])
     end
 
-    return logical_XZ_ops, logical_XZ_vecs#, logical_XZ_ops_not_permuted, logical_XZ_vecs_not_permuted
-    # return logical_XZ_ops, logical_XZ_vecs_not_permuted# #delete this after test
+    return logical_XZ_ops, logical_XZ_vecs
 
 end
 
@@ -183,30 +164,47 @@ function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logi
     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
     k=n-m
 
-    standard_generators_x=generator_standard[:,1:n]#*permute_matrix_inv
-    standard_generators_z=generator_standard[:,n+1:end]#*permute_matrix_inv
+    standard_generators_x=generator_standard[:,1:n]
+    standard_generators_z=generator_standard[:,n+1:end]
 
     encoding_circuit = Vector{Op}()
 
-    permuted_indices = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
+    permute_vector = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
 
     # # First loop: Add CX gates based on logical_xs matrix
-    # for i in 1:k
-    #     for j in r+1:n-k
+    # for i in 1:k #logical qubits
+    #     for j in r+1:n-k #ancilla qubits
     #         if logical_XZ_vecs["X",i][j]==1 #X̃
     #             push!(encoding_circuit, Op("CX", n-k+i, j))
     #         end
     #     end
     # end
 
+    # First loop: Add CX gates based on logical_xs matrix
+    qubitind=la.zero(1:k)
+    for i in 1:k #logical qubits
+        for j in n:-1:1 #ancilla qubits
+            if logical_XZ_vecs["X",i][j]==1 #X̃
+                if qubitind[i]==0
+                    qubitind[i]=j
+                else
+                    push!(encoding_circuit, Op("CX", qubitind[i], j))
+                end
+            end
+        end
+    end
+
+    println("qubitind=$(qubitind)")
+
     # Second loop: Add H, CX, and CZ gates based on standard_generators_x and standard_generators_z matrices
     for i in 1:r
         push!(encoding_circuit, Op("H", i))
-        for j in 1:n
+        for j in setdiff(1:n,qubitind)
             if i == j
                 continue
             end
-            if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1)
+
+            if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1) #fix: might be wrong
                 push!(encoding_circuit, Op("CX", i, j))
                 push!(encoding_circuit, Op("CZ", i, j))
             elseif standard_generators_x[i, j]==1
@@ -232,7 +230,7 @@ end
 
 #     encoding_circuit = Vector{Op}()
 
-#     permuted_indices = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
+#     permute_vector = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
 
 #     # First loop: Add CX gates based on logical_xs matrix
 #     for i in 1:k
@@ -478,6 +476,7 @@ struct StabilizerCode #alpha version
     generator::AbstractMatrix
     generator_standard::AbstractMatrix
     permute_matrix_inv::AbstractMatrix
+    permute_vector::AbstractVectorS
     logicals::Dict
     # codestates::Vector
     # codewords::Vector
@@ -507,6 +506,7 @@ struct StabilizerCode #alpha version
         generator=stabilizers_to_generator(stabilizers)
  
         generator_standard, permute_matrix_inv = get_standard_form(generator)
+        permute_vector = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
         logicals, logical_XZ_vecs = get_XZ_logicals!(generator_standard,permute_matrix_inv,logicals)
         ops_encoding=encoding_circuit_from_generator(generator_standard,logical_XZ_vecs,permute_matrix_inv) #delete this after test
         ops_syndrome=get_ops_syndrome(generator_standard)
@@ -527,14 +527,31 @@ struct StabilizerCode #alpha version
         new_ops(op::QuantumOps)=code_ops(op,logicals)
         new_ops(ops::Vector{QuantumOps})=code_ops(ops,logicals)
 
-        function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
+        # function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
 
-            N=get_N(state_init)
-            if N!=k
-                throw(ArgumentError("init state cannot be larger than k=$(k) of the code."))
+        #new_encode= :plus, :minus, :T or :zero
+        function new_encode(state_init_sym::Symbol=:zero;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
+
+            # state_init=zero_state(k)
+            # state=la.kron(zero_state(n-k),state_init)
+
+            state=zero_state(n)
+            permute_vector_logicals = permute_vector[n-k+1:n]
+
+            if state_init_sym==:plus #you can prepare other init states here
+                for i=permute_vector_logicals
+                    state=Op("H",i)*state
+                end
+            elseif state_init_sym==:minus #you can prepare other init states here
+                state=one_state(n)
+                for i=permute_vector_logicals
+                    state=Op("H",i)*state
+                end
+            elseif state_init_sym==:T #you can prepare other init states here
+                for i=permute_vector_logicals
+                    state=Op("T",i)*state
+                end
             end
-
-            state=la.kron(zero_state(n-k),state_init)
 
             ops=isempty(encoding) ? ops_encoding : encoding
             for o=ops
@@ -562,9 +579,8 @@ struct StabilizerCode #alpha version
             end
 
             if isempty(physical_qubits_keep)
-                permuted_indices = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
                 keep_qubits=collect(n-k+1:n)
-                physical_qubits_keep=permuted_indices[keep_qubits]
+                physical_qubits_keep=permute_vector[keep_qubits]
             end
 
             return reduce_hilbert_space(state,physical_qubits_keep;qubit_mapping=qubit_mapping)
@@ -583,6 +599,8 @@ struct StabilizerCode #alpha version
         end
 
         function new_syndrome(state_encoded::AbstractVectorS;noise::Union{Bool,NoiseModel}=false)
+
+            throw("fix: needs to be fixed")
 
             if get_N(state_encoded)!=n
                 throw("input state must be encoded in the code")
@@ -613,6 +631,7 @@ struct StabilizerCode #alpha version
 
         function new_correct(state_encoded_ancillas::AbstractVectorS,syndrome_vec::Vector;noise::Union{Bool,NoiseModel}=false)
 
+            throw("fix: needs to be fixed")
             if 0<d<=2
                 throw("The code cannot correct errors!")
             end
@@ -632,6 +651,7 @@ struct StabilizerCode #alpha version
 
         function new_correct(state_encoded::AbstractVectorS;noise::Union{Bool,NoiseModel}=false) #firstly measure syndromes
 
+            throw("fix: needs to be fixed")
             if 0<d<=2
                 throw("The code cannot correct errors!")
             end
@@ -704,7 +724,7 @@ struct StabilizerCode #alpha version
             logical_XZ_vecs=logical_XZ_vecs
         )
 
-        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix_inv,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix_inv,permute_vector,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 
