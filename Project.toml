@@ -15,8 +15,6 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-ITensorMPS = "0.3.2"
-LinearAlgebra = "1.11.0"
 julia = "1"
 
 [extras]
