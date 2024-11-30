@@ -1,6 +1,6 @@
 import SparseArrays as sa
 import LinearAlgebra as la
-import ITensors as it
+import ITensorMPS as it
 import StatsBase as sb
 import Pkg
 

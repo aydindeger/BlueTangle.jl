@@ -465,8 +465,8 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
     end
 
     function new_expand(sites::Vector{it.Index{Int64}})
-        if control!=-2 || size(mat,1)>4
-            throw("nonlocal tensor is not supported")
+        if control!=-2# || size(mat,1)>4
+            throw("control tensor is not supported")
         end
 
         if target_qubit == -1
@@ -654,21 +654,21 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,f::Function)
 
-        new_apply(state::AbstractVectorS;kwargs...)=f(state;kwargs...)
+        new_apply(state::Union{AbstractVectorS,it.MPS};kwargs...)=f(state;kwargs...)
 
         return new(1,name,new_apply,f)
     end
 
     function OpF(name::String,mat::AbstractMatrixS)
 
-        new_apply_mat(state::AbstractVectorS)=mat*state
+        new_apply_mat(state::Union{AbstractVectorS,it.MPS})=mat*state
 
         return new(1,name,new_apply_mat,mat)
     end
     
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
         
-        function new_apply_mat2(state::AbstractVectorS)
+        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS})
             for o=ops
                 state=o*state
             end

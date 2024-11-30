@@ -194,10 +194,10 @@ This function processes a list of quantum operations, updating qubit indices to 
 # Example
 ```julia
 ops = [
-    Op("H", 1, -1, -2, false),
-    Op("SWAP", 1, 2, -2, false),
-    Op("CNOT", 1, 2, -2, false),
-    Op("X", 2, -1, -2, false)
+    Op("H", 1, false),
+    Op("SWAP", 1, 2,  false),
+    Op("CNOT", 1, 2,false),
+    Op("X", 2, false)
 ]
 
 relabeled_ops, final_mapping = swap_relabel(ops)

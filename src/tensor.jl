@@ -47,15 +47,15 @@ expect(psi::it.MPS,op_str::String)=it.expect(psi, op_str)
 # ψ0 = MPS(s, n -> n == 1 ? "↓" : "↑")
 
 """
-to_state(MPS::it.ITensors.MPS,M::Vector{it.Index{Int64}})
+to_state(MPS::it.MPS,M::Vector{it.Index{Int64}})
 
     Convert MPS to state vector
 """
-to_state(MPS::it.ITensors.MPS,M::Vector{it.Index{Int64}})=sa.sparse(reshape(it.array(it.contract(MPS),reverse(M)),2^length(M)))
-to_state(MPS::it.ITensors.MPS)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(it.siteinds(MPS))),2^length(MPS)))
+to_state(MPS::it.MPS,M::Vector{it.Index{Int64}})=sa.sparse(reshape(it.array(it.contract(MPS),reverse(M)),2^length(M)))
+to_state(MPS::it.MPS)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(it.siteinds(MPS))),2^length(MPS)))
 
 #this is wrong!
-# to_state(MPS::it.ITensors.MPS)=round.(sa.sparse(reshape(it.contract(MPS).tensor,2^length(MPS))),digits=10)
+# to_state(MPS::it.MPS)=round.(sa.sparse(reshape(it.contract(MPS).tensor,2^length(MPS))),digits=10)
 
 function reflectMPS(psi::it.MPS)
     N = length(psi)
@@ -122,10 +122,10 @@ function amplitude(psi::it.MPS,config::Vector)
 end
 
 """
-    prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
+    prob(state::Union{sa.SparseVector,it.MPS},shots::Int,select_qubit::Int)
 this gives probability of measuring 0 and 1 on select_qubit after shots
 """
-function prob(state::Union{sa.SparseVector,it.ITensors.MPS},shots::Int,select_qubit::Int)
+function prob(state::Union{sa.SparseVector,it.MPS},shots::Int,select_qubit::Int)
 
     all_sample=hcat(sample_bit(state,shots)...)[select_qubit,:]
 
@@ -140,18 +140,18 @@ end
 sample state/MPS
 """
 sample_bit(state::AbstractVectorS,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
-sample_bit(MPS::it.ITensors.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
+sample_bit(MPS::it.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
 
 """
-inner(ψ::AbstractVectorS,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
-inner(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
+inner(ψ::AbstractVectorS,MPS::it.MPS)=ψ'to_state(MPS)
+inner(MPS::it.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
 inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
-inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
+inner(MPS::it.MPS,MPS2::it.MPS)=it.inner(MPS',MPS2)
 """
-inner(ψ::AbstractVectorS,MPS::it.ITensors.MPS)=ψ'to_state(MPS)
-inner(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
+inner(ψ::AbstractVectorS,MPS::it.MPS)=ψ'to_state(MPS)
+inner(MPS::it.MPS,ψ::AbstractVectorS)=inner(ψ,MPS)
 inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
-inner(MPS::it.ITensors.MPS,MPS2::it.ITensors.MPS)=it.inner(MPS',MPS2)
+inner(MPS::it.MPS,MPS2::it.MPS)=it.inner(MPS',MPS2)
 
 
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
@@ -173,12 +173,12 @@ function fidelity(rho::AbstractMatrix, sigma::AbstractMatrix)
 end
 
 """
-    fidelity(ψ::it.ITensors.MPS,ψ::AbstractVectorS)=abs2(inner(ψ,MPS))
+    fidelity(ψ::it.MPS,ψ::AbstractVectorS)=abs2(inner(ψ,MPS))
 """
-fidelity(ψ::it.ITensors.MPS,ψ2::it.ITensors.MPS)=abs2(inner(ψ,ψ2))
+fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
 
-# inner_slow(MPS::it.ITensors.MPS,ψ::AbstractVectorS,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
-# inner_slow(MPS::it.ITensors.MPS,ψ::AbstractVectorS)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))
+# inner_slow(MPS::it.MPS,ψ::AbstractVectorS,maxdim::Int)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS),maxdim))
+# inner_slow(MPS::it.MPS,ψ::AbstractVectorS)=it.inner(MPS',to_MPS(ψ,it.siteinds(MPS)))
 
 # function entanglement_entropy(psi::it.MPS, b::Int)
 #     s = it.siteinds(psi)  
