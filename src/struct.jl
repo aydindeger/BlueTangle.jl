@@ -348,8 +348,8 @@ Represents a quantum operation.
 - `q`: Number of qubits involved in the operation.
 - `name`: Name of the operation.
 - `mat`: Matrix representation of the quantum operation.
-- `qubit`: Index of the target qubit.
-- `target_qubit`: Index of the target qubit for two-qubit operations.
+- `qubit`: index of the target qubit.
+- `target_qubit`: index of the target qubit for two-qubit operations.
 - `noise`: Noise model associated with the operation.
 
 Constructs an Op object representing a quantum operation with optional noise.
@@ -464,7 +464,7 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
         return rv
     end
 
-    function new_expand(sites::Vector{it.Index{Int64}})
+    function new_expand(sites::Vector)
         if control!=-2# || size(mat,1)>4
             throw("control tensor is not supported")
         end
@@ -495,7 +495,7 @@ function _get_new_expand(f::Function, qubit::Int, target_qubit::Int, control::In
         return rv
     end
 
-    function new_expand(sites::Vector{it.Index{Int64}},pars...)
+    function new_expand(sites::Vector,pars...)
         # if (target_qubit > 0 && abs(qubit-target_qubit)>1) || control!=-2
         #     throw("nonlocal tensor is not supported")
         # end
@@ -626,7 +626,7 @@ struct ifOp <: QuantumOps
         new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
         new_born_apply(rho::sa.SparseMatrixCSC,noise=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise)
 
-        function new_expand(sites::Vector{it.Index{Int64}})
+        function new_expand(sites::Vector{it.Index})
             throw("error: fix")
             # _mat_to_tensor(sites,_measurement_mat(name),qubit)
         end
