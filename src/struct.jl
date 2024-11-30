@@ -626,7 +626,7 @@ struct ifOp <: QuantumOps
         new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
         new_born_apply(rho::sa.SparseMatrixCSC,noise=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise)
 
-        function new_expand(sites::Vector{it.Index})
+        function new_expand(sites::Vector)
             throw("error: fix")
             # _mat_to_tensor(sites,_measurement_mat(name),qubit)
         end

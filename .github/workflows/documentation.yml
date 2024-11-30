@@ -19,7 +19,7 @@ jobs:
       # Set up Julia
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.9'
+          version: '1.11'
 
       # # Set up Python and install matplotlib
       # - name: Set up Python
