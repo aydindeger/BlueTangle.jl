@@ -6,7 +6,10 @@ import Pkg
 
 using ForwardDiff, Optimisers, OptimKit
 
+const AbstractVectorST = Union{AbstractVector, sa.SparseVector, it.MPS}
 const AbstractVectorS = Union{AbstractVector, sa.SparseVector}
+
+const AbstractMatrixST = Union{AbstractMatrix, sa.SparseMatrixCSC, it.MPO}
 const AbstractMatrixS = Union{AbstractMatrix, sa.SparseMatrixCSC}
 
 include("struct.jl")
@@ -14,7 +17,7 @@ include("decompose.jl")
 include("hilbert.jl")
 include("func.jl")
 include("ops.jl")
-# include("qec.jl")
+include("qec.jl")
 include("bit.jl")
 include("layout.jl")
 include("gates.jl")

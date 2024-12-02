@@ -26,6 +26,7 @@ function stabilizers_to_generator(stabilizers::Vector)
     return generator_matrix
 end
 
+
 """
 get_standard_form(G::AbstractMatrix)
 """
@@ -48,7 +49,7 @@ function get_standard_form(G::AbstractMatrix)
     
     E_rref, s, E_transform_rows, E_transform_cols = reduced_row_echelon(E)
 
-    if n - k - r != 0     
+    if n - k - r != 0
         A = mod.(A * E_transform_cols, 2)
         C = mod.(C * E_transform_cols, 2)
         D = mod.(E_transform_rows * D, 2)
@@ -62,13 +63,15 @@ function get_standard_form(G::AbstractMatrix)
     len_E=size(E_transform_cols,1)
     permute_matrix_E[n-len_E+1:n, n-len_E+1:n] .= E_transform_cols
     permute_matrix_inv=permute_matrix_E'*generator_transform_cols'
-    # permute_matrix_inv=reduced_row_echelon_inverse(permute_matrix_E)*reduced_row_echelon_inverse(generator_transform_cols)
 
     if r!=rank_of_rref(G)
         throw("something's wrong with the rank or standard form")
     end
 
-    return G, permute_matrix_inv
+    permute_vector_inv = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n] #' is correct
+    logical_indices=[permute_vector_inv[n-k+i] for i=1:k]
+
+    return G, permute_matrix_inv, permute_vector_inv, logical_indices
 end
 
 function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix)
@@ -107,7 +110,7 @@ function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::Abstrac
         logical_XZ_ops["X",ki]=logical_vec_2_ops(Xvecs[ki,:])
     end
 
-    return logical_XZ_ops, sa.sparse(Xvecs),sa.sparse(Zvecs) #logical_XZ_vecs
+    return logical_XZ_ops, sa.sparse(Xvecs), sa.sparse(Zvecs)
 
 end
 
@@ -155,220 +158,58 @@ function _extract_blocks(G_standard_form,r::Int) #r=rank
 
 end
 
-function encoding_circuit_from_generator(generator_standard::AbstractMatrix,Xvecs::AbstractMatrixS,qubit_rearrange)
+function encoding_circuit_from_generator(generator_standard::AbstractMatrix,Xvecs::AbstractMatrixS,permute_vector_inv::AbstractVector)
 
     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
     r=rank_of_rref(generator_standard)
     k=n-m
-
+    
     encoding_circuit = Vector{Op}()
-
-    for i in 1:k
-
-        control_qubit=qubit_rearrange[n-k+i]
-
+    
+    # First loop: Add CX gates based on logical_xs matrix
+    for i in 1:k #goes over whole
+    
+        control_qubit=permute_vector_inv[n-k+i]
+    
         # if Xvecs[i,control_qubit]==1
         #    #control qubit 
         # end
-
+    
         for j in 1:n
-            if (i+n-k) != j
+            if control_qubit != j
                 if Xvecs[i,j]==1
-                    push!(encoding_circuit,Op("X",j;control=control_qubit))
+                    push!(encoding_circuit,Op("CX",control_qubit,j))
                 end
             end
         end
-
+    
     end
     
     for i in 1:r
     
+        control_qubit=i
         if generator_standard[i,i+n]==0
             push!(encoding_circuit, Op("H", i))
-            control_qubit=i
         else
             push!(encoding_circuit, Op("H", i))
             push!(encoding_circuit, Op("S", i))
-            control_qubit=i
         end
     
         for j in 1:n
             if i != j
                 if (generator_standard[i, j]==1) && (generator_standard[i, j+n]==0)
-                    push!(encoding_circuit, Op("X", j;control=control_qubit))
+                    push!(encoding_circuit, Op("CX", control_qubit,j))
                 elseif (generator_standard[i, j]==0) && (generator_standard[i, j+n]==1)
-                    push!(encoding_circuit, Op("Z", j;control=control_qubit))
+                    push!(encoding_circuit, Op("CZ", control_qubit, j))
                 elseif (generator_standard[i, j]==1) && (generator_standard[i, j+n]==1)
-                    push!(encoding_circuit, Op("Y", j;control=control_qubit))
+                    push!(encoding_circuit, Op("CY", control_qubit,j))
                 end
             end
         end
     end
+    
     return encoding_circuit
 end
-
-# function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix_inv::Union{AbstractMatrix,Bool}=false)
-
-#     r=rank_of_rref(generator_standard)
-#     #stac ebook, gottesman's thesis
-#     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
-#     k=n-m
-
-#     standard_generators_x=generator_standard[:,1:n]
-#     standard_generators_z=generator_standard[:,n+1:end]
-
-#     encoding_circuit = Vector{Op}()
-
-#     encoding_circuit_last = Vector{Op}()
-#     # First loop: Add CX gates based on logical_xs matrix
-#     qubitind=la.zero(1:k)
-#     for i in 1:k #logical qubits
-#         for j in n:-1:1 #ancilla qubits
-#             if logical_XZ_vecs["X",i][j]==1 #X̃
-#                 if qubitind[i]==0
-#                     qubitind[i]=j
-#                 else
-#                     push!(encoding_circuit_last, Op("CX", qubitind[i], j))
-#                 end
-#             end
-#         end
-#     end
-
-#     encoding_circuit_first = Vector{Op}()
-#     # Second loop: Add H, CX, and CZ gates based on standard_generators_x and standard_generators_z matrices
-#     for i in 1:r
-#         push!(encoding_circuit_first, Op("H", i))
-#         for j in 1:n#setdiff(1:n,qubitind)
-            
-#             if i == j
-#                 continue
-#             end
-
-#             if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1) #fix: might be wrong
-#                 push!(encoding_circuit_first, Op("CX", i, j))
-#                 push!(encoding_circuit_first, Op("CZ", i, j))
-#             elseif standard_generators_x[i, j]==1
-#                 push!(encoding_circuit_first, Op("CX", i, j))
-#             elseif standard_generators_z[i, j]==1
-#                 push!(encoding_circuit_first, Op("CZ", i, j))
-#             end
-#         end
-#     end
-
-#     append!(encoding_circuit,encoding_circuit_last)
-#     append!(encoding_circuit,encoding_circuit_first)
-
-#     return encoding_circuit
-# end
-
-
-# function encoding_circuit_from_generator(Hs::AbstractMatrix, logical_XZ_vecs::Dict,permute_matrix::Union{AbstractMatrix,Bool}=false)
-#     n = size(Hs, 2) ÷ 2          # Number of physical qubits
-#     m = size(Hs, 1)              # Number of stabilizer generators
-#     k = n - m                    # Number of logical qubits
-#     r = m                        # Assuming full rank for stabilizer generators
-
-#     encoding_circuit = Vector{Op}()
-
-#     # First loop: Encoding logical qubits
-#     for i in 1:k
-#         control_qubit = i + n - k  # Control qubit index
-
-#         # Check if the logical X operator has a 1 at the control qubit
-#         if logical_XZ_vecs["X", i][control_qubit] == 1
-#             # Control qubit is active; proceed to apply controlled operations
-#             nothing  # Placeholder (no action needed here)
-#         end
-
-#         for j in 1:n
-#             if control_qubit != j && logical_XZ_vecs["X", i][j] == 1
-#                 # Apply CNOT gate with control at control_qubit and target at j
-#                 push!(encoding_circuit, Op("CX", control_qubit, j))
-#             end
-#         end
-#     end
-
-#     # Second loop: Encoding stabilizer generators
-#     for i in 1:r
-#         if Hs[i, i + n] == 0
-#             # Apply H gate followed by control dot at qubit i
-#             push!(encoding_circuit, Op("H", i))
-#         else
-#             # Apply H gate, S gate, and control dot at qubit i
-#             push!(encoding_circuit, Op("H", i))
-#             push!(encoding_circuit, Op("S", i))
-#         end
-
-#         for j in 1:n
-#             if i != j
-#                 x_i_j = Hs[i, j]
-#                 z_i_j = Hs[i, j + n]
-#                 if x_i_j == 1 && z_i_j == 0
-#                     # Apply CNOT gate with control at i and target at j
-#                     push!(encoding_circuit, Op("CX", i, j))
-#                 elseif x_i_j == 0 && z_i_j == 1
-#                     # Apply CZ gate with control at i and target at j
-#                     push!(encoding_circuit, Op("CZ", i, j))
-#                 elseif x_i_j == 1 && z_i_j == 1
-#                     # Decompose controlled-Y gate into known gates
-#                     push!(encoding_circuit, Op("Sd", i))
-#                     push!(encoding_circuit, Op("CX", i, j))
-#                     push!(encoding_circuit, Op("S", j))
-#                     push!(encoding_circuit, Op("CX", i, j))
-#                 end
-#             end
-#         end
-#     end
-
-#     return encoding_circuit
-# end
-
-
-
-
-# function encoding_circuit_from_generator(generator_standard::AbstractMatrix,logical_XZ_vecs::Dict,permute_matrix::Union{AbstractMatrix,Bool}=false)
-
-#     r=rank_of_rref(generator_standard)
-#     #stac ebook, gottesman's thesis
-#     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
-#     k=n-m
-
-#     standard_generators_x=generator_standard[:,1:n]
-#     standard_generators_z=generator_standard[:,n+1:end]    
-
-#     encoding_circuit = Vector{Op}()
-
-#     permute_vector_inv = [findfirst(permute_matrix[:, i] .== 1) for i in 1:n]
-
-#     # First loop: Add CX gates based on logical_xs matrix
-#     for i in 1:k
-#         for j in r+1:n-k
-#             if logical_XZ_vecs["X",i][j]==1 #X̃
-#                 push!(encoding_circuit, Op("CX", n-k+i, j))
-#             end
-#         end
-#     end
-
-#     # Second loop: Add H, CX, and CZ gates based on standard_generators_x and standard_generators_z matrices
-#     for i in 1:r
-#         push!(encoding_circuit, Op("H", i))
-#         for j in 1:n
-#             if i == j
-#                 continue
-#             end
-#             if (standard_generators_x[i, j]==1) && (standard_generators_z[i, j]==1)
-#                 push!(encoding_circuit, Op("CX", i, j))
-#                 push!(encoding_circuit, Op("CZ", i, j))
-#             elseif standard_generators_x[i, j]==1
-#                 push!(encoding_circuit, Op("CX", i, j))
-#             elseif standard_generators_z[i, j]==1
-#                 push!(encoding_circuit, Op("CZ", i, j))
-#             end
-#         end
-#     end
-
-#     return encoding_circuit
-# end
 
 function get_ops_syndrome(generator_standard::AbstractMatrix)
 
@@ -470,6 +311,8 @@ end
     reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
 
 k=code.k #number of logical qubits
+
+physical_qubits_keep=#this is where the logical info is encoded
 """
 function reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
 
@@ -482,7 +325,6 @@ function reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::Abstrac
     
     pos,amp=sa.findnz(psi)
     new_basis = int2bin.(pos .-1,n)
-    # physical_qubits=collect(n-k+1:n) #this is where the logical info is encoded
     
     logical_fock_basis=Vector{Vector{Int}}()
     for b=new_basis #each config
@@ -585,7 +427,7 @@ struct StabilizerCode #alpha version
     generator_standard::AbstractMatrix
     permute_matrix_inv::AbstractMatrix
     permute_vector_inv::AbstractVectorS
-    permute_vector::AbstractVectorS #this can be deleted
+    logical_indices::AbstractVector
     logicals::Dict
     # codestates::Vector
     # codewords::Vector
@@ -614,11 +456,9 @@ struct StabilizerCode #alpha version
         # stabilizer_matrix=string_to_matrix.(stabilizers)
         generator=stabilizers_to_generator(stabilizers)
  
-        generator_standard, permute_matrix_inv = get_standard_form(generator)
-        permute_vector_inv = [findfirst(permute_matrix_inv'[:, i] .== 1) for i in 1:n]
-        permute_vector = [findfirst(permute_matrix_inv[:, i] .== 1) for i in 1:n]
+        generator_standard, permute_matrix_inv, permute_vector_inv, logical_indices = get_standard_form(generator)
         logicals, Xvecs, Zvecs = get_XZ_logicals!(generator_standard,permute_matrix_inv,logicals)
-        ops_encoding=encoding_circuit_from_generator(generator_standard,Xvecs,permute_vector) #delete this after test
+        ops_encoding=encoding_circuit_from_generator(generator_standard,Xvecs,permute_vector_inv)
         ops_syndrome=get_ops_syndrome(generator_standard)
 
         # below for codespace and codewords
@@ -639,29 +479,14 @@ struct StabilizerCode #alpha version
 
         # function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
 
-        #new_encode= :plus, :minus, :T or :zero
-        function new_encode(state_init_sym::Symbol=:zero;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],qubit_rearrange) #encoded state is last  
+        # new_encode= :plus, :minus, :T or :zero
+        
+        new_encode(state_init_sym::Symbol=:zero;random_op_count::Int=20,noise::Union{Bool,NoiseModel}=false,encoding::Vector=[])=new_encode(n,state_init_sym;random_op_count=random_op_count,noise=noise,encoding=encoding)
 
-            # state_init=zero_state(k)
-            # state=la.kron(zero_state(n-k),state_init)
+        #mps
+        function new_encode(N::Union{Int,Vector{it.Index{Int64}}},state_init_sym::Symbol=:zero;random_op_count::Int=20,noise::Union{Bool,NoiseModel}=false,encoding::Vector=[])
 
-            state=zero_state(n)
-            permute_vector_inv_logicals = qubit_rearrange[n-k+1:n]
-
-            if state_init_sym==:plus #you can prepare other init states here
-                for i=permute_vector_inv_logicals
-                    state=Op("H",i)*state
-                end
-            elseif state_init_sym==:minus #you can prepare other init states here
-                state=one_state(n)
-                for i=permute_vector_inv_logicals
-                    state=Op("H",i)*state
-                end
-            elseif state_init_sym==:T #you can prepare other init states here
-                for i=permute_vector_inv_logicals
-                    state=Op("T",i)*state
-                end
-            end
+            state=qec_state_prep(N,logical_indices,state_init_sym;random_op_count=random_op_count)[1]#[1] indicates qec state
 
             ops=isempty(encoding) ? ops_encoding : encoding
             for o=ops
@@ -672,39 +497,15 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[],decoding::Vector=[],physical_qubits_keep::Vector=[],qubit_mapping::Vector=[])
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,decoding::Vector=[],qubit_mapping::Vector=[])
 
-            if isempty(encoding) && isempty(decoding)
-                ops=ops_encoding'
-            elseif !isempty(encoding) && isempty(decoding)
-                ops=encoding'
-            elseif isempty(encoding) && !isempty(decoding)
-                ops=decoding
-            else
-                throw("Error! How did you get here?")
-            end
+            ops=isempty(decoding) ? ops_encoding' : decoding
 
             for o=ops
                 state=apply(state,o;noise=noise)
             end
 
-            if isempty(physical_qubits_keep)
-                keep_qubits=collect(n-k+1:n)
-                physical_qubits_keep=permute_vector_inv[keep_qubits]
-            end
-
-            return reduce_hilbert_space(state,physical_qubits_keep;qubit_mapping=qubit_mapping)
-
-            # state_partial=partial_trace(state,physical_qubits_keep)
-            # e,v=la.eigen(state_partial)
-
-            # e_pos=findfirst(isapprox(1), e)
-            # if isa(e_pos,Number)
-            #     return sa.sparse(v[:,e_pos])
-            # else
-            #     println("something is wrong!")
-            #     return state_partial
-            # end
+            return reduce_hilbert_space(state,logical_indices;qubit_mapping=qubit_mapping)
 
         end
 
@@ -829,57 +630,16 @@ struct StabilizerCode #alpha version
         new_apply(state::AbstractVectorS, op::Op; noise::Union{Bool,NoiseModel}=false)=op.q==1 ? new_apply(state, op.name, op.qubit;noise=noise) : new_apply(state, op.name, op.qubit, op.target_qubit;noise=noise)
         
         info=(
+            permute_vector=[findfirst(permute_matrix_inv[:, i] .== 1) for i in 1:n],
             len_logical=length(keys(logicals)),
             # len_codestates=len_codestates,
             logical_XZ_vecs=(Xvecs,Zvecs)
         )
 
-        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix_inv,permute_vector_inv,permute_vector,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
+        return new(n,k,d,m,stabilizers,generator,generator_standard,permute_matrix_inv,permute_vector_inv,logical_indices,logicals,ops_encoding,ops_syndrome,info,new_ops,new_apply,new_encode,new_decode,new_syndrome,new_correct);
 
     end
 
-end
-
-function reduced_row_echelon_inverse(matrix::AbstractMatrix{Int})
-    n = size(matrix, 1)
-    if n != size(matrix, 2)
-        error("Matrix must be square to compute its inverse.")
-    end
-
-    # Augment the matrix with the identity matrix
-    augmented = hcat(matrix, Matrix{Int}(la.I(n)))
-
-    # Perform Gauss-Jordan elimination over GF(2)
-    for col in 1:n
-        # Find the pivot in the current column
-        pivot_row = findfirst(augmented[col:end, col] .!= 0)
-        if pivot_row === nothing
-            error("Matrix is singular and cannot be inverted over GF(2).")
-        end
-        pivot_row += col - 1  # Adjust index due to slicing
-
-        # Swap rows if necessary
-        if pivot_row != col
-            augmented[[col, pivot_row], :] = augmented[[pivot_row, col], :]
-        end
-
-        # Eliminate entries in other rows
-        for row in 1:n
-            if row != col && augmented[row, col] == 1
-                augmented[row, :] .= mod.(augmented[row, :] .+ augmented[col, :], 2)
-            end
-        end
-    end
-
-    # Check if left half is identity
-    if any(augmented[:, 1:n] .!= Matrix{Int}(la.I(n)))
-        error("Matrix is singular and cannot be inverted over GF(2).")
-    end
-
-    # The inverse is the right half of the augmented matrix
-    inverse_matrix = augmented[:, n+1:end]
-
-    return inverse_matrix
 end
 
 function permutation_vector_from_matrix(permute_matrix::AbstractMatrix{Int})
@@ -917,4 +677,82 @@ function create_random_logicals(logicals::Dict,op_count=10,plot_bool=false)
     end
     
     return logical_ops
+end
+
+
+"""
+qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
+"""
+function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
+    # state_init_sym=:random
+
+    mps_bool=typeof(n)==Int ? false : true
+    
+    len_k=length(logical_indices)
+    k=mps_bool==false ? len_k : sitesN(len_k)
+
+    state=zero_state(n)
+    state_logical=zero_state(k)
+
+    if state_init_sym==:plus
+        for i=logical_indices
+            state=Op("H",i)*state
+        end
+        for i=1:len_k
+            state_logical=Op("H",i)*state_logical
+        end
+    elseif state_init_sym==:minus
+        state=one_state(n)
+        state_logical=one_state(k)
+        for i=logical_indices
+            state=Op("H",i)*state
+        end
+        for i=1:len_k
+            state_logical=Op("H",i)*state_logical
+        end
+    elseif state_init_sym==:random
+        ops_random=BlueTangle.random_ops(len_k,random_op_count)
+        for o=ops_random     
+            state_logical=o*state_logical
+            if o.q==1
+                state=Op(o.name,logical_indices[o.qubit])*state
+            elseif o.q==2
+                state=Op(o.name,logical_indices[o.qubit],logical_indices[o.target_qubit])*state
+            end
+        end
+    end
+
+    return state,state_logical
+end
+
+"""
+reduce_and_relabel_qubits(psi::AbstractVectorS, qubit_mapping::Vector)
+"""
+function reduce_and_relabel_qubits(psi::AbstractVectorS, qubit_mapping::Vector)
+    n = Int(round(log2(length(psi))))  # Total number of qubits
+    k = length(qubit_mapping)          # Number of qubits to keep
+    psi_new = sa.spzeros(ComplexF64, 2^k)   # New state vector for k qubits
+    
+    # Iterate over all basis states in the reduced Hilbert space
+    for j in 0:(2^k - 1)
+        # Binary representation of the new basis state (reversed due to endianness)
+        b_new = reverse(digits(j, base=2, pad=k))
+        
+        # Build the corresponding full basis state in the original Hilbert space
+        b_full = zeros(Int, n)
+        for idx in 1:k
+            b_full[qubit_mapping[idx]] = b_new[idx]
+        end
+        # The discarded qubits are assumed to be in |0⟩ state (bits set to 0)
+        
+        # Convert the full binary string to an index in the original state vector
+        i = 0
+        for bit in b_full
+            i = (i << 1) | bit  # Left shift and add the bit
+        end
+        
+        # Assign the amplitude from the original state vector
+        psi_new[j+1] = psi[i+1]
+    end
+    return psi_new
 end

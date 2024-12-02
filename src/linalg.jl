@@ -319,64 +319,6 @@ function reduced_row_echelon(generator::AbstractMatrix{Int})
     return generator .% 2, rank, transform_rows .% 2, transform_cols
 end
 
-# """
-#     reduced_row_echelon(generator::AbstractMatrix)
-# """
-# function reduced_row_echelon(A::AbstractMatrix{Int})
-#     m, n = size(A)
-#     # Augment A with identity matrix to track transformations
-#     B = hcat(A .% 2, Matrix{Int}(la.I, m, m))
-#     pivots = Int[]
-#     r = 1  # Row index
-
-#     for c in 1:n  # Column index
-#         # Find pivot in column c at or below row r
-#         pivot_rows = findall(B[r:end, c] .% 2 .≠ 0) .+ (r - 1)
-#         if !isempty(pivot_rows)
-#             i = pivot_rows[1]
-#             # Swap row r and pivot row i
-#             if i ≠ r
-#                 B[[r, i], :] = B[[i, r], :]
-#             end
-#             # Record pivot
-#             push!(pivots, c)
-#             # Eliminate other entries in column c
-#             for k in 1:m
-#                 if k ≠ r && B[k, c] % 2 ≠ 0
-#                     B[k, :] = (B[k, :] .+ B[r, :]) .% 2
-#                 end
-#             end
-#             r += 1
-#             if r > m
-#                 break
-#             end
-#         end
-#     end
-
-#     # Determine columns not used as pivots
-#     all_columns = collect(1:n)
-#     pivot_set = Set(pivots)
-#     non_pivots = [col for col in all_columns if col ∉ pivot_set]
-
-#     # Combine pivot columns with non-pivot columns
-#     permuted_indices = vcat(pivots, non_pivots)
-
-#     # Extract H and U from the augmented matrix
-#     H = B[:, 1:n]
-#     U = B[:, n+1:end]
-
-#     # Reorder H columns based on pivot and non-pivot indices
-#     H = H[:, permuted_indices]
-
-#     # Construct permutation matrix P
-#     P = zeros(Int, n, n)
-#     for i in 1:n
-#         P[permuted_indices[i], i] = 1
-#     end
-
-#     return (H .% 2, length(pivots), U .% 2, P)
-# end
-
 function rank_of_rref(A::AbstractMatrix{Int})
     len_cols=size(A,2)÷2
     non_zero_rows = sum(any(A[i, 1:len_cols] .== 1) for i in 1:size(A, 1))

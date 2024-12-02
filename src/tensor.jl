@@ -1,5 +1,11 @@
-sitesN(N::Int)=it.siteinds("Qubit", N)
+"""
+N_MPS(N::Int)
+"""
+N_MPS(N::Int)=it.siteinds("Qubit", N)
 
+"""
+init(N::Int)
+"""
 init(N::Int)=N,sitesN(N)
 
 ##
