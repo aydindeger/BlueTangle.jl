@@ -74,10 +74,16 @@ function get_standard_form(G::AbstractMatrix)
     return G, permute_matrix_inv, permute_vector_inv, logical_indices
 end
 
+"""
+get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix)
+"""
 function get_XZ_logicals(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix)
     get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix,Dict())
 end
 
+"""
+get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix,logical_XZ_ops::Dict)
+"""
 function get_XZ_logicals!(G_standard::AbstractMatrix,permute_matrix_inv::AbstractMatrix,logical_XZ_ops::Dict)
 
     r=rank_of_rref(G_standard)
@@ -158,6 +164,9 @@ function _extract_blocks(G_standard_form,r::Int) #r=rank
 
 end
 
+"""
+encoding_circuit_from_generator(generator_standard::AbstractMatrix,Xvecs::AbstractMatrixS,permute_vector_inv::AbstractVector)
+"""
 function encoding_circuit_from_generator(generator_standard::AbstractMatrix,Xvecs::AbstractMatrixS,permute_vector_inv::AbstractVector)
 
     m,n=size(generator_standard,1),size(generator_standard,2) ÷ 2
@@ -281,70 +290,41 @@ function identify_error(syndrome::AbstractVector, generator_standard::AbstractMa
     return "No single-qubit error matches this syndrome"
 end
 
-code_ops(name::String, logical_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit]]
-code_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit,target_qubit]]
+"""
+physical_ops(name::String, logical_qubit::Int, logicals::Dict)
+"""
+physical_ops(name::String, logical_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit]]
 
-function code_ops(op::QuantumOps, logicals::Dict)
+"""
+physical_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict)
+"""
+physical_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict)=[Op(x...) for x=logicals[name,logical_qubit,target_qubit]]
+
+"""
+physical_ops(op::QuantumOps, logicals::Dict)
+"""
+function physical_ops(op::QuantumOps, logicals::Dict)
     if isa(op,OpF)
-        vals=logicals[op.name]
-        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
+        vals=logicals[op]
     elseif op.q == 1
         vals=logicals[op.name,op.qubit]
-        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
     elseif op.q == 2
         vals=logicals[op.name,op.qubit,op.target_qubit]
-        return isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals]
     end
+
+    return isa(vals,QuantumOps) ? vals : (isa(first(vals),QuantumOps) ? vals : [Op(x...) for x=vals])
 end
 
-function code_ops(ops::Vector{QuantumOps}, logicals::Dict)
+"""
+physical_ops(ops::Vector{QuantumOps}, logicals::Dict)
+"""
+function physical_ops(ops::Vector{QuantumOps}, logicals::Dict)
     list_of_ops=Vector{QuantumOps}()
     for op=ops
-        append!(list_of_ops,code_ops(op, logicals))
+        append!(list_of_ops,physical_ops(op, logicals))
     end
 
     return list_of_ops
-end
-
-
-"""
-    reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
-
-k=code.k #number of logical qubits
-
-physical_qubits_keep=#this is where the logical info is encoded
-"""
-function reduce_hilbert_space(psi::AbstractVectorS,physical_qubits_keep::AbstractVector;qubit_mapping::AbstractVector=[])
-
-    n=get_N(psi)
-    k=length(physical_qubits_keep)
-
-    if isempty(qubit_mapping)
-        qubit_mapping=collect(1:n)
-    end
-    
-    pos,amp=sa.findnz(psi)
-    new_basis = int2bin.(pos .-1,n)
-    
-    logical_fock_basis=Vector{Vector{Int}}()
-    for b=new_basis #each config
-        logical_basis=[]
-        for physical_qubit=physical_qubits_keep
-            physical_pos=findfirst(x->x==physical_qubit,qubit_mapping)
-            push!(logical_basis,b[physical_pos])
-        end
-        push!(logical_fock_basis,logical_basis)
-    end
-    
-    new_pos=bin2int.(logical_fock_basis) .+ 1
-
-    new_state=sa.spzeros(ComplexF64,2^k)
-    for (a,i)=enumerate(new_pos)
-        new_state[i]=amp[a]
-    end
-
-    return la.normalize(new_state) #fix this
-
 end
 
 function logical_string_to_dict(logical_string::String)
@@ -361,7 +341,6 @@ function logical_string_to_dict(logical_string::String)
     end
     return dict
 end
-
 
 """
     StabilizerCode(stabilizers::Vector,logicals::Dict)
@@ -472,10 +451,10 @@ struct StabilizerCode #alpha version
 
         ##
 
-        new_ops(name::String, logical_qubit::Int)=code_ops(name,logical_qubit,logicals)
-        new_ops(name::String, logical_qubit::Int, target_qubit::Int)=code_ops(name,logical_qubit,target_qubit,logicals)
-        new_ops(op::QuantumOps)=code_ops(op,logicals)
-        new_ops(ops::Vector{QuantumOps})=code_ops(ops,logicals)
+        new_ops(name::String, logical_qubit::Int)=physical_ops(name,logical_qubit,logicals)
+        new_ops(name::String, logical_qubit::Int, target_qubit::Int)=physical_ops(name,logical_qubit,target_qubit,logicals)
+        new_ops(op::QuantumOps)=physical_ops(op,logicals)
+        new_ops(ops::Vector{QuantumOps})=physical_ops(ops,logicals)
 
         # function new_encode(state_init::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,encoding::Vector=[]) #encoded state is last  
 
@@ -497,7 +476,7 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,decoding::Vector=[],qubit_mapping::Vector=[])
+        function new_decode(state::AbstractVectorS;noise::Union{Bool,NoiseModel}=false,decoding::Vector=[])
 
             ops=isempty(decoding) ? ops_encoding' : decoding
 
@@ -505,7 +484,7 @@ struct StabilizerCode #alpha version
                 state=apply(state,o;noise=noise)
             end
 
-            return reduce_hilbert_space(state,logical_indices;qubit_mapping=qubit_mapping)
+            return reduce_and_relabel_qubits(state, logical_indices)
 
         end
 
@@ -583,7 +562,7 @@ struct StabilizerCode #alpha version
 
         #one qubit
         function new_apply(state::AbstractVectorS, name::String, qubit::Int;noise::Union{Bool,NoiseModel}=false)
-            ops=code_ops(name, qubit, logicals)
+            ops=physical_ops(name, qubit, logicals)
             N=get_N(state)
 
             if qubit > N+m
@@ -615,7 +594,7 @@ struct StabilizerCode #alpha version
             keyexist=(name, logical_qubit, target_qubit) ∈ keys(logicals)
 
             if keyexist
-                ops=code_ops(name,logical_qubit,target_qubit,logicals)
+                ops=physical_ops(name,logical_qubit,target_qubit,logicals)
             else
                 throw("logical does not exist")
             end
@@ -649,34 +628,6 @@ function permutation_vector_from_matrix(permute_matrix::AbstractMatrix{Int})
         p[i] = findfirst(permute_matrix[:, i] .== 1)
     end
     return p
-end
-
-function create_random_logicals(logicals::Dict,op_count=10,plot_bool=false)
-
-    logical_ops=Vector{QuantumOps}()
-    random_ops=rand(keys(logicals),op_count)
-    for key=random_ops
-        if isa(key,String)
-            push!(logical_ops,opf)
-        else
-            push!(logical_ops,Op(key...))
-        end
-    end
-    
-    logical_ops_extended=QuantumOps[]
-    for o=logical_ops
-        if isa(o,OpF)
-            append!(logical_ops_extended,mat_ops)
-        else
-            push!(logical_ops_extended,o)
-        end
-    end
-    
-    if plot_bool==true
-        plotq(logical_ops_extended)
-    end
-    
-    return logical_ops
 end
 
 
@@ -726,11 +677,12 @@ function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::V
 end
 
 """
-reduce_and_relabel_qubits(psi::AbstractVectorS, qubit_mapping::Vector)
+reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector)
+logical_indices=qubit_mapping
 """
-function reduce_and_relabel_qubits(psi::AbstractVectorS, qubit_mapping::Vector)
+function reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector)
     n = Int(round(log2(length(psi))))  # Total number of qubits
-    k = length(qubit_mapping)          # Number of qubits to keep
+    k = length(logical_indices)          # Number of qubits to keep
     psi_new = sa.spzeros(ComplexF64, 2^k)   # New state vector for k qubits
     
     # Iterate over all basis states in the reduced Hilbert space
@@ -741,7 +693,7 @@ function reduce_and_relabel_qubits(psi::AbstractVectorS, qubit_mapping::Vector)
         # Build the corresponding full basis state in the original Hilbert space
         b_full = zeros(Int, n)
         for idx in 1:k
-            b_full[qubit_mapping[idx]] = b_new[idx]
+            b_full[logical_indices[idx]] = b_new[idx]
         end
         # The discarded qubits are assumed to be in |0⟩ state (bits set to 0)
         
