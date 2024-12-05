@@ -296,7 +296,7 @@ Calculates the entanglement entropy of a quantum state.
 
 Returns the calculated entanglement entropy.
 """
-function entanglement_entropy(psi::AbstractVectorS)
+function entanglement_entropy(psi::AbstractVectorS;spectrum_bool=false)
 
     N=get_N(psi)
     partA=N ÷ 2
@@ -307,7 +307,7 @@ function entanglement_entropy(psi::AbstractVectorS)
     
     spec=spec[spec .> 0]
     
-    return sum(-spec.*log.(spec)),-log.(spec)
+    return spectrum_bool==false ? sum(-spec.*log.(spec)) : sum(-spec.*log.(spec)),-log.(spec)
     
 end
 
