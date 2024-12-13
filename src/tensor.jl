@@ -24,7 +24,7 @@ one_state(M::Vector{it.Index{Int64}})=it.productMPS(M,"1")
 """
 create given product state
 """
-product_state(M::Vector{it.Index{Int64}},list_of_qubits::Vector)=it.productMPS(M,map(string,list_of_qubits))
+product_state(M::Vector{it.Index{Int64}},list_of_qubits::Vector)=it.productMPS(M,map(string,Int.(list_of_qubits)))
 
 """
 create neel state 010101

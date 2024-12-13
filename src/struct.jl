@@ -423,6 +423,21 @@ function Op(name::String,qubit::Int,target_qubit::Int;kwargs...)
 
     return Op(name, mat, qubit, target_qubit; kwargs...)
 end
+# Three qubit constructor with built-in gate
+function Op(name::String,qubit::Int,control_qubit::Int,target_qubit::Int)
+
+    if name=="CCZ"
+        return Op("CZ",qubit,target_qubit;control=control_qubit)
+    elseif name=="CCX"
+        return Op("CX",qubit,target_qubit;control=control_qubit)
+    elseif name=="CCY"
+        return Op("CY",qubit,target_qubit;control=control_qubit)
+    elseif name=="CSWAP"
+        return Op("SWAP",qubit,target_qubit;control=control_qubit)
+    else
+        throw("Unsupported three-qubit operation")
+    end
+end
 # One qubit constructor with matrix or function
 function Op(name::String,matf::Union{Function, AbstractMatrix},qubit::Int; kwargs...)
     return Op(name, matf, qubit, -1; kwargs...)

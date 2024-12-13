@@ -47,16 +47,59 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
 
         end
 
-    else #control operation
+    else #control operation on two-qubit gates
+            
+        if distance==1 #nonlocal #check this
+            list=foldl(kron,[x==qubit ? final_mat : (x==control ? sa.sparse(gate.P1) : id) for x=1:N if x!=target_qubit])    
+            return list+foldl(kron,[x==control ? sa.sparse(gate.P0) : id for x=1:N])#control
+            
+        else
 
-        if distance>1 #local
-            throw("nonlocal operations (qubit and target) with control are not allowed")
+            if mat==gate.CX
+                return CCZX("CCX",N,qubit,control,target_qubit)
+            elseif mat==gate.CZ
+                return CCZX("CCZ",N,qubit,control,target_qubit)
+            else
+                throw("Unsupported operation. Use 'CCZ' or 'CCX'.")
+            end
+            
         end
 
-        list=foldl(kron,[x==qubit ? final_mat : (x==control ? sa.sparse(gate.P1) : id) for x=1:N if x!=target_qubit])    
-        return list+foldl(kron,[x==control ? sa.sparse(gate.P0) : id for x=1:N])#control
     end
 
+end
+
+
+function CCZX(sym::String,N::Int,i::Int,j::Int,k::Int)
+
+    if any(q -> q < 1 || q > N, [i, j, k])
+        throw("Qubit indices must be within the range 1 to N")
+    end
+
+    i=N-i
+    j=N-j
+    k=N-k
+
+    H = sa.spzeros(2^N,2^N);
+
+    if sym=="CCZ"
+        for a in 0:2^N-1
+            H[a+1,a+1]+= ((a >> i) & (a >> j) & (a >> k) & 1)==1 ? -1 : 1 
+        end
+    elseif sym=="CCX"
+        for a in 0:2^N-1
+            if ((a >> i) & (a >> j) & 1)==1
+                b=a⊻(1<<k)
+                H[a+1,b+1]+=1;
+            else
+                H[a+1,a+1]+=1;
+            end
+        end
+    else
+        throw("Unsupported operation. Use 'CCZ' or 'CCX'.")
+    end
+    
+    return H
 end
 
 
@@ -117,29 +160,29 @@ end
 
 
 
-function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::AbstractVectorS) #todo #fix and implement control here
+# function hilbert_layer(N::Int,layer::Vector{<:QuantumOps},state::AbstractVectorS) #todo #fix and implement control here
     
-    id = sa.sparse([1.0 0; 0im 1]);
-    vec=fill(id,N)
+#     id = sa.sparse([1.0 0; 0im 1]);
+#     vec=fill(id,N)
 
-    for op=layer
-        if op.q==1
-            vec[op.qubit]=op.mat
-        elseif op.q==2
+#     for op=layer
+#         if op.q==1
+#             vec[op.qubit]=op.mat
+#         elseif op.q==2
 
-            if abs(op.qubit-op.target_qubit)>1 #nonlocal
-                throw("nonlocal operations (qubit and target) with control are not allowed")
-            end
+#             if abs(op.qubit-op.target_qubit)>1 #nonlocal
+#                 throw("nonlocal operations (qubit and target) with control are not allowed")
+#             end
 
-            final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
-            vec[op.qubit]=final_mat
-            vec[op.target_qubit]*=NaN
-        end#
-    end
+#             final_mat=op.qubit > op.target_qubit ? sa.sparse(BlueTangle._swap_control_target(op.mat)) : op.mat
+#             vec[op.qubit]=final_mat
+#             vec[op.target_qubit]*=NaN
+#         end#
+#     end
     
-    return foldl(kron,vec[any.(!isnan, vec)])*state
+#     return foldl(kron,vec[any.(!isnan, vec)])*state
 
-end
+# end
 
 
 """
@@ -172,7 +215,7 @@ function _swap_control_target(matrix::Matrix)
 end
 
 """
-    swap_relabel(ops::Vector{Op}) -> Tuple{Vector{Op}, Vector{Int}}
+    relabel_swap(ops::Vector{Op}) -> Tuple{Vector{Op}, Vector{Int}}
 
 Relabel qubit indices in a sequence of quantum operations, simulating the effect of SWAP gates without actually performing them.
 
@@ -191,19 +234,10 @@ This function processes a list of quantum operations, updating qubit indices to 
 - For non-SWAP operations, qubit indices are updated based on the current mapping.
 - The function assumes qubit indices start from 1.
 
-# Example
-```julia
-ops = [
-    Op("H", 1, false),
-    Op("SWAP", 1, 2,  false),
-    Op("CNOT", 1, 2,false),
-    Op("X", 2, false)
-]
-
-relabeled_ops, final_mapping = swap_relabel(ops)
+relabeled_ops, final_mapping = relabel_swap(ops)
 ```
 """
-function swap_relabel(ops::Vector{Op})
+function relabel_swap(ops::Vector{Op})
     N = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
     qubit_mapping = collect(1:N)
     relabeled_ops = Op[]
@@ -542,7 +576,7 @@ Creates a quantum state vector from a list of qubits.
 
 Returns a sparse vector representing the quantum state of the system.
 """
-product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
+product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(Int.(sign.(list_of_qubits)))))
 # product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
 neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
 neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])

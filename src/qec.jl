@@ -634,7 +634,7 @@ end
 """
 qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
 """
-function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
+function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20)
     # state_init_sym=:random
 
     mps_bool=typeof(n)==Int ? false : true
@@ -671,6 +671,15 @@ function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::V
                 state=Op(o.name,logical_indices[o.qubit],logical_indices[o.target_qubit])*state
             end
         end
+    elseif isa(state_init_sym,AbstractVector)
+        state_logical=mps_bool==true ? product_state(k,state_init_sym) : product_state(state_init_sym)
+
+        state_fock=mps_bool==true ? Int.(la.zeros(length(n))) : Int.(la.zeros(n))
+        state_fock[logical_indices] .= state_init_sym
+
+        state=mps_bool==true ? product_state(n,state_fock) : product_state(state_fock)
+    else
+        println("zero state returned")
     end
 
     return state,state_logical
