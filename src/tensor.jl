@@ -160,7 +160,15 @@ inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
 inner(MPS::it.MPS,MPS2::it.MPS)=it.inner(MPS',MPS2)
 
 
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int)=it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!
+function _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
+
+    if control==-2
+        return it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!#note how target qubit comes first. this is correct!
+    else
+        return it.op(mat,sites[target_qubit],sites[control],sites[qubit])
+    end
+end
+
 _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
 
 """

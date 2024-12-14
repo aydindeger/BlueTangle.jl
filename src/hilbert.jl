@@ -237,7 +237,7 @@ This function processes a list of quantum operations, updating qubit indices to 
 relabeled_ops, final_mapping = relabel_swap(ops)
 ```
 """
-function relabel_swap(ops::Vector{Op})
+function relabel_swap(ops::Vector{T}) where T<:QuantumOps
     N = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
     qubit_mapping = collect(1:N)
     relabeled_ops = Op[]

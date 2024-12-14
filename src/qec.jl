@@ -645,7 +645,12 @@ function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::V
     state=zero_state(n)
     state_logical=zero_state(k)
 
-    if state_init_sym==:plus
+    if (state_init_sym==:zeros) || (state_init_sym==:zero)
+        return state,state_logical
+    elseif (state_init_sym==:ones) || (state_init_sym==:one)
+        state=one_state(n)
+        state_logical=one_state(k)
+    elseif state_init_sym==:plus
         for i=logical_indices
             state=Op("H",i)*state
         end
@@ -679,20 +684,24 @@ function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::V
 
         state=mps_bool==true ? product_state(n,state_fock) : product_state(state_fock)
     else
-        println("zero state returned")
+        throw("error: invalid state name!")
     end
 
     return state,state_logical
 end
 
 """
-reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector)
+reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector,qubit_mapping::Vector=Vector[])
 logical_indices=qubit_mapping
 """
-function reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector)
+function reduce_and_relabel_qubits(psi::AbstractVectorS, logical_indices::Vector,qubit_mapping::Vector=Vector[])
     n = Int(round(log2(length(psi))))  # Total number of qubits
     k = length(logical_indices)          # Number of qubits to keep
     psi_new = sa.spzeros(ComplexF64, 2^k)   # New state vector for k qubits
+
+    if qubit_mapping!=Vector[]
+        logical_indices = [findfirst(x->x==y,qubit_mapping) for y=logical_indices]
+    end
     
     # Iterate over all basis states in the reduced Hilbert space
     for j in 0:(2^k - 1)

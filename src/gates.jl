@@ -47,9 +47,17 @@ const gate = (
     ISWAP =[1. 0 0 0; 0 0 im 0; 0 im 0 0; 0 0 0 1],
     FSWAP =[1. 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 -1],
     SYC =[1. 0 0 0; 0 0 -im 0; 0 -im 0 0; 0 0 0 exp(-im*pi/6)],#Sycamore
-    ECR = (1/sqrt(2)) * [0 + 0im 1. + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2)
+    ECR = (1/sqrt(2)) * [0 + 0im 1. + 0im 0 + 0im 0 + 1im; 1 + 0im 0 + 0im 0 - 1im 0 + 0im; 0 + 0im 0 + 1im 0 + 0im 1 + 0im; 0 - 1im 0 + 0im 1 + 0im 0 + 0im], # (IX-XY)/sqrt(2),
+    CCX = [1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0; 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0],
+    CCZ = [1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 -1.0]
     )
 
+
+one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
+two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
+gates_with_phase=["P","RX","RY","RZ","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
+
+    
 """
 `random_gate_1(N::Int) -> Op`
 
@@ -336,9 +344,6 @@ function _get_name_and_arguments(op_name0::String)
 
 end
 
-one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
-two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
-gates_with_phase=["P","RX","RY","RZ","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
 
 _clean_name(op_name::String)=uppercase(string(split(op_name, "(")[1]))
 

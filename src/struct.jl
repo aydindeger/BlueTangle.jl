@@ -480,8 +480,17 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
     end
 
     function new_expand(sites::Vector)
+
         if control!=-2# || size(mat,1)>4
-            throw("control tensor is not supported")
+
+            if name=="CX" ##these are CCX and CCZ
+                rv = _mat_to_tensor(sites,gate.CCX,qubit,target_qubit;control=control)
+            elseif name=="CZ"
+                rv = _mat_to_tensor(sites,gate.CCZ,qubit,target_qubit;control=control)
+            else
+                throw("control tensor is not supported")
+            end
+
         end
 
         if target_qubit == -1
