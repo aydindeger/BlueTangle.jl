@@ -463,7 +463,7 @@ struct StabilizerCode #alpha version
         new_encode(state_init_sym::Symbol=:zero;random_op_count::Int=20,noise::Union{Bool,NoiseModel}=false,encoding::Vector=[])=new_encode(n,state_init_sym;random_op_count=random_op_count,noise=noise,encoding=encoding)
 
         #mps
-        function new_encode(N::Union{Int,Vector{it.Index{Int64}}},state_init_sym::Symbol=:zero;random_op_count::Int=20,noise::Union{Bool,NoiseModel}=false,encoding::Vector=[])
+        function new_encode(N::Union{Int,Vector},state_init_sym::Symbol=:zero;random_op_count::Int=20,noise::Union{Bool,NoiseModel}=false,encoding::Vector=[])
 
             state=qec_state_prep(N,logical_indices,state_init_sym;random_op_count=random_op_count)[1]#[1] indicates qec state
 
@@ -632,9 +632,9 @@ end
 
 
 """
-qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
+qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
 """
-function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20)
+function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20)
     # state_init_sym=:random
 
     mps_bool=typeof(n)==Int ? false : true

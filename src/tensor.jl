@@ -14,32 +14,32 @@ init(N::Int)=N,sitesN(N)
 """
 create all zero state
 """
-zero_state(M::Vector{it.Index{Int64}})=it.productMPS(M,"0")
+zero_state(M::Vector)=it.productMPS(M,"0")
 
 """
 create all one state
 """
-one_state(M::Vector{it.Index{Int64}})=it.productMPS(M,"1")
+one_state(M::Vector)=it.productMPS(M,"1")
 
 """
 create given product state
 """
-product_state(M::Vector{it.Index{Int64}},list_of_qubits::Vector)=it.productMPS(M,map(string,Int.(list_of_qubits)))
+product_state(M::Vector,list_of_qubits::Vector)=it.productMPS(M,map(string,Int.(list_of_qubits)))
 
 """
 create neel state 010101
 """
-neel_state01(M::Vector{it.Index{Int64}})=product_state(M,[isodd(i) ? 0 : 1 for i=1:length(M)])
+neel_state01(M::Vector)=product_state(M,[isodd(i) ? 0 : 1 for i=1:length(M)])
 
 """
 create neel state 101010
 """
-neel_state10(M::Vector{it.Index{Int64}})=product_state(M,[isodd(i) ? 1 : 0 for i=1:length(M)])
+neel_state10(M::Vector)=product_state(M,[isodd(i) ? 1 : 0 for i=1:length(M)])
 
 """
 create random state
 """
-random_state(sites::Vector{it.Index{Int64}},chi::Int=1)=it.randomMPS(sites,chi)
+random_state(sites::Vector,chi::Int=1)=it.randomMPS(sites,chi)
 
 ##========== state preparation ==========
 
@@ -53,11 +53,11 @@ expect(psi::it.MPS,op_str::String)=it.expect(psi, op_str)
 # ψ0 = MPS(s, n -> n == 1 ? "↓" : "↑")
 
 """
-to_state(MPS::it.MPS,M::Vector{it.Index{Int64}})
+to_state(MPS::it.MPS,M::Vector)
 
     Convert MPS to state vector
 """
-to_state(MPS::it.MPS,M::Vector{it.Index{Int64}})=sa.sparse(reshape(it.array(it.contract(MPS),reverse(M)),2^length(M)))
+to_state(MPS::it.MPS,M::Vector)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(M)),2^length(M)))
 to_state(MPS::it.MPS)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(it.siteinds(MPS))),2^length(MPS)))
 
 #this is wrong!
@@ -73,13 +73,13 @@ function reflectMPS(psi::it.MPS)
     return psi_reflected
 end
 
-# to_MPS(vec::Vector,M::Vector{it.Index{Int64}},maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
+# to_MPS(vec::Vector,M::Vector,maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
 to_MPS(vec::Vector,M::Vector)=it.MPS(vec,M)|>reflectMPS
 
-# to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}},maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
+# to_MPS(vec::AbstractVectorS,M::Vector,maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
 
 """
-    to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}})
+    to_MPS(vec::AbstractVectorS,M::Vector)
 
     Convert state vector to MPS
 """
@@ -160,7 +160,7 @@ inner(ψ::AbstractVectorS,ψ2::AbstractVectorS)=ψ'ψ2
 inner(MPS::it.MPS,MPS2::it.MPS)=it.inner(MPS',MPS2)
 
 
-function _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
+function _mat_to_tensor(sites::Vector,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control::Int=-2)
 
     if control==-2
         return it.op(mat,sites[target_qubit],sites[qubit])#note how target qubit comes first. this is correct!#note how target qubit comes first. this is correct!
@@ -169,7 +169,7 @@ function _mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit
     end
 end
 
-_mat_to_tensor(sites::Vector{it.Index{Int64}},mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
+_mat_to_tensor(sites::Vector,mat::AbstractMatrix,qubit::Int)=it.op(mat,sites[qubit])
 
 """
     fidelity(ψ::AbstractVectorS,ψ2::AbstractVectorS)
