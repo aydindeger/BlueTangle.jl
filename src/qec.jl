@@ -640,7 +640,7 @@ function qec_state_prep(n::Union{Int,Vector{it.Index{Int64}}},logical_indices::V
     mps_bool=typeof(n)==Int ? false : true
     
     len_k=length(logical_indices)
-    k=mps_bool==false ? len_k : N_MPS(len_k)
+    k=mps_bool==false ? len_k : n[1:len_k]
 
     state=zero_state(n)
     state_logical=zero_state(k)

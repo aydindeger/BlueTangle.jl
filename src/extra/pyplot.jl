@@ -195,6 +195,8 @@ function plotq(layers::Vector; labels::Vector{String} = [""])
     xsize = num * 1.5  # Provide horizontal space based on number of operations
     ysize = qubit_lines * 1  # Vertical space based on qubit lines
     
+    xsize=xsize > 200 ? 200 : xsize
+
     fig, ax = subplots(figsize=(xsize, ysize), dpi=100)
     ax.axis("off")  # Turn off the axis
     

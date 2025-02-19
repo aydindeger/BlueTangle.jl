@@ -350,9 +350,7 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
-apply(op::QuantumOps,state::it.MPS;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)=apply(state,op;noise=noise,cutoff=cutoff,maxdim=maxdim)
-
-function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cutoff=1e-10,maxdim=500)
+function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false)#,cutoff=1e-10,maxdim=500)
     
     M=get_M(psi)
 
@@ -370,11 +368,11 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
             throw("MPS ifOp measurement is not supported")
             # psi,ind=op.born_apply(psi,noise)
         else
-            psi,ind=_born_measure(psi,op;cutoff=cutoff,maxdim=maxdim)
+            psi,ind=_born_measure(psi,op)#;cutoff=cutoff,maxdim=maxdim)
         end
         # println("measurement result=$(ind)")
     else #good old gates
-        psi=it.normalize(it.apply(op.expand(M),psi;cutoff=cutoff,maxdim=maxdim))
+        psi=it.normalize(it.apply(op.expand(M),psi))#;cutoff=cutoff,maxdim=maxdim))
     end
 
     ##aply noise.
@@ -484,17 +482,17 @@ end
 
 
 
-function _born_measure(psi::it.MPS,o::QuantumOps;cutoff=1e-10,maxdim=500)
+function _born_measure(psi::it.MPS,o::QuantumOps)#;cutoff=1e-10,maxdim=500)
 
     M=it.siteinds(psi)
-    psi=it.normalize(it.apply(o.expand(M),psi;cutoff=cutoff,maxdim=maxdim)) #rotate
+    psi=it.normalize(it.apply(o.expand(M),psi))#;cutoff=cutoff,maxdim=maxdim)) #rotate
     psi,ind=born_measure_Z(psi,o.qubit)
-    psi=it.normalize(it.apply(it.op(o.mat',M[o.qubit]),psi;cutoff=cutoff,maxdim=maxdim))#rotate back
+    psi=it.normalize(it.apply(it.op(o.mat',M[o.qubit]),psi))#;cutoff=cutoff,maxdim=maxdim))#rotate back
     return psi,ind
 
 end
 
-function born_measure_Z(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
+function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
 
     born_ops=[gate.P0, gate.P1]
     si=it.siteinds(psi, qubit)
@@ -505,7 +503,7 @@ function born_measure_Z(psi::it.MPS,qubit::Int;cutoff=1e-10,maxdim=500)
     prob0=real.(rho_j[1])#0
     ind=rand() < prob0 ? 0 : 1
 
-    psi=it.normalize(it.apply(it.op(born_ops[ind+1],si),psi;cutoff=cutoff,maxdim=maxdim))
+    psi=it.normalize(it.apply(it.op(born_ops[ind+1],si),psi))#;cutoff=cutoff,maxdim=maxdim))
 
     return psi,ind
 

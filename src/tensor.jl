@@ -74,7 +74,7 @@ function reflectMPS(psi::it.MPS)
 end
 
 # to_MPS(vec::Vector,M::Vector{it.Index{Int64}},maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
-to_MPS(vec::Vector,M::Vector{it.Index{Int64}})=it.MPS(vec,M)|>reflectMPS
+to_MPS(vec::Vector,M::Vector)=it.MPS(vec,M)|>reflectMPS
 
 # to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}},maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
 
@@ -83,7 +83,7 @@ to_MPS(vec::Vector,M::Vector{it.Index{Int64}})=it.MPS(vec,M)|>reflectMPS
 
     Convert state vector to MPS
 """
-to_MPS(vec::AbstractVectorS,M::Vector{it.Index{Int64}})=to_MPS(Vector(vec),M)
+to_MPS(vec::AbstractVectorS,M::Vector)=to_MPS(Vector(vec),M)
 
 function tensor_to_matrix(tensor::it.ITensor)
     a=tensor.tensor.storage
