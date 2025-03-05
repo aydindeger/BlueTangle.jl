@@ -683,16 +683,23 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,mat::AbstractMatrixS)
 
-        new_apply_mat(state::Union{AbstractVectorS,it.MPS})=mat*state
+        new_apply_mat(state::AbstractVectorS)=mat*state
 
         return new(1,name,new_apply_mat,mat)
     end
     
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
-        
-        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS})
-            for o=ops
-                state=o*state
+
+        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS};cutoff=1e-12)
+
+            if isa(state,it.MPS)
+                for o=ops
+                    state=apply(state,o;cutoff=cutoff)
+                end
+            else
+                for o=ops
+                    state=o*state
+                end
             end
 
             return state
