@@ -634,7 +634,7 @@ end
 """
 qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
 """
-function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20)
+function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20,return_random::Bool=false)
     # state_init_sym=:random
 
     mps_bool=typeof(n)==Int ? false : true
@@ -675,6 +675,9 @@ function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_
             elseif o.q==2
                 state=Op(o.name,logical_indices[o.qubit],logical_indices[o.target_qubit])*state
             end
+        end
+        if return_random==true
+            return state,state_logical,ops_random
         end
     elseif isa(state_init_sym,AbstractVector)
         state_logical=mps_bool==true ? product_state(k,state_init_sym) : product_state(state_init_sym)

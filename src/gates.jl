@@ -43,6 +43,12 @@ const gate = (
     CNOT = [1. 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0], # CNOT
     CY = [1. 0  0   0; 0 1.  0   0; 0 0  0 -im; 0 0 im  0],
     CZ = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
+    CS = la.Diagonal([1, 1, 1, im]),
+    CT = round.([1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(im * π / 4)],sigdigits=10),
+    CTD = round.([1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(-im * π / 4)],sigdigits=10),#CTdagger
+    CSD = la.Diagonal([1., 1, 1, -im]), #CSdagger
+    CI = la.Diagonal([1., 1, 1, 1]),
+    CH =  [1 0 0 0; 0 1 0 0; 0 0 1/sqrt(2) 1/sqrt(2); 0 0 1/sqrt(2) -1/sqrt(2)],
     SWAP =[1. 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 1],
     ISWAP =[1. 0 0 0; 0 0 im 0; 0 im 0 0; 0 0 0 1],
     FSWAP =[1. 0 0 0; 0 0 1 0; 0 1 0 0; 0 0 0 -1],
@@ -52,7 +58,9 @@ const gate = (
     CCZ = [1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0; 0.0 0.0 0.0 0.0 0.0 0.0 0.0 -1.0]
     )
 
+##
 
+#update below
 one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
 two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
 gates_with_phase=["P","RX","RY","RZ","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]

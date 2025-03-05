@@ -479,29 +479,27 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
         return rv
     end
 
+
     function new_expand(sites::Vector)
-
-        if control!=-2# || size(mat,1)>4
-
-            if name=="CX" ##these are CCX and CCZ
-                rv = _mat_to_tensor(sites,gate.CCX,qubit,target_qubit;control=control)
-            elseif name=="CZ"
-                rv = _mat_to_tensor(sites,gate.CCZ,qubit,target_qubit;control=control)
+        if control != -2
+            if uppercase(name) in ["X", "Y", "Z", "T", "TD", "S", "SD", "I", "H"]
+                rv = _mat_to_tensor(sites, gate[Symbol("C$(uppercase(name))")], control, qubit)
+            elseif name == "CX"
+                rv = _mat_to_tensor(sites, gate.CCX, qubit, target_qubit; control=control)
+            elseif name == "CZ"
+                rv = _mat_to_tensor(sites, gate.CCZ, qubit, target_qubit; control=control)
             else
                 throw("control tensor is not supported")
             end
-
+            return rv
         end
-
+    
         if target_qubit == -1
-            rv = _mat_to_tensor(sites,mat,qubit)
+            rv = _mat_to_tensor(sites, mat, qubit)
         elseif target_qubit > 0
-            # if abs(qubit-target_qubit)>1
-            #     throw("nonlocal tensor is not supported")
-            # end
-            size(mat,1)==4 ? rv = _mat_to_tensor(sites,mat,qubit,target_qubit) : throw("target_qubit is not defined")
+            size(mat, 1) == 4 ? (rv = _mat_to_tensor(sites, mat, qubit, target_qubit)) : throw("target_qubit is not defined")
         end
-
+    
         return rv
     end
 
