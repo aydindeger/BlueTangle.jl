@@ -350,7 +350,7 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
-function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cutoff=1e-12)#,cutoff=1e-10,maxdim=500)
+function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,maxdim=-1)#,cutoff=1e-10,maxdim=500)
     
     M=get_M(psi)
 
@@ -359,7 +359,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
     # end
 
     if isa(op,OpF)
-        psi=op.apply(psi;cutoff=cutoff)
+        psi=op.apply(psi;maxdim=maxdim)
     elseif isa(op,OpQC)
         throw("Quantum Channel MPS is not supported")
         # psi=op.apply(psi)
@@ -372,7 +372,11 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,cu
         end
         # println("measurement result=$(ind)")
     else #good old gates
-        psi=it.normalize(it.apply(op.expand(M),psi;cutoff=cutoff))#;cutoff=cutoff,maxdim=maxdim))
+        if maxdim==-1
+            psi=it.normalize(it.apply(op.expand(M),psi))
+        else
+            psi=it.normalize(it.apply(op.expand(M),psi;maxdim=maxdim))#;cutoff=cutoff,maxdim=maxdim))
+        end
     end
 
     ##aply noise.
