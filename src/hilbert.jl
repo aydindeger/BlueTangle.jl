@@ -350,16 +350,25 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
-function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,maxdim=-1)#,cutoff=1e-10,maxdim=500)
+function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)#,cutoff=1e-10,maxdim=500)
     
     M=get_M(psi)
+    # Decide which parameter to pass: if cutoff is defined then use it, otherwise use maxdim.
+    dim_kw = Dict{Symbol,Any}()
+    if haskey(kwargs, :cutoff)
+        dim_kw[:cutoff] = kwargs[:cutoff]
+    end
+    if haskey(kwargs, :maxdim)
+        dim_kw[:maxdim] = kwargs[:maxdim]
+    end
+    dim_kw = (; dim_kw...) # Convert dictionary to a named tuple for kwarg splatting
 
     # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
     #     throw("non-local gate $(op.name) is not supported.")
     # end
 
     if isa(op,OpF)
-        psi=op.apply(psi;maxdim=maxdim)
+        psi = op.apply(psi; dim_kw...)
     elseif isa(op,OpQC)
         throw("Quantum Channel MPS is not supported")
         # psi=op.apply(psi)
@@ -368,15 +377,11 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,ma
             throw("MPS ifOp measurement is not supported")
             # psi,ind=op.born_apply(psi,noise)
         else
-            psi,ind=_born_measure(psi,op)#;cutoff=cutoff,maxdim=maxdim)
+            psi,ind=_born_measure(psi,op)
         end
         # println("measurement result=$(ind)")
     else #good old gates
-        if maxdim==-1
-            psi=it.normalize(it.apply(op.expand(M),psi))
-        else
-            psi=it.normalize(it.apply(op.expand(M),psi;maxdim=maxdim))#;cutoff=cutoff,maxdim=maxdim))
-        end
+        psi=it.normalize(it.apply(op.expand(M),psi; dim_kw...))
     end
 
     ##aply noise.

@@ -690,11 +690,11 @@ struct OpF <: QuantumOps
     
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
 
-        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS};maxdim=-1)
+        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS};kwargs...)
 
             if isa(state,it.MPS)
                 for o=ops
-                    state=apply(state,o;maxdim=maxdim)
+                    state=apply(state,o;kwargs...)
                 end
             else
                 for o=ops
