@@ -306,6 +306,8 @@ function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
 
 end
 
+
+
 # apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
 
 """
@@ -350,6 +352,8 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
+apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+
 function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)#,cutoff=1e-10,maxdim=500)
     
     M=get_M(psi)
@@ -381,7 +385,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
         end
         # println("measurement result=$(ind)")
     else #good old gates
-        psi=it.normalize(it.apply(op.expand(M),psi; dim_kw...))
+        psi=la.normalize(it.apply(op.expand(M),psi; dim_kw...))
     end
 
     ##aply noise.
@@ -394,6 +398,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
 
 end
 
+apply(op::QuantumOps, psi::it.MPS; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
 
 """
 `apply(rho::sa.SparseMatrixCSC, op::QuantumOps)`
@@ -494,9 +499,9 @@ end
 function _born_measure(psi::it.MPS,o::QuantumOps)#;cutoff=1e-10,maxdim=500)
 
     M=it.siteinds(psi)
-    psi=it.normalize(it.apply(o.expand(M),psi))#;cutoff=cutoff,maxdim=maxdim)) #rotate
+    psi=la.normalize(it.apply(o.expand(M),psi))#;cutoff=cutoff,maxdim=maxdim)) #rotate
     psi,ind=born_measure_Z(psi,o.qubit)
-    psi=it.normalize(it.apply(it.op(o.mat',M[o.qubit]),psi))#;cutoff=cutoff,maxdim=maxdim))#rotate back
+    psi=la.normalize(it.apply(it.op(o.mat',M[o.qubit]),psi))#;cutoff=cutoff,maxdim=maxdim))#rotate back
     return psi,ind
 
 end
@@ -512,7 +517,7 @@ function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
     prob0=real.(rho_j[1])#0
     ind=rand() < prob0 ? 0 : 1
 
-    psi=it.normalize(it.apply(it.op(born_ops[ind+1],si),psi))#;cutoff=cutoff,maxdim=maxdim))
+    psi=la.normalize(it.apply(it.op(born_ops[ind+1],si),psi))#;cutoff=cutoff,maxdim=maxdim))
 
     return psi,ind
 

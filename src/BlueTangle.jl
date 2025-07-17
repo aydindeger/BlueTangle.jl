@@ -17,7 +17,7 @@ export StabilizerCode, encoding_circuit_from_generator, physical_ops, qec_state_
 export relabel_swap
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude
-export it, sa, plt, la, sb #Packages
+export it, its, sa, plt, la, sb #Packages
 export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, variational_apply, get_stats, get_layers, measure_ZNE, fidelity, get_optimized_layers, optimize_simple
 
 end

@@ -1,5 +1,6 @@
 import SparseArrays as sa
 import LinearAlgebra as la
+import ITensors as its
 import ITensorMPS as it
 import StatsBase as sb
 import Pkg
@@ -27,7 +28,7 @@ include("linalg.jl")
 import Base: *
 *(o::QuantumOps, state::AbstractVectorS) = apply(state,o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi,o)
-*(tensor::it.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
+*(tensor::its.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
 
 """
     ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron

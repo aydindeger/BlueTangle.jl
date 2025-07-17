@@ -57,8 +57,8 @@ to_state(MPS::it.MPS,M::Vector)
 
     Convert MPS to state vector
 """
-to_state(MPS::it.MPS,M::Vector)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(M)),2^length(M)))
-to_state(MPS::it.MPS)=sa.sparse(reshape(it.array(it.contract(MPS),reverse(it.siteinds(MPS))),2^length(MPS)))
+to_state(MPS::it.MPS,M::Vector)=sa.sparse(reshape(its.array(its.contract(MPS),reverse(M)),2^length(M)))
+to_state(MPS::it.MPS)=sa.sparse(reshape(its.array(its.contract(MPS),reverse(its.siteinds(MPS))),2^length(MPS)))
 
 #this is wrong!
 # to_state(MPS::it.MPS)=round.(sa.sparse(reshape(it.contract(MPS).tensor,2^length(MPS))),digits=10)
@@ -85,7 +85,7 @@ to_MPS(vec::Vector,M::Vector)=it.MPS(vec,M)|>reflectMPS
 """
 to_MPS(vec::AbstractVectorS,M::Vector)=to_MPS(Vector(vec),M)
 
-function tensor_to_matrix(tensor::it.ITensor)
+function tensor_to_matrix(tensor::its.ITensor)
     a=tensor.tensor.storage
     len=length(a)
     if len==2
@@ -208,7 +208,7 @@ fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
 
 function entanglement_entropy(psi::it.MPS) #fix
     #pastaq
-    ψ = it.normalize!(copy(psi))
+    ψ = la.normalize!(copy(psi))
     N = length(ψ)
     bond = N ÷ 2
     it.orthogonalize!(ψ, bond)
