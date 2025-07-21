@@ -631,13 +631,16 @@ function permutation_vector_from_matrix(permute_matrix::AbstractMatrix{Int})
 end
 
 
+
 """
 qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
+
+Note you still need to apply encoding circuit to the physical state to get the encoded state
 """
 function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20,return_random::Bool=false)
     # state_init_sym=:random
 
-    mps_bool=typeof(n)==Int ? false : true
+    mps_bool = isa(n, Integer) ? false : true
     
     len_k=length(logical_indices)
     k=mps_bool==false ? len_k : n[1:len_k]
@@ -647,9 +650,15 @@ function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_
 
     if (state_init_sym==:zeros) || (state_init_sym==:zero)
         return state,state_logical
-    elseif (state_init_sym==:ones) || (state_init_sym==:one)
-        state=one_state(n)
-        state_logical=one_state(k)
+    elseif (state_init_sym==:ones) || (state_init_sym==:one) #check this
+
+        for i=logical_indices
+            state=Op("X",i)*state
+        end
+        for i=1:len_k
+            state_logical=Op("X",i)*state_logical
+        end
+
     elseif state_init_sym==:plus
         for i=logical_indices
             state=Op("H",i)*state
@@ -657,17 +666,20 @@ function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_
         for i=1:len_k
             state_logical=Op("H",i)*state_logical
         end
-    elseif state_init_sym==:minus
-        state=one_state(n)
-        state_logical=one_state(k)
+    elseif state_init_sym==:minus #check this
+
         for i=logical_indices
+            state=Op("X",i)*state
             state=Op("H",i)*state
         end
         for i=1:len_k
+            state_logical=Op("X",i)*state_logical
             state_logical=Op("H",i)*state_logical
         end
     elseif state_init_sym==:random
+
         ops_random=BlueTangle.random_ops(len_k,random_op_count)
+        
         for o=ops_random     
             state_logical=o*state_logical
             if o.q==1
@@ -679,15 +691,15 @@ function qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_
         if return_random==true
             return state,state_logical,ops_random
         end
-    elseif isa(state_init_sym,AbstractVector)
-        state_logical=mps_bool==true ? product_state(k,state_init_sym) : product_state(state_init_sym)
+    # elseif isa(state_init_sym,AbstractVector) # this is problematic
+    #     state_logical=mps_bool==true ? product_state(k,state_init_sym) : product_state(state_init_sym)
 
-        state_fock=mps_bool==true ? Int.(la.zeros(length(n))) : Int.(la.zeros(n))
-        state_fock[logical_indices] .= state_init_sym
+    #     state_fock=mps_bool==true ? Int.(la.zeros(length(n))) : Int.(la.zeros(n))
+    #     state_fock[logical_indices] .= state_init_sym
 
-        state=mps_bool==true ? product_state(n,state_fock) : product_state(state_fock)
+    #     state=mps_bool==true ? product_state(n,state_fock) : product_state(state_fock)
     else
-        throw("error: invalid state name!")
+        throw(ArgumentError("invalid state name"))
     end
 
     return state,state_logical

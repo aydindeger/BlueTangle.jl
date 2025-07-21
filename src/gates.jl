@@ -198,6 +198,8 @@ for _=1:depth#layer
             c=c+2
         end
 
+        # make sure it never gives three qubit gates.
+
     end
 
 

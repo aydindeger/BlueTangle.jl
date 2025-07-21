@@ -12,7 +12,7 @@ export plotq, savefigure #Plot
 export ⊗, isunitary, same_up_to_global_phase, partial_trace, stinespring_dilation, reduced_row_echelon, rank_of_rref #Linear algebra, linalg
 export fock_basis_create, int2bin, bin2int, sparsevector, hamming_distance, born_measure_Z
 export zyz_decomposition, kronecker_decomposition #Decomposition
-export dim, _born_measure
+export maxdim, _born_measure
 export StabilizerCode, encoding_circuit_from_generator, physical_ops, qec_state_prep, get_XZ_logicals!, get_XZ_logicals, stabilizers_to_generator, reduce_and_relabel_qubits, get_standard_form #QEC get_codeword, 
 export relabel_swap
 export entanglement_entropy, shadow, mag_moments
