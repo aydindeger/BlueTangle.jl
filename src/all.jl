@@ -30,6 +30,12 @@ import Base: *
 *(o::QuantumOps, psi::it.MPS) = apply(psi,o)
 *(tensor::its.ITensor,psi::it.MPS) = it.apply(tensor,psi) #exact
 
+*(str::Tuple, state::AbstractVectorS) = apply(state,Op(str...))
+*(vector_str::AbstractVector{<:Tuple}, state::AbstractVectorS) = apply(vector_str, state)
+
+*(vector_str::Tuple, psi::it.MPS) =  apply(vector_str, psi)
+*(vector_str::AbstractVector{<:Tuple}, psi::it.MPS) =  apply(vector_str, psi)
+
 """
     ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron
 """

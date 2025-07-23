@@ -13,7 +13,7 @@ export ⊗, isunitary, same_up_to_global_phase, partial_trace, stinespring_dilat
 export fock_basis_create, int2bin, bin2int, sparsevector, hamming_distance, born_measure_Z
 export zyz_decomposition, kronecker_decomposition #Decomposition
 export maxdim, _born_measure
-export StabilizerCode, encoding_circuit_from_generator, physical_ops, qec_state_prep, get_XZ_logicals!, get_XZ_logicals, stabilizers_to_generator, reduce_and_relabel_qubits, get_standard_form #QEC get_codeword, 
+export StabilizerCode, encoding_circuit_from_generator, physical_ops, qec_state_prep, QECState, get_XZ_logicals!, get_XZ_logicals, stabilizers_to_generator, reduce_and_relabel_qubits, get_standard_form #QEC get_codeword, 
 export relabel_swap
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude

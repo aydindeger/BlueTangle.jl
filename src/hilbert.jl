@@ -352,7 +352,48 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
+
+function apply(vector_of_ops::Union{Vector{Op},AbstractVector{<:Tuple}},psi::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)
+    
+    if isa(vector_of_ops, Vector{Op})
+
+        for op in vector_of_ops
+            psi = apply(psi, op; noise=noise)
+        end
+
+    elseif isa(vector_of_ops, AbstractVector{<:Tuple})
+
+        for str in vector_of_ops
+            psi = apply(psi, Op(str...); noise=noise)
+        end
+
+    else
+        throw(ArgumentError("ops are not valid!"))
+    end
+
+    return psi
+end
+
+function apply(vector_of_ops::Union{Vector{Op},AbstractVector{<:Tuple}},psi::it.MPS;noise::Union{NoiseModel,Bool}=false,kwargs...)
+    
+    if isa(vector_of_ops, Vector{Op})
+        for op in vector_of_ops
+            psi = apply(psi, op; noise=noise, kwargs...)
+        end
+    elseif isa(vector_of_ops, AbstractVector{<:Tuple})
+        for str in vector_of_ops
+            psi = apply(psi, Op(str...); noise=noise, kwargs...)
+        end
+    else
+        throw(ArgumentError("ops are not valid!"))
+    end
+
+    return psi
+end
+
 apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+
+apply(str::Tuple,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,Op(str...);noise=noise)
 
 function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)#,cutoff=1e-10,maxdim=500)
     
@@ -399,6 +440,8 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
 end
 
 apply(op::QuantumOps, psi::it.MPS; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
+
+apply(str::Tuple, psi::it.MPS; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, Op(str...); noise=noise, kwargs...)
 
 """
 `apply(rho::sa.SparseMatrixCSC, op::QuantumOps)`

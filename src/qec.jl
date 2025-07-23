@@ -631,6 +631,30 @@ function permutation_vector_from_matrix(permute_matrix::AbstractMatrix{Int})
 end
 
 
+struct QECState
+    logical::Union{AbstractVectorS,it.MPS}
+    physical::Union{AbstractVectorS,it.MPS}
+    sym::Symbol
+    is_mps::Bool
+    dims::Vector{Int}
+    ops_random::Vector{Op}
+
+    function QECState(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Union{Symbol,Vector}=:zero;random_op_count::Int=20,return_random::Bool=false)
+        if return_random
+            state_physical, state_logical, ops_random = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
+        else
+            state_physical, state_logical = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
+            ops_random = Op[]
+        end
+        sym = isa(state_init_sym, Symbol) ? state_init_sym : :unknown
+        is_mps = !isa(n, Int)
+
+        dims = is_mps ? [it.maxlinkdim(state_logical),it.maxlinkdim(state_physical)] : [length(state_logical), length(state_physical)]
+        
+        new(state_logical, state_physical, sym, is_mps, dims, ops_random)
+    end
+    
+end
 
 """
 qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
