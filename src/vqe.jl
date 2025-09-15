@@ -171,7 +171,7 @@ struct AnsatzOptions
         model::String="lbfgs",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,
-        pars_initial::Vector=[],
+        pars_initial::AbstractVectorS=[],
         deep_circuit::Bool=false,
         history::Bool=true
         )
@@ -186,9 +186,9 @@ struct AnsatzOptions
             dim=0
             for o=ops
 
-                if o.q!=1 && abs(o.qubit-o.target_qubit)>1
-                    throw("non-local gate $(o.name) is not allowed! Use control parameter instead or add swaps")
-                end
+                # if o.q!=1 && abs(o.qubit-o.target_qubit)>1
+                #     throw("non-local gate $(o.name) is not allowed! Use control parameter instead or add swaps")
+                # end
                 
                 if isa(o.mat,Function)
                     arg_no=BlueTangle._find_argument_number(o.mat)
@@ -314,7 +314,7 @@ end
 
 
 """
-    variational_apply(pars::Vector, opt::AnsatzOptions)
+    variational_apply(pars::AbstractVectorS, opt::AnsatzOptions)
 
 Applies the variational quantum circuit defined by the `AnsatzOptions` to the initial state using the given parameters.
 
@@ -325,7 +325,7 @@ Applies the variational quantum circuit defined by the `AnsatzOptions` to the in
 # Returns
 - The final state after applying the variational circuit.
 """
-function variational_apply(pars::Vector,opt::AnsatzOptions)
+function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions)
 
     state=opt.init
     N=isa(state,it.MPS) ? get_M(state) : opt.N
@@ -336,9 +336,9 @@ function variational_apply(pars::Vector,opt::AnsatzOptions)
         c=1
         for (op,fn)=zip(opt.ops,opt.args)
 
-            if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-                throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
-            end
+            # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+            #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
+            # end
 
             state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
             c = c+fn
@@ -354,9 +354,9 @@ function variational_apply(pars::Vector,opt::AnsatzOptions)
         c=1
         for (op,fn)=zip(opt.ops,opt.args)
 
-            if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-                throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
-            end
+            # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+            #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
+            # end
 
             state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
             c = c+fn
