@@ -669,6 +669,7 @@ ansatz = AnsatzOptions(
     N = N,
     pars_initial = ones(100), # Initial parameters
     ops = ops,
+    loss = H,
     model = "lbfgs" # Using the L-BFGS optimiser
 )
 

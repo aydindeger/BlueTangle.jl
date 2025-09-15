@@ -154,7 +154,7 @@ struct AnsatzOptions
     noise::Union{NoiseModel,Bool}
     dim::Int
     pars_initial::Vector
-    init::Union{sa.SparseVector,it.MPS,Circuit}
+    init::Union{AbstractVectorS,it.MPS,Circuit}
     number_of_iterations::Int
     model::String
     learning_rate::Float64
@@ -167,7 +167,7 @@ struct AnsatzOptions
         ops::Union{Vector{String},Vector{<:QuantumOps}},
         loss::Union{Function,sa.SparseMatrixCSC}, #input state returns number
         noise=false,
-        init::Union{sa.SparseVector,it.MPS,Circuit}=sa.sparse([]),
+        init::Union{AbstractVectorS,it.MPS,Circuit}=sa.sparse([]),
         model::String="lbfgs",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,

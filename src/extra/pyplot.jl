@@ -131,7 +131,7 @@ function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
     control = BlueTangle._control_find(op)
 
     if target_qubit>0
-        marker2=isa(op,OpQC) ? "o" : (BlueTangle._swap_control_target(op.mat)==op.mat ? "o" : "x")
+        marker2=isa(op,OpQC) ? "o" : (BlueTangle._check_swap_invariant(op.mat) ? "o" : "x")
     end
 
     if control != -2

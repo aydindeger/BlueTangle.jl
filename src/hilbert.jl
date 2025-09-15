@@ -186,6 +186,24 @@ end
 
 
 """
+the gate is invariant under swapping the qubits.
+"""
+function _check_swap_invariant(matrix::Union{AbstractMatrixS,Function})
+
+    if isa(matrix,Function)
+        arg_no=BlueTangle._find_argument_number(matrix)
+        matrix=matrix(la.rand(arg_no)...)
+    end
+
+    if size(matrix) != (4, 4)
+        throw("Matrix must be 4x4")
+    end
+
+    return all(x->x==0,matrix*gate.SWAP-gate.SWAP*matrix)
+
+end
+
+"""
 `_swap_control_target(matrix::Matrix) -> Matrix`
 
 Swap the control and target qubits in a two-qubit gate matrix.
@@ -194,10 +212,14 @@ Swap the control and target qubits in a two-qubit gate matrix.
 
 Returns a new matrix with swapped control and target qubits.
 """
-function _swap_control_target(matrix::Matrix)
-    # Ensure the matrix is 4x4
-    if size(matrix) != (4, 4)
-        throw("Matrix must be 4x4")
+function _swap_control_target(matrix::Union{AbstractMatrixS,Function})
+    
+    if _check_swap_invariant(matrix)
+        return matrix
+    end
+
+    if isa(matrix,Function)
+        throw("this function is not invariant under swap and it's a problem!")
     end
 
     result = zero(matrix)#zeros(Complex{Float64}, 4, 4)
