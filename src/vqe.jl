@@ -369,6 +369,8 @@ function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions)
 end
 
 
+VQA(opt::AnsatzOptions)=VQE(opt)
+
 """
     VQE(opt::AnsatzOptions)
 
@@ -436,4 +438,3 @@ function VQE(opt::AnsatzOptions)
     end
 
 end
-
