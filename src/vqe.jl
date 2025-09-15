@@ -368,9 +368,6 @@ function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions)
     
 end
 
-
-VQA(opt::AnsatzOptions)=VQE(opt)
-
 """
     VQE(opt::AnsatzOptions)
 
@@ -385,7 +382,23 @@ Performs the Variational Quantum Eigensolver (VQE) algorithm to find the optimal
     - The optimized parameters for the variational circuit.
     - The final state obtained from the optimized parameters.
 """
-function VQE(opt::AnsatzOptions)
+VQE(opt::AnsatzOptions)=VQA(opt)
+
+"""
+    VQA(opt::AnsatzOptions)
+
+Performs a variational algorithm to find the optimal state of a given loss function using the variational quantum circuit defined by the `AnsatzOptions`.
+
+# Arguments
+- `opt::AnsatzOptions`: The `AnsatzOptions` object containing the configuration for the variational quantum circuit.
+
+# Returns
+- A tuple containing:
+    - The optimization history (energy values) if `history=true`, otherwise the final energy value.
+    - The optimized parameters for the variational circuit.
+    - The final state obtained from the optimized parameters.
+"""
+function VQA(opt::AnsatzOptions)
 
     function loss_func(pars::Vector, opt::AnsatzOptions)
         state = variational_apply(pars, opt)
