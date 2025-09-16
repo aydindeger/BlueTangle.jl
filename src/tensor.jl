@@ -3,11 +3,6 @@ N_MPS(N::Int)
 """
 N_MPS(N::Int)=it.siteinds("Qubit", N)
 
-"""
-init(N::Int)
-"""
-init(N::Int)=N,sitesN(N)
-
 ##
 ##========== state preparation ==========
 
@@ -47,7 +42,9 @@ maxdim(MPS::it.MPS)=it.maxlinkdim(MPS)
 maxdim(MPO::it.MPO)=it.maxlinkdim(MPO)
 
 
-expect(psi::it.MPS,op_str::String)=it.expect(psi, op_str)
+expect(psi::it.MPS, op_str::String)=it.expect(psi, op_str)
+
+expect(psi::it.MPS, mpo::it.MPO)=it.inner(psi', mpo, psi)
 
 
 # ψ0 = MPS(s, n -> n == 1 ? "↓" : "↑")
