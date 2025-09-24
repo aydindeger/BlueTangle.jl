@@ -54,12 +54,12 @@ end
 Function to generate names of all tensor products of Pauli matrices for n qubits
 """
 function pauli_decomposition_names(n::Int)
-    pauli_names=["I", "x", "y", "z"]
+    pauli_names=["I", "X", "Y", "Z"]
     indices = Iterators.product(ntuple(_ -> 1:4, n)...)
 
     tensor_products = []
     for index in indices
-            push!(tensor_products, join([pauli_names[i] for i in index], "*"))
+            push!(tensor_products, join([pauli_names[i] for i in index], ","))
     end
 
     return tensor_products
@@ -72,18 +72,24 @@ function pauli_decomposition(A::AbstractMatrixS)
     n = Int(log2(size(A, 1)))
     pauli_tensors = pauli_decomposition_tensor(n)
     coefficients = [la.tr(A * P) / 2^n for P in pauli_tensors]
-    return sa.sparse(coefficients), pauli_tensors
+    s_coef=sa.sparse(coefficients)
+    nz_elements=sa.findnz(s_coef)[1]
+    nz_coefs=sa.findnz(s_coef)[2]
+    paulis=pauli_decomposition_names(n)[nz_elements]
+    return s_coef, nz_coefs, paulis
 end
 
 """
+#fix this can be made more efificent
 pauli_reconstruction(coefficients::AbstractVectorS, pauli_tensors::Vector)
 # Function to reconstruct the matrix from Pauli decomposition
 
 pauli_reconstruction(coefficients::AbstractVectorS,qubit::Int)
     # nonlocal reconstruction #add id on qubit+1
 """
-function pauli_reconstruction(coefficients::AbstractVectorS, pauli_tensors::Vector)
-    sum(coefficients[i] * pauli_tensors[i] for i in 1:length(coefficients))
+function pauli_reconstruction(non_zero_coefficients::AbstractVectorS, paulis::Vector)
+    # sum(coefficients[i] * pauli_tensors[i] for i in 1:length(coefficients))
+    sum(non_zero_coefficients.*get_operator.(paulis))
 end
 
 #nonlocal reconstruction

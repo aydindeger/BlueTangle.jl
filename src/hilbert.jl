@@ -36,7 +36,7 @@ function hilbert(N::Int,mat::AbstractMatrix,qubit::Int,target_qubit::Int;control
             return foldl(kron,e_ops)
         else #pauli decomposition and reconstruction to build nonlocal ops
             # println("nonlocal hilbert reconstruction")
-            coefficients, _ = pauli_decomposition(final_mat)
+            coefficients, _, _ = pauli_decomposition(final_mat)
             final_mat_nonlocal=pauli_reconstruction(coefficients,min(qubit,target_qubit);distance=distance)#nonlocal reconstruct
 
             for _=1:N-max(qubit,target_qubit)
@@ -297,15 +297,19 @@ end
     apply noise on qubit or target_qubit of a given state and noise model
 """
 function apply_noise(state::AbstractVectorS,op::QuantumOps,noise::NoiseModel)
+
+    if op.noisy==true
     
-    if op.q==1
-        if op.control == -2 
-            return noise.q1.apply(state,op.qubit)
-        else
-            return noise.q2.apply(state,op.control,op.qubit)
+        if op.q==1
+            if op.control == -2 
+                return noise.q1.apply(state,op.qubit)
+            else
+                return noise.q2.apply(state,op.control,op.qubit)
+            end
+        elseif op.q==2
+            return noise.q2.apply(state,op.qubit,op.target_qubit)
         end
-    elseif op.q==2
-        return noise.q2.apply(state,op.qubit,op.target_qubit)
+
     end
 
 end
@@ -315,15 +319,19 @@ end
 apply noise on qubit or target_qubit of a given density matrix and noise model
 """
 function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
+
+    if op.noisy==true
     
-    if op.q==1
-        if op.control == -2 
-            return noise.q1.apply(rho,op.qubit)
-        else
-            return noise.q2.apply(rho,op.control,op.qubit)
+        if op.q==1
+            if op.control == -2 
+                return noise.q1.apply(rho,op.qubit)
+            else
+                return noise.q2.apply(rho,op.control,op.qubit)
+            end
+        elseif op.q==2
+            return noise.q2.apply(rho,op.qubit,op.target_qubit)
         end
-    elseif op.q==2
-        return noise.q2.apply(rho,op.qubit,op.target_qubit)
+
     end
 
 end
@@ -366,7 +374,7 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
     end
 
     ##aply noise.
-    if isa(noise, NoiseModel) && op.noisy
+    if isa(noise, NoiseModel)
         state=apply_noise(state,op,noise)
     end
 
@@ -375,9 +383,9 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 end
 
 
-function apply(vector_of_ops::Union{Vector{Op},AbstractVector{<:Tuple}},psi::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)
+function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)
     
-    if isa(vector_of_ops, Vector{Op})
+    if isa(vector_of_ops, Vector{<:QuantumOps})
 
         for op in vector_of_ops
             psi = apply(psi, op; noise=noise)
@@ -396,9 +404,9 @@ function apply(vector_of_ops::Union{Vector{Op},AbstractVector{<:Tuple}},psi::Abs
     return psi
 end
 
-function apply(vector_of_ops::Union{Vector{Op},AbstractVector{<:Tuple}},psi::it.MPS;noise::Union{NoiseModel,Bool}=false,kwargs...)
+function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::it.MPS;noise::Union{NoiseModel,Bool}=false,kwargs...)
     
-    if isa(vector_of_ops, Vector{Op})
+    if isa(vector_of_ops, Vector{<:QuantumOps})
         for op in vector_of_ops
             psi = apply(psi, op; noise=noise, kwargs...)
         end
@@ -452,7 +460,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
     end
 
     ##aply noise.
-    if isa(noise, NoiseModel) && op.noisy
+    if isa(noise, NoiseModel)
         throw("Noisy MPS is not supported")
         # state=apply_noise(state,op,noise)
     end
@@ -496,7 +504,7 @@ function apply(rho::sa.SparseMatrixCSC,op::QuantumOps;noise::Union{NoiseModel,Bo
     end
 
     ##aply noise
-    if isa(noise, NoiseModel) && op.noisy
+    if isa(noise, NoiseModel)
         rho=apply_noise(rho,op,noise)
     end
 

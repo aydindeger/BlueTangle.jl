@@ -325,11 +325,16 @@ Applies the variational quantum circuit defined by the `AnsatzOptions` to the in
 # Returns
 - The final state after applying the variational circuit.
 """
-function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions)
+function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions;noise_override::Union{Bool,NoiseModel}=false)
 
     state=opt.init
     N=isa(state,it.MPS) ? get_M(state) : opt.N
-    noise=opt.noise
+
+    if isa(noise_override, NoiseModel)
+        noise=noise_override # this overrides the noise in ansatz. So you can use different noise models for given parameters in VQE and VQA
+    else
+        noise=opt.noise
+    end
 
     if isa(noise, NoiseModel)
 
@@ -343,10 +348,7 @@ function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions)
             state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
             c = c+fn
 
-            selected_noise = op.q == 1 ? noise.q1 : noise.q2
-            if isa(selected_noise, QuantumChannel) && op.noisy==true
-                state = apply_noise(state, op, selected_noise)
-            end
+            state = apply_noise(state, op, noise)
         end
 
     else

@@ -793,6 +793,7 @@ function _final_measurement(state::AbstractVectorS,options::Options)#todo parall
 
 end
 
+
 """
 `expand_multi_op(list_of_operators::String, qubits_applied::Vector, N::Int) -> Matrix`
 
@@ -821,6 +822,67 @@ function expand_multi_op(list_of_operators::String,qubits_applied::Vector{Int},N
 
     return string_to_matrix(str_ops)
 end
+
+
+"""
+`get_operator(list_of_operators::String, qubits_applied::Vector, N::Int) -> Matrix`
+
+Expand multiple quantum operators over a specified set of qubits.
+
+- `list_of_operators`: A string representing a list of operators.
+- `qubits_applied`: A vector of qubits on which operators are applied.
+- `N`: Total number of qubits.
+
+Returns a matrix representing the expanded operators.
+"""
+function get_operator(list_of_operators::Union{String,Vector{String}},qubits_applied::Vector{Int},N::Int)
+    if isa(list_of_operators, Vector{String})
+        list_of_operators=join(list_of_operators, ",")
+    end
+
+    return expand_multi_op(list_of_operators,qubits_applied,N)
+end
+
+function get_operator(list_of_operators::Union{String,Vector{String}},qubits_applied::Int,N::Int)
+    if isa(list_of_operators, Vector{String})
+        list_of_operators=join(list_of_operators, ",")
+    end
+ 
+    return expand_multi_op(list_of_operators,[qubits_applied],N)
+end
+
+"""
+    get_operator(observable::Union{String,Vector{String}}, n::Int) -> AbstractMatrix
+
+Constructs the Kronecker product of the operator `observable` repeated `n` times.
+
+# Arguments
+- `observable::String`: The operator to be repeated, represented as a string (e.g., "X").
+- `n::Int`: The number of times the operator is repeated.
+
+# Returns
+- An `AbstractMatrix` representing the Kronecker product of the operator repeated `n` times.
+
+Example: get_operator("X", 3) -> kron(X, X, X)
+"""
+function get_operator(observable::Union{String,Vector{String}}, N::Int)
+
+    if isa(observable, Vector{String})
+        observable=join(observable, ",")
+    end
+
+    ops = join(fill(observable, N), ",")
+    return string_to_matrix(ops)
+end
+
+function get_operator(observable::Union{String,Vector{String}})
+    if isa(observable, Vector{String})
+        observable=join(observable, ",")
+    end
+    return string_to_matrix(observable)
+end
+
+expand_multi_op(list_of_operators::String,qubits_applied::Int,N::Int)=expand_multi_op(list_of_operators,[qubits_applied],N)
 
 """
 `string_to_matrix(list_of_operators::String) -> Matrix`
