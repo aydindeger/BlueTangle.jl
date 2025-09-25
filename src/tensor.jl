@@ -36,6 +36,30 @@ create random state
 """
 random_state(sites::Vector,chi::Int=1)=it.randomMPS(sites,chi)
 
+
+"""
+creates MPS plus state
+"""
+function plus_state(n::Vector)
+    mps=zero_state(n)
+    for i=1:length(n)
+        mps=Op("H",i)*mps
+    end
+    return mps
+end
+
+
+"""
+creates MPS minus state
+"""
+function minus_state(n::Vector)
+    mps=one_state(n)
+    for i=1:length(n)
+        mps=Op("H",i)*mps
+    end
+    return mps
+end
+
 ##========== state preparation ==========
 
 maxdim(MPS::it.MPS)=it.maxlinkdim(MPS)
