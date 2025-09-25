@@ -90,7 +90,7 @@ function reflectMPS(psi::it.MPS)
 end
 
 # to_MPS(vec::Vector,M::Vector,maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
-to_MPS(vec::Vector,M::Vector)=it.MPS(vec,M)|>reflectMPS
+to_MPS(vec::Vector,M::Vector)=throw("sorry, something's wrong here!")#it.MPS(vec,M)|>reflectMPS #fix this as it reflects sites as well!
 
 # to_MPS(vec::AbstractVectorS,M::Vector,maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
 
@@ -188,8 +188,6 @@ function sample_bit(MPS::it.MPS,shots::Int=1;basis="Z")
     
     return [it.sample!(MPS).-1 for i=1:shots]
 end
-
-
 
 
 """

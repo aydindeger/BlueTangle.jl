@@ -411,6 +411,7 @@ function VQA(opt::AnsatzOptions)
     pars = opt.pars_initial
     # learning_rate=opt.learning_rate
     energy_history = Vector{Float64}()#(undef,en_size)
+    pars_history = []
     optimizer = opt.optimizer
 
     if lowercase(opt.model)=="lbfgs"
@@ -424,9 +425,9 @@ function VQA(opt::AnsatzOptions)
         pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, opt), pars, optimizer)
 
         if opt.history==false
-            return res,pars,variational_apply(pars, opt)
+            return res,pars
         else
-            return normgradhistory[:,1],pars,variational_apply(pars, opt)
+            return normgradhistory[:,1],pars
         end
 
     else
@@ -440,14 +441,15 @@ function VQA(opt::AnsatzOptions)
 
             if opt.history==true# && mod(i,Int(opt.number_of_iterations/100))==0
                 push!(energy_history,loss_func(pars, opt))
+                push!(pars_history,pars)
             end
 
         end
 
         if opt.history==false
-            return loss_func(pars, N),pars,variational_apply(pars, opt)
+            return loss_func(pars, N),pars
         else
-            return energy_history,pars,variational_apply(pars, opt)
+            return energy_history,pars,pars_history
         end
 
     end
