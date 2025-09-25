@@ -40,24 +40,19 @@ random_state(sites::Vector,chi::Int=1)=it.randomMPS(sites,chi)
 """
 creates MPS plus state
 """
-function plus_state(n::Vector)
-    mps=zero_state(n)
-    for i=1:length(n)
-        mps=Op("H",i)*mps
-    end
-    return mps
-end
-
+plus_state(n::Vector)=convert_X_basis(zero_state(n))
 
 """
 creates MPS minus state
 """
-function minus_state(n::Vector)
-    mps=one_state(n)
-    for i=1:length(n)
-        mps=Op("H",i)*mps
+minus_state(n::Vector)=convert_X_basis(one_state(n))
+
+function convert_X_basis(state::Union{AbstractVectorS,it.MPS})
+    N=get_N(state)
+    for i=1:N
+        state=Op("H",i)*state
     end
-    return mps
+    return state
 end
 
 ##========== state preparation ==========
@@ -166,8 +161,36 @@ end
 """
 sample state/MPS
 """
-sample_bit(state::AbstractVectorS,shots::Int=1)=int2bin.(sample(state,shots),get_N(state))
-sample_bit(MPS::it.MPS,shots::Int=1)=[it.sample!(MPS).-1 for i=1:shots]
+function sample_bit(state::AbstractVectorS,shots::Int=1;basis="Z")
+    
+    if uppercase(basis)=="X"
+        state=convert_X_basis(state)
+    elseif uppercase(basis)=="Z"
+        nothing
+    else
+        throw("basis must be Z or X")
+    end
+
+    return int2bin.(sample(state,shots),get_N(state))
+
+end
+
+
+function sample_bit(MPS::it.MPS,shots::Int=1;basis="Z")
+
+    if uppercase(basis)=="X"
+        MPS=convert_X_basis(MPS)
+    elseif uppercase(basis)=="Z"
+        nothing
+    else
+        throw("basis must be Z or X")
+    end
+    
+    return [it.sample!(MPS).-1 for i=1:shots]
+end
+
+
+
 
 """
 inner(ψ::AbstractVectorS,MPS::it.MPS)=ψ'to_state(MPS)
