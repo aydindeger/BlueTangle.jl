@@ -24,6 +24,7 @@ include("tensor.jl")
 include("trotter.jl")
 include("vqe.jl")
 include("linalg.jl")
+include("qasm.jl")
 
 import Base: *
 *(o::QuantumOps, state::AbstractVectorS) = apply(state,o)
