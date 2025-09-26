@@ -21,7 +21,6 @@ end
 _qi0(i::Int) = i - 1  # 1→0
 _qi1(s) = parse(Int, s) + 1  # 0→1
 
-# ------------ EXPORT ------------
 """
     to_qasm(ops::Vector{Op};
             nqubits::Union{Int,Nothing}=nothing,
@@ -37,6 +36,18 @@ function to_qasm(ops::Vector{Op};
                  creg::AbstractString="c")::String
     isempty(ops) && throw(ArgumentError("ops vector is empty"))
 
+    # --- helpers ---
+    _clean_upper(name::AbstractString) = uppercase(String(split(name, '(')[1]))
+    _split_name_args(s::AbstractString) = begin
+        if occursin('(', s)
+            head, rest = split(s, '('; limit=2)
+            return (uppercase(String(head)), String(rstrip(replace(rest, ')' => ""))))
+        else
+            return (uppercase(String(s)), nothing)
+        end
+    end
+    _qi0(i::Int) = i - 1
+
     # infer N
     function _maxidx(op::Op)
         m = op.qubit
@@ -47,6 +58,7 @@ function to_qasm(ops::Vector{Op};
     N = isnothing(nqubits) ? maximum(_maxidx.(ops)) : nqubits
     N < 1 && throw(ArgumentError("nqubits must be ≥ 1"))
 
+    # collect opaque decls we need to emit
     opaques = Set{String}()
 
     # op → QASM lines
@@ -59,7 +71,7 @@ function to_qasm(ops::Vector{Op};
         nameU = _clean_upper(op.name)
         base, args = _split_name_args(op.name)
 
-        # ---- measurements (basis-rotations → MZ) ----
+        # measurements
         if nameU == "MZ" || nameU == "M(Z)"
             return ["measure $qreg[$qi] -> $creg[$qi];"]
         elseif nameU == "MX" || nameU == "M(X)"
@@ -68,22 +80,29 @@ function to_qasm(ops::Vector{Op};
             return ["sdg $qreg[$qi];", "h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];"]
         end
 
-        # ---- 1-qubit (incl. parametrized) + control ----
+        # 1-qubit (incl. parametrized) + optional control
         if t < 0
             if c >= 1
-                # controlled 1q gates / rotations
+                # ---- Controlled 1q gates ----
                 if base == "X";  return ["cx $qreg[$ci],$qreg[$qi];"] end
                 if base == "Y";  return ["cy $qreg[$ci],$qreg[$qi];"] end
                 if base == "Z";  return ["cz $qreg[$ci],$qreg[$qi];"] end
 
-                if base == "RZ" || base == "U1" || base == "P"
-                    return ["cu1($(args)) $qreg[$ci],$qreg[$qi];"]
+                # Controlled rotations: export as crx/cry/crz (NOT cu1/cu3)
+                if base == "RX"
+                    push!(opaques, "opaque crx(theta) a,b;")
+                    return ["crx($(args)) $qreg[$ci],$qreg[$qi];"]
                 elseif base == "RY"
-                    return ["cu3($(args),0,0) $qreg[$ci],$qreg[$qi];"]
-                elseif base == "RX"
-                    return ["h $qreg[$qi];",
-                            "cu1($(args)) $qreg[$ci],$qreg[$qi];",
-                            "h $qreg[$qi];"]
+                    push!(opaques, "opaque cry(theta) a,b;")
+                    return ["cry($(args)) $qreg[$ci],$qreg[$qi];"]
+                elseif base == "RZ"
+                    push!(opaques, "opaque crz(theta) a,b;")
+                    return ["crz($(args)) $qreg[$ci],$qreg[$qi];"]
+                end
+
+                # Phase/U-gates keep cu1/cu3 forms
+                if base == "P" || base == "U1"
+                    return ["cu1($(args)) $qreg[$ci],$qreg[$qi];"]
                 elseif base == "U2"
                     return ["cu3(pi/2,$(args)) $qreg[$ci],$qreg[$qi];"]
                 elseif base == "U3"
@@ -92,7 +111,7 @@ function to_qasm(ops::Vector{Op};
                     throw(ArgumentError("Controlled $(op.name) not supported"))
                 end
             else
-                # plain 1q
+                # plain 1q (no control)
                 if base == "P" || base == "U1"; return ["u1($(args)) $qreg[$qi];"] end
                 if base == "U2";                return ["u2($(args)) $qreg[$qi];"] end
                 if base == "U3";                return ["u3($(args)) $qreg[$qi];"] end
@@ -113,7 +132,7 @@ function to_qasm(ops::Vector{Op};
             end
         end
 
-        # ---- 2q / 3q (param and non-param) ----
+        # 2q / 3q (param and non-param) — unchanged from your last version
         if base == "CX" || base == "CNOT"
             if c >= 1; return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] else return ["cx $qreg[$qi],$qreg[$ti];"] end
         elseif base == "CY"
@@ -132,7 +151,6 @@ function to_qasm(ops::Vector{Op};
             push!(opaques, "opaque ecr a,b;");    return ["ecr $qreg[$qi],$qreg[$ti];"]
         end
 
-        # param 2q
         if base == "CP"
             return ["cu1($(args)) $qreg[$qi],$qreg[$ti];"]
         elseif base == "RXX"
@@ -151,7 +169,6 @@ function to_qasm(ops::Vector{Op};
             push!(opaques, "opaque swapa(a) a,b;"); return ["swapa($(args)) $qreg[$qi],$qreg[$ti];"]
         end
 
-        # 3q
         if base == "CCX";   return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
         if base == "CCY";   return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
         if base == "CCZ";   return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
@@ -234,7 +251,7 @@ function from_qasm(qasm::AbstractString)::Vector{Op}
             push!(ops, Op("$(gate)($θ)", qi)); continue
         end
         if (m = match(r"^u1\s*\(\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
-            λ = strip(m.captures[1]); qi = _q1(m.captures[2]); push!(ops, Op("P($λ)", qi)); continue
+            λ = strip(m.captures[1]); qi = _q1(m.captures[2]); push!(ops, Op("U1($λ)", qi)); continue
         end
         if (m = match(r"^u2\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
             ϕ = strip(m.captures[1]); λ = strip(m.captures[2]); qi = _q1(m.captures[3])
@@ -248,7 +265,7 @@ function from_qasm(qasm::AbstractString)::Vector{Op}
         # controlled 1q rotations: cu1/cu3 and crx/cry/crz
         if (m = match(r"^(?:cu1|cp)\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
             λ = strip(m.captures[1]); ctrl = _q1(m.captures[2]); tgt = _q1(m.captures[3])
-            push!(ops, Op("rz($λ)", tgt; control=ctrl)); continue
+            push!(ops, Op("U1($λ)", tgt; control=ctrl)); continue
         end
         if (m = match(r"^cu3\s*\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
             θ = strip(m.captures[1]); ϕ = strip(m.captures[2]); λ = strip(m.captures[3])

@@ -63,7 +63,6 @@ const gate = (
 #update below
 one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
 two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
-gates_with_phase=["P","RX","RY","RZ","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
 
     
 """
@@ -360,6 +359,10 @@ _clean_name(op_name::String)=uppercase(string(split(op_name, "(")[1]))
 _name_with_arg_bool(name::String)=_clean_name(name) ∈ gates_with_phase
 _name_with_two_qubit_gates_bool(name::String)=_clean_name(name) ∈ two_qubit_gates
 
+gates_with_phase=["P","RX","RY","RZ","U1","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
+
+
+#if you add any gate with parameters, add it to gates_with_phase list
 
 """
 all gate functions
@@ -379,6 +382,8 @@ function gates(op_name::String,param_bool=false)
     _RZ(θ)=[ #exp(-i θ/2 Z)
         exp(-im*θ/2) 0;
         0 exp(im*θ/2)]
+
+    _U1(λ) = [1 0; 0 exp(im*λ)]
 
     _U2(φ, λ)=(1/sqrt(2)) * [1 -exp(im * λ); exp(im * φ) exp(im * (φ + λ))]
 
@@ -407,6 +412,7 @@ function gates(op_name::String,param_bool=false)
         "RX" => _RX,
         "RY" => _RY,
         "RZ" => _RZ,
+        "U1" => _U1,
         "U2" => _U2,
         "U3" => _U3,
         "CP" => _CP,
@@ -450,7 +456,7 @@ end
 
 # phase gates
 
-export _P,_RX,_RY,_RZ,_U2,_U3,_CP,_GIVENS,_FSIM,_SWAPA,_RXX,_RYY,_RZZ,_RXY
+export _P,_RX,_RY,_RZ,_U1,_U2,_U3,_CP,_GIVENS,_FSIM,_SWAPA,_RXX,_RYY,_RZZ,_RXY
 
 """
 _P(λ) = [1 0; 0 exp(im*λ)]
@@ -468,6 +474,11 @@ _RY(θ)=[ #exp(-i θ/2 Y)
 _RZ(θ)=[ #exp(-i θ/2 Z)
     exp(-im*θ/2) 0;
     0 exp(im*θ/2)]
+
+"""
+_U1(λ) = _P(λ)
+"""
+_U1(λ) = [1 0; 0 exp(im*λ)]
 
 """
 _U2(φ, λ)=(1/sqrt(2)) * [1 -exp(im * λ); exp(im * φ) exp(im * (φ + λ))]
