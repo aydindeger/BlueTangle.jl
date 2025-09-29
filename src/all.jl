@@ -22,7 +22,7 @@ include("gates.jl")
 include("noise.jl")
 include("tensor.jl")
 include("trotter.jl")
-include("vqe.jl")
+include("vqa.jl")
 include("linalg.jl")
 include("qasm.jl")
 

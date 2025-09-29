@@ -181,6 +181,9 @@ Plots a quantum circuit diagram from a vector of quantum operations.
 Creates a visual representation of the quantum circuit based on the specified operations and initial qubit states.
 """
 function plotq(layers::Vector; labels::Vector{String} = [""])
+
+    layers=get_layers(layers)
+
     ops = vcat(layers...)
 
     qubit_lines = maximum([max(op.qubit, BlueTangle._target_find(op), BlueTangle._control_find(op)) for op in ops if !isa(op, OpF)])

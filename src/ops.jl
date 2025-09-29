@@ -9,6 +9,31 @@ get_M(state::it.MPS)=it.siteinds(state)
 get_N(psi::it.MPS)=length(get_M(psi))
 
 """
+qubit number from a set of operations
+"""
+function get_N(ops::Vector{<:QuantumOps})
+    max_index = 0
+
+    ops=filter(op -> !isa(op, OpF), ops)
+
+    for op in ops
+
+        if isa(op, ifOp)
+            current_max = op.qubit
+        elseif isa(op, OpQC)
+            current_max = max(op.qubit, op.target_qubit)
+        else
+            current_max = max(op.qubit, op.target_qubit, op.control)
+        end
+
+        max_index = max(max_index, current_max)
+
+    end
+
+    return max_index
+end
+
+"""
     sample(state::AbstractVectorS, shots::Int) -> Vector
 
 Sample outcomes from a quantum state vector based on the probability distribution.

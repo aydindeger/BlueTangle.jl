@@ -245,6 +245,63 @@ struct AnsatzOptions
 end
 
 
+"""
+    EfficientSU2(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ", "CX"]; deep_circuit::Bool=false)
+Generates an efficient SU(2) variational quantum circuit for `N` qubits with a specified number of repetitions and gate types.
+This is similar to Qiskit implementation
+# Arguments
+- `N::Int`: The number of qubits in the circuit.
+- `reps::Int=1`: The number of repetitions of the gate sequence.
+- `gates::Vector{String}=["RY", "RZ", "CX"]
+: A vector of gate names to be used in the circuit.
+- `deep_circuit::Bool=false`: If true, uses a deep circuit structure; otherwise
+uses a brick-wall structure.
+# Returns
+- A vector of `QuantumOps` representing the generated variational quantum circuit.
+# Example
+```julia
+circuit = EfficientSU2(4, 2, ["RY", "RZ"], deep_circuit=true)
+```
+This function constructs a variational quantum circuit by repeating a specified sequence of gates across the qubits. The circuit can be structured in a deep or brick-wall configuration based on the `deep_circuit` parameter.
+"""
+function EfficientSU2(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ"];deep_circuit::Bool=true)
+
+    gate_list = String[]
+    for i in 1:reps+1
+        append!(gate_list, gates)
+        if i <= reps
+            push!(gate_list, "CX")
+        end
+    end
+
+    return BlueTangle._variational_circuit_from_string(N,gate_list;deep_circuit=deep_circuit)[1]
+
+end
+
+
+"""
+    generate_ansatz_circuit(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ", "CX"]; deep_circuit::Bool=false)
+Generates an efficient variational quantum circuit for `N` qubits with a specified number of repetitions and gate types.
+# Arguments
+- `N::Int`: The number of qubits in the circuit.
+- `reps::Int=1`: The number of repetitions of the gate sequence.
+- `gates::Vector{String}=["RY", "RZ", "CX"]
+: A vector of gate names to be used in the circuit.
+- `deep_circuit::Bool=false`: If true, uses a deep circuit structure; otherwise
+uses a brick-wall structure.
+# Returns
+- A vector of `QuantumOps` representing the generated variational quantum circuit.
+# Example
+```julia
+circuit = generate_ansatz_circuit(4, 2, ["RY", "RZ", "CX"], deep_circuit=true)
+```
+This function constructs a variational quantum circuit by repeating a specified sequence of gates across the qubits. The circuit can be structured in a deep or brick-wall configuration based on the `deep_circuit` parameter.
+"""
+function generate_ansatz_circuit(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ", "CX"]; deep_circuit::Bool=true)
+    gate_list = vcat(fill(gates, reps)...)
+    return BlueTangle._variational_circuit_from_string(N, gate_list; deep_circuit=deep_circuit)[1]
+end
+
 function _variational_circuit_from_string(N::Int,ops::Vector{String};deep_circuit::Bool=false)
     
     ops_final=Vector{QuantumOps}()
@@ -416,7 +473,7 @@ function VQA(opt::AnsatzOptions)
 
     if lowercase(opt.model)=="lbfgs"
 
-        function loss_func_and_grad(pars::Vector, opt::AnsatzOptions)
+        function loss_func_and_grad(pars::Vector, opt::AnsatzOptions) #fix! this can be made more efficient 
             state = variational_apply(pars, opt)
             gr=ForwardDiff.gradient(p -> loss_func(p,opt), pars)
             return (opt.loss(state),gr)
@@ -429,6 +486,14 @@ function VQA(opt::AnsatzOptions)
         else
             return normgradhistory[:,1],pars
         end
+
+    elseif lowercase(opt.model)=="cobyla"
+
+        
+x0 = pars
+
+pars2, info = PRIMA.cobyla(p -> loss_func_aydin(p,opt), x0)
+print("====\nusing cobyla directly: $x\n$info\n$(info.fx)")
 
     else
 

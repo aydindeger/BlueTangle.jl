@@ -62,9 +62,8 @@ const gate = (
 
 #update below
 one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
-two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
+two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","RYY","RZZ","RXY","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
 
-    
 """
 `random_gate_1(N::Int) -> Op`
 

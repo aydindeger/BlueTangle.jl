@@ -18,7 +18,7 @@ export relabel_swap
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude
 export it, its, sa, plt, la, sb #Packages
-export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, VQA, variational_apply, get_stats, get_layers, measure_ZNE, fidelity, get_optimized_layers, optimize_simple
+export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, VQA, variational_apply, EfficientSU2, generate_ansatz_circuit, get_stats, get_layers, measure_ZNE, fidelity, get_optimized_layers, optimize_simple
 export to_qasm, from_qasm
 
 end
