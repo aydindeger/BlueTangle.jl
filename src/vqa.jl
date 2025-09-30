@@ -136,7 +136,25 @@ Constructs an `AnsatzOptions` object that contains the configuration for a varia
 - `ops::Union{Vector{String},Vector{<:QuantumOps}}`: The quantum operations defining the ansatz, either as a vector of strings or a vector of `QuantumOps`.
 - `noise=false`: Specifies whether to include noise in the ansatz. Can be either a `NoiseModel` or a boolean value.
 - `init::Union{sa.SparseVector,Circuit}=sa.sparse([])`: The initial state of the ansatz, either as a sparse vector or a `Circuit`. Defaults to the zero state.
-- `model::String="lbfgs"`: The optimization model to use. Can be "cobyla"(gradient-free), "lbfgs", "adam", "descent", "radam", "momentum", or "nesterov".
+
+# Optimization Models
+
+## Gradient-Free Models (uses PRIMA.jl)
+- `"cobyla"`: Affine model, supports bounds, linear, and non-linear constraints.
+- `"newuoa"`: Quadratic model, no constraints.
+- `"uobyqa"`: Quadratic model, no constraints.
+- `"bobyqa"`: Quadratic model, supports bounds.
+- `"lincoa"`: Quadratic model, supports bounds and linear constraints.
+- `"prima"`: Automatically picks the best PRIMA model.
+
+## Gradient-Based Models (uses ForwardDiff.jl, Optimisers.jl, OptimKit.jl]
+- `"lbfgs"`: Uses LBFGS optimizer (gradient-based).
+- `"adam"`: Uses Adam optimizer (gradient-based).
+- `"descent"`: Uses gradient descent optimizer.
+- `"radam"`: Uses RAdam optimizer.
+- `"momentum"`: Uses Momentum optimizer.
+- `"nesterov"`: Uses Nesterov optimizer.
+
 - `number_of_iterations::Int=1000`: The number of iterations for the optimization.
 - `learning_rate::Float64=0.01`: The learning rate for the optimization.
 - `pars_initial::Vector=[]`: The initial parameters for the ansatz. If not provided, random parameters are generated.
@@ -229,8 +247,6 @@ struct AnsatzOptions
             optimizer=Optimisers.setup(Optimisers.Nesterov(learning_rate),pars_initial)
         elseif lowercase(model)=="lbfgs" #OptimKit.jl LBFGS
             optimizer = OptimKit.LBFGS(; maxiter=number_of_iterations) #PRIMA.jl
-        elseif lowercase(model)=="cobyla"
-            optimizer = nothing
         else
             optimizer = nothing
         end
@@ -489,11 +505,42 @@ function VQA(opt::AnsatzOptions)
             return normgradhistory[:,1],pars
         end
 
+    elseif lowercase(opt.model)=="prima"
+
+        pars, info_c = pr.prima(p -> loss_func(p,opt), pars)
+
+        return info_c.fx, pars
+
     elseif lowercase(opt.model)=="cobyla"
 
         pars, info_c = pr.cobyla(p -> loss_func(p,opt), pars)
 
         return info_c.fx, pars
+
+    elseif lowercase(opt.model)=="uobyqa"
+
+        pars, info_c = pr.uobyqa(p -> loss_func(p,opt), pars)
+
+        return info_c.fx, pars
+
+    elseif lowercase(opt.model)=="newuoa"
+
+        pars, info_c = pr.newuoa(p -> loss_func(p,opt), pars)
+
+        return info_c.fx, pars
+
+    elseif lowercase(opt.model)=="bobyqa"
+
+        pars, info_c = pr.bobyqa(p -> loss_func(p,opt), pars)
+
+        return info_c.fx, pars
+
+    elseif lowercase(opt.model)=="lincoa"
+
+        pars, info_c = pr.lincoa(p -> loss_func(p,opt), pars)
+
+        return info_c.fx, pars
+
     else
 
         for i in 1:opt.number_of_iterations
