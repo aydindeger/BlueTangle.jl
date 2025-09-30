@@ -491,8 +491,9 @@ function VQA(opt::AnsatzOptions)
 
     elseif lowercase(opt.model)=="cobyla"
 
-        info.fx, pars = pr.cobyla(p -> loss_func(p,opt), pars)
+        pars, info_c = pr.cobyla(p -> loss_func(p,opt), pars)
 
+        return info_c.fx, pars
     else
 
         for i in 1:opt.number_of_iterations
