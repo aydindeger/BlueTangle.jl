@@ -6,6 +6,7 @@ import StatsBase as sb
 import Pkg
 
 using ForwardDiff, Optimisers, OptimKit
+import PRIMA as pr
 
 const AbstractVectorS = Union{AbstractVector, sa.SparseVector}
 const AbstractMatrixS = Union{AbstractMatrix, sa.SparseMatrixCSC}
@@ -25,6 +26,14 @@ include("trotter.jl")
 include("vqa.jl")
 include("linalg.jl")
 include("qasm.jl")
+
+"""
+Displaying docstrings in VSCode
+https://discourse.julialang.org/t/displaying-docstrings-in-notebook-in-vscode-errors/107627/4
+"""
+macro docVSC(fn)
+    return :( display("text/markdown",Base.doc($fn)))
+end
 
 import Base: *
 *(o::QuantumOps, state::AbstractVectorS) = apply(state,o)

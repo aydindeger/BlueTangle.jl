@@ -136,7 +136,7 @@ Constructs an `AnsatzOptions` object that contains the configuration for a varia
 - `ops::Union{Vector{String},Vector{<:QuantumOps}}`: The quantum operations defining the ansatz, either as a vector of strings or a vector of `QuantumOps`.
 - `noise=false`: Specifies whether to include noise in the ansatz. Can be either a `NoiseModel` or a boolean value.
 - `init::Union{sa.SparseVector,Circuit}=sa.sparse([])`: The initial state of the ansatz, either as a sparse vector or a `Circuit`. Defaults to the zero state.
-- `model::String="lbfgs"`: The optimization model to use. Can be "lbfgs", "adam", "descent", "radam", "momentum", or "nesterov".
+- `model::String="lbfgs"`: The optimization model to use. Can be "cobyla"(gradient-free), "lbfgs", "adam", "descent", "radam", "momentum", or "nesterov".
 - `number_of_iterations::Int=1000`: The number of iterations for the optimization.
 - `learning_rate::Float64=0.01`: The learning rate for the optimization.
 - `pars_initial::Vector=[]`: The initial parameters for the ansatz. If not provided, random parameters are generated.
@@ -159,7 +159,7 @@ struct AnsatzOptions
     model::String
     learning_rate::Float64
     deep_circuit::Bool
-    optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS}
+    optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS,Nothing}
     history::Bool
     
     function AnsatzOptions(;
@@ -168,7 +168,7 @@ struct AnsatzOptions
         loss::Union{Function,sa.SparseMatrixCSC}, #input state returns number
         noise=false,
         init::Union{AbstractVectorS,it.MPS,Circuit}=sa.sparse([]),
-        model::String="lbfgs",
+        model::String="cobyla",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,
         pars_initial::AbstractVectorS=[],
@@ -228,9 +228,11 @@ struct AnsatzOptions
         elseif lowercase(model)=="nesterov"
             optimizer=Optimisers.setup(Optimisers.Nesterov(learning_rate),pars_initial)
         elseif lowercase(model)=="lbfgs" #OptimKit.jl LBFGS
-            optimizer = OptimKit.LBFGS(; maxiter=number_of_iterations)
+            optimizer = OptimKit.LBFGS(; maxiter=number_of_iterations) #PRIMA.jl
+        elseif lowercase(model)=="cobyla"
+            optimizer = nothing
         else
-            optimizer = OptimKit.LBFGS(; maxiter=number_of_iterations)
+            optimizer = nothing
         end
 
         if isa(loss,sa.SparseMatrixCSC)
@@ -489,11 +491,7 @@ function VQA(opt::AnsatzOptions)
 
     elseif lowercase(opt.model)=="cobyla"
 
-        
-x0 = pars
-
-pars2, info = PRIMA.cobyla(p -> loss_func_aydin(p,opt), x0)
-print("====\nusing cobyla directly: $x\n$info\n$(info.fx)")
+        info.fx, pars = pr.cobyla(p -> loss_func(p,opt), pars)
 
     else
 

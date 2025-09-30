@@ -11,11 +11,13 @@ ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OptimKit = "77e91f04-9b3b-57a6-a776-40b61faaebe0"
 Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
+PRIMA = "0a7d04aa-8ac2-47b3-b7a7-9dbd6ad661ed"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+PRIMA = "0.2.4"
 julia = "1"
 
 [extras]
