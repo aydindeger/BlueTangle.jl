@@ -182,7 +182,7 @@ Creates a visual representation of the quantum circuit based on the specified op
 """
 function plotq(layers::Vector; labels::Vector{String} = [""])
 
-    layers=get_layers(layers)
+    # layers=get_layers(layers)
 
     ops = vcat(layers...)
 

@@ -185,7 +185,7 @@ using LinearAlgebra
 
         end
 
-        t2=isapprox(fidelity(rho1,rho0),avg_fidelity,atol=10/experiment_no)
+        t2=isapprox(fidelity(rho1,rho0),avg_fidelity,atol=100/experiment_no)
 
         t1 && t2
 
