@@ -176,7 +176,7 @@ struct AnsatzOptions
     number_of_iterations::Int
     model::String
     learning_rate::Float64
-    chi::Int #bond dimension for MPS
+    cutoff::Number #cutoff bond for MPS
     deep_circuit::Bool
     optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS,Nothing}
     history::Bool
@@ -184,17 +184,29 @@ struct AnsatzOptions
     function AnsatzOptions(;
         N::Int,
         ops::Union{Vector{String},Vector{<:QuantumOps}},
-        loss::Union{Function,sa.SparseMatrixCSC}, #input state returns number
+        loss::Union{Function,sa.SparseMatrixCSC,it.MPO}, #input state returns number
         noise=false,
         init::Union{AbstractVectorS,it.MPS,Circuit}=sa.sparse([]),
         model::String="cobyla",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,
-        chi::Int=-1,
+        cutoff::Number=-1, #cutoff bond for MPS
         pars_initial::AbstractVectorS=[],
         deep_circuit::Bool=false,
         history::Bool=true
         )
+
+        # Consistency check for MPS usage
+        is_mps_init = isa(init, it.MPS)
+        is_mps_loss = isa(loss, it.MPO)
+        is_mps_cutoff = cutoff != -1
+
+        if is_mps_cutoff && !is_mps_init
+            throw(ArgumentError("Cutoff is only valid for MPS."))
+        end
+        if (is_mps_init || is_mps_loss) && !(is_mps_init && is_mps_loss)
+            throw(ArgumentError("Discrepancy detected: If either init or loss indicate MPS, both must be compatible with MPS (init must be MPS, loss must be MPO)."))
+        end
 
         if isa(ops,Vector{String})
             ops_final,op_args_list,dim=_variational_circuit_from_string(N,ops;deep_circuit=deep_circuit)
@@ -253,13 +265,13 @@ struct AnsatzOptions
             optimizer = nothing
         end
 
-        if isa(loss,sa.SparseMatrixCSC)
-            loss_new(state)=isa(state,it.MPS) ? throw("loss is not MPO.") : real(state' * loss * state)
+        if isa(loss,sa.SparseMatrixCSC) || isa(loss,it.MPO) #here loss is a matrix or MPO. So this is for VQE.
+            loss_new(state)=real(expect(state,loss))#isa(state,it.MPS) ? real(expect(state,H)) : real(state' * loss * state)
         else
             loss_new=loss
         end
 
-        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,chi,deep_circuit,optimizer,history)
+        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,cutoff,deep_circuit,optimizer,history)
     end
 
 end
@@ -402,7 +414,7 @@ Applies the variational quantum circuit defined by the `AnsatzOptions` to the in
 # Returns
 - The final state after applying the variational circuit.
 """
-function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions;noise_override::Union{Bool,NoiseModel}=false)
+function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions;noise_override::Union{Bool,NoiseModel}=false,kwargs...)
 
     state=opt.init
     N=isa(state,it.MPS) ? get_M(state) : opt.N
@@ -420,7 +432,14 @@ function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions;noise_overri
         #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
         # end
 
-        state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
+        # state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
+
+        if isa(state,it.MPS) && opt.cutoff!=-1
+            state=fn>0 ? apply(state,op;pars=pars[c:c+fn-1],cutoff=opt.cutoff) : apply(state,op;cutoff=opt.cutoff)
+        else
+            state=fn>0 ? apply(state,op;pars=pars[c:c+fn-1]) : apply(state,op)
+        end
+
         c = c+fn
 
         if isa(noise, NoiseModel)
