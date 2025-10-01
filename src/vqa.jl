@@ -204,7 +204,8 @@ struct AnsatzOptions
         if is_mps_cutoff && !is_mps_init
             throw(ArgumentError("Cutoff is only valid for MPS."))
         end
-        if (is_mps_init || is_mps_loss) && !(is_mps_init && is_mps_loss)
+        # Only check for consistency if loss is an MPO (not a function)
+        if (is_mps_init || is_mps_loss) && (isa(loss, it.MPO)) && !(is_mps_init && is_mps_loss)
             throw(ArgumentError("Discrepancy detected: If either init or loss indicate MPS, both must be compatible with MPS (init must be MPS, loss must be MPO)."))
         end
 
