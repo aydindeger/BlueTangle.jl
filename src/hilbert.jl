@@ -350,8 +350,10 @@ Apply a quantum gate operation to a state vector in place.
 
 Modifies the state vector directly.
 """
-function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false)
+function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)
     
+    _unsupported_keyword_check(kwargs,[:pars]) #:pars are for variational gates
+
     N=get_N(state)
 
     # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
@@ -369,11 +371,13 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
             state,ind=_born_measure(state,op)
         end
         # println("measurement result=$(ind)")
+    elseif op.type=="f" #for variational circuits
+        state=op.expand(N,kwargs[:pars]...)*state
     else #good old gates
         state=op.expand(N)*state
     end
 
-    ##aply noise.
+    ##apply noise.
     if isa(noise, NoiseModel)
         state=apply_noise(state,op,noise)
     end
@@ -382,38 +386,20 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
 
 end
 
-
-function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)
+function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::Union{AbstractVectorS,it.MPS};noise::Union{NoiseModel,Bool}=false,kwargs...)
     
     if isa(vector_of_ops, Vector{<:QuantumOps})
 
-        for op in vector_of_ops
-            psi = apply(psi, op; noise=noise)
-        end
-
-    elseif isa(vector_of_ops, AbstractVector{<:Tuple})
-
-        for str in vector_of_ops
-            psi = apply(psi, Op(str...); noise=noise)
-        end
-
-    else
-        throw(ArgumentError("ops are not valid!"))
-    end
-
-    return psi
-end
-
-function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::it.MPS;noise::Union{NoiseModel,Bool}=false,kwargs...)
-    
-    if isa(vector_of_ops, Vector{<:QuantumOps})
         for op in vector_of_ops
             psi = apply(psi, op; noise=noise, kwargs...)
         end
+
     elseif isa(vector_of_ops, AbstractVector{<:Tuple})
+
         for str in vector_of_ops
             psi = apply(psi, Op(str...); noise=noise, kwargs...)
         end
+
     else
         throw(ArgumentError("ops are not valid!"))
     end
@@ -421,12 +407,21 @@ function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}
     return psi
 end
 
-apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
+apply(op::QuantumOps, psi::Union{it.MPS,AbstractVectorS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
 
-apply(str::Tuple,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,Op(str...);noise=noise)
+apply(str::Tuple, psi::Union{it.MPS,AbstractVectorS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, Op(str...); noise=noise, kwargs...)
+
+function _unsupported_keyword_check(kwargs, keys_to_check::Vector)
+    invalid_keys = filter(k -> k ∉ keys_to_check, keys(kwargs))
+    if !isempty(invalid_keys)
+        throw("Unsupported keyword argument(s) provided: $(invalid_keys)")
+    end
+end
 
 function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)#,cutoff=1e-10,maxdim=500)
     
+    _unsupported_keyword_check(kwargs,[:cutoff,:maxdim,:pars])
+
     M=get_M(psi)
     # Decide which parameter to pass: if cutoff is defined then use it, otherwise use maxdim.
     dim_kw = Dict{Symbol,Any}()
@@ -455,6 +450,8 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
             psi,ind=_born_measure(psi,op)
         end
         # println("measurement result=$(ind)")
+    elseif op.type=="f" #for variational circuits
+        psi=la.normalize(it.apply(op.expand(M,kwargs[:pars]...),psi; dim_kw...))
     else #good old gates
         psi=la.normalize(it.apply(op.expand(M),psi; dim_kw...))
     end
@@ -469,9 +466,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
 
 end
 
-apply(op::QuantumOps, psi::it.MPS; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
 
-apply(str::Tuple, psi::it.MPS; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, Op(str...); noise=noise, kwargs...)
 
 """
 `apply(rho::sa.SparseMatrixCSC, op::QuantumOps)`

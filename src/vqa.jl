@@ -176,6 +176,7 @@ struct AnsatzOptions
     number_of_iterations::Int
     model::String
     learning_rate::Float64
+    chi::Int #bond dimension for MPS
     deep_circuit::Bool
     optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS,Nothing}
     history::Bool
@@ -189,6 +190,7 @@ struct AnsatzOptions
         model::String="cobyla",
         number_of_iterations::Int=1000,
         learning_rate::Float64=0.01,
+        chi::Int=-1,
         pars_initial::AbstractVectorS=[],
         deep_circuit::Bool=false,
         history::Bool=true
@@ -257,7 +259,7 @@ struct AnsatzOptions
             loss_new=loss
         end
 
-        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,deep_circuit,optimizer,history)
+        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,chi,deep_circuit,optimizer,history)
     end
 
 end
@@ -411,32 +413,18 @@ function variational_apply(pars::AbstractVectorS,opt::AnsatzOptions;noise_overri
         noise=opt.noise
     end
 
-    if isa(noise, NoiseModel)
+    c=1
+    for (op,fn)=zip(opt.ops,opt.args)
 
-        c=1
-        for (op,fn)=zip(opt.ops,opt.args)
+        # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+        #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
+        # end
 
-            # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-            #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
-            # end
+        state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
+        c = c+fn
 
-            state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
-            c = c+fn
-
+        if isa(noise, NoiseModel)
             state = apply_noise(state, op, noise)
-        end
-
-    else
-
-        c=1
-        for (op,fn)=zip(opt.ops,opt.args)
-
-            # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
-            #     throw("non-local gate $(op.name) is not allowed! Use control parameter instead or add swaps")
-            # end
-
-            state=fn>0 ? op.expand(N,pars[c:c+fn-1]...)*state : op.expand(N)*state
-            c = c+fn
         end
 
     end
