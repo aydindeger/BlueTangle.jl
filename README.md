@@ -31,7 +31,7 @@ Please be aware that this package is currently under active development and is i
 
 ## About the Developer
 
-Aydin Deger, a Research Fellow in Quantum Computing Theory at University College London, is the sole developer of the BlueTangle.jl. With a deep interest in theoretical physics and quantum computing, Aydin aims to bridge complex quantum concepts with practical computing applications through this package. BlueTangle.jl embodies his vision of making quantum computing more accessible and comprehensible to a diverse audience, from researchers to enthusiasts.
+Aydin Deger, a Research Associate in the Theory of Quantum Systems at University of Oxford, is the developer of the BlueTangle.jl. With a deep interest in theoretical physics and quantum computing, Aydin aims to bridge complex quantum concepts with practical computing applications through this package. BlueTangle.jl embodies his vision of making quantum computing more accessible and comprehensible to a diverse audience, from researchers to enthusiasts.
 
 For further information or to explore more about Aydin's work, please visit [deger.xyz](http://deger.xyz).
 
@@ -95,6 +95,6 @@ println("Correlations:", correlations)
 For citation in research work, please use the following reference:
 
 ```
-Aydin Deger, "BlueTangle.jl: A Noisy and Dynamic Quantum Circuit Simulator", https://github.com/aydindeger/BlueTangle/ (2024).
+Aydin Deger, "BlueTangle.jl: A Noisy and Dynamic Quantum Circuit Simulator", https://github.com/aydindeger/BlueTangle.jl/ (2024).
 ```
 
