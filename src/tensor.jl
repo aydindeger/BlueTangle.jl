@@ -89,17 +89,17 @@ function reflectMPS(psi::it.MPS)
     return psi_reflected
 end
 
-# to_MPS(vec::Vector,M::Vector,maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS
-to_MPS(vec::Vector,M::Vector)=throw("sorry, something's wrong here!")#it.MPS(vec,M)|>reflectMPS #fix this as it reflects sites as well!
-
+# to_MPS(vec::Vector,M::Vector,maxdim::Int=500)=it.MPS(vec,M;maxdim=maxdim,cutoff=1e-10)|>reflectMPS throw("sorry, something's wrong here!")#it.MPS(vec,M)|>reflectMPS #fix this as it reflects sites as well!
 # to_MPS(vec::AbstractVectorS,M::Vector,maxdim::Int=500)=to_MPS(Vector(vec),M,maxdim)
 
 """
-    to_MPS(vec::AbstractVectorS,M::Vector)
+    to_MPS(vec::AbstractVector, sites::AbstractVector; kwargs...)
 
     Convert state vector to MPS
 """
-to_MPS(vec::AbstractVectorS,M::Vector)=to_MPS(Vector(vec),M)
+function to_MPS(vec::AbstractVectorS, sites::AbstractVector; kwargs...)
+    return it.MPS(Vector(vec), sites; kwargs...)
+end
 
 function tensor_to_matrix(tensor::its.ITensor)
     a=tensor.tensor.storage
