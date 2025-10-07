@@ -179,6 +179,7 @@ struct AnsatzOptions
     cutoff::Number #cutoff bond for MPS
     deep_circuit::Bool
     optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS,Nothing}
+    paramshift::Bool
     history::Bool
     
     function AnsatzOptions(;
@@ -193,6 +194,7 @@ struct AnsatzOptions
         cutoff::Number=-1, #cutoff bond for MPS
         pars_initial::AbstractVectorS=[],
         deep_circuit::Bool=false,
+        paramshift::Bool=false,
         history::Bool=true
         )
 
@@ -272,7 +274,7 @@ struct AnsatzOptions
             loss_new=loss
         end
 
-        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,cutoff,deep_circuit,optimizer,history)
+        return new(N,ops_final,op_args_list,loss_new,noise,dim,pars_initial,state,number_of_iterations,model,learning_rate,cutoff,deep_circuit,optimizer,paramshift,history)
     end
 
 end
@@ -502,10 +504,16 @@ function VQA(opt::AnsatzOptions)
         function loss_func_and_grad(pars::Vector, opt::AnsatzOptions) #fix! this can be made more efficient 
             state = variational_apply(pars, opt)
             gr=ForwardDiff.gradient(p -> loss_func(p,opt), pars)
+            
             return (opt.loss(state),gr)
         end
 
-        pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, opt), pars, optimizer)
+        if opt.paramshift==false
+            pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_func_and_grad(p, opt), pars, optimizer)
+        else
+            println("it is probably better if you use gradient free optimiser like `cobyla`")
+            pars, res, gs, niter, normgradhistory = OptimKit.optimize(p -> loss_and_grad_paramshift(p, opt), pars, optimizer)
+        end
 
         if opt.history==false
             return res,pars
@@ -573,4 +581,31 @@ function VQA(opt::AnsatzOptions)
 
     end
 
+end
+
+
+# returns loss for a given parameter vector (re-uses your existing machinery)
+_loss(p, opt) = opt.loss(variational_apply(p, opt))
+
+function loss_and_grad_paramshift(p::Vector{Float64}, opt::AnsatzOptions)
+    # numeric loss with your usual cutoff/truncation path
+    ℓ = _loss(p, opt)
+
+    SHIFT = pi/2  # for Pauli/Pauli-string rotations
+
+    g = zeros(length(p))
+    base = copy(p)
+    i = 1
+    for fn in opt.args  # number of parameters for each gate, in order
+        for _k in 1:fn
+            base[i] = p[i] + SHIFT
+            fp = _loss(base, opt)
+            base[i] = p[i] - SHIFT
+            fm = _loss(base, opt)
+            g[i] = 0.5 * (fp - fm)
+            base[i] = p[i]
+            i += 1
+        end
+    end
+    return (ℓ, g)
 end
