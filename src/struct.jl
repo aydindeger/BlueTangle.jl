@@ -848,7 +848,7 @@ function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
     return prod(o.expand(N) for o=reverse(vcat(circ.layers...)))
 end
 
-function sa.sparse(ops::Vector{QuantumOps})
+function sa.sparse(ops::Vector)
     N=get_stats(ops).N
     return prod(o.expand(N) for o=reverse(ops))
 end
