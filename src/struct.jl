@@ -203,6 +203,10 @@ struct OpQC <: QuantumOps
 
         if q==1
 
+            if target_qubit>0
+                throw("for 1-qubit quantum channel, target_qubit should be -1")
+            end
+
             new_prob_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit)
             new_apply_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
             new_apply_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
@@ -210,6 +214,10 @@ struct OpQC <: QuantumOps
             return new(q,name,qubit,target_qubit,-2,kraus_ops,false,type,new_prob_op,new_apply_op)
 
         elseif q==2
+
+            if target_qubit<0
+                throw("for 2-qubit quantum channel, you must select the target_qubit")
+            end
 
             new_prob2_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
@@ -628,7 +636,7 @@ Represents a conditional quantum operation used for mid-circuit born measurement
 `ifOp` is constructed to represent quantum operations that are conditional on the measurement outcome of a qubit. This operator is particularly useful in quantum circuits for implementing dynamic responses based on mid-circuit measurement results.
 
 # Examples
-```julia
+
 # Example of creating an ifOp for a conditional operation based on the X-basis measurement (MX)
 conditional_op = ifOp("MX", qubit, (operation_if_0, operation_if_1))
 """

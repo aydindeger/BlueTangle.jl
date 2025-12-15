@@ -636,7 +636,7 @@ struct QECState
     physical::Union{AbstractVectorS,it.MPS}
     sym::Symbol
     is_mps::Bool
-    dims::Vector{Int}
+    dims::Vector{Int} #[dim_logical,dim_physical]
     ops_random::Vector{Op}
 
     function QECState(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false)
