@@ -9,6 +9,11 @@ Wrappers for creating single-qubit and two-qubit noise models, respectively.
 Returns a noise model for either one or two qubits, depending on the function used.
 """
 noise_model1(model::String, p::Float64)=noise_model(model, p; two_qubit=false)
+
+
+"""
+noise_model2(model::String, p::Float64)=noise_model(model, p; two_qubit=true)
+"""
 noise_model2(model::String, p::Float64)=noise_model(model, p; two_qubit=true)
 
 """

@@ -301,7 +301,7 @@ function is_valid_quantum_channel(kraus_operators::Vector)
     
     choi_matrix = kraus_to_choi(kraus_operators)
 
-    eigvals = la.eigen(choi_matrix).values
+    eigvals = la.eigen(la.Hermitian(choi_matrix)).values  # real eigenvalues
 
     completely_positive = (choi_matrix ≈ choi_matrix') && all(round.(eigvals,digits=10) .>= 0)#ishermitian and is_positive_semidefinite
     
@@ -418,8 +418,9 @@ end
 # One qubit constructor with built-in gate
 function Op(name::String,qubit::Int;kwargs...)
 
-    if uppercase(name)=="RES"
-        return ifOp("MZ",qubit,"I","X")
+    if uppercase(name)=="RES" || uppercase(name)=="RESET"
+        # return ifOp("MZ",qubit,"I","X")
+        return OpQC("RES",[[1.0 0.0; 0.0 0.0],[0.0 1.0; 0.0 0.0]],qubit) #amplitude_damping with gamma=1
     else
         return Op(name, qubit, -1; kwargs...)
     end

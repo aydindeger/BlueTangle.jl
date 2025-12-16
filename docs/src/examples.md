@@ -342,8 +342,6 @@ apply(state, op)
 
 After the reset operation, the state of the qubits can be either |00⟩ or |01⟩. The outcome depends on the state of the first qubit at the time of measurement. If the first qubit was in the |0⟩ state (which happens with a 50% probability due to the Bell state's nature), the reset operation does nothing. However, if the first qubit was in the |1⟩ state (again, a 50% chance), the X gate flips it to |0⟩. 
 
-Since the second qubit is entangled with the first, its state is correlated. Therefore, measuring the first qubit and applying the reset operation affects the overall state of the two-qubit system. 
-
 ## 8) Random Quantum Circuits
 
 ### Overview

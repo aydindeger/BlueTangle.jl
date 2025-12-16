@@ -30,7 +30,7 @@ _qi1(s) = parse(Int, s) + 1  # 0→1
 Emit OpenQASM 2.0 for a vector of `Op`s, including parametrized gates
 (RX/RY/RZ, U1/U2/U3, CP, RXX/RYY/RZZ/RXY, GIVENS, FSIM, SWAPA) and controls.
 """
-function to_qasm(ops::Vector{Op};
+function to_qasm(ops::Vector{<:QuantumOps};
                  nqubits::Union{Int,Nothing}=nothing,
                  qreg::AbstractString="q",
                  creg::AbstractString="c")::String
@@ -49,12 +49,13 @@ function to_qasm(ops::Vector{Op};
     _qi0(i::Int) = i - 1
 
     # infer N
-    function _maxidx(op::Op)
+    function _maxidx(op::QuantumOps)
         m = op.qubit
         if op.target_qubit > 0; m = max(m, op.target_qubit); end
         if op.control      > 0; m = max(m, op.control);      end
         m
     end
+
     N = isnothing(nqubits) ? maximum(_maxidx.(ops)) : nqubits
     N < 1 && throw(ArgumentError("nqubits must be ≥ 1"))
 
@@ -62,7 +63,21 @@ function to_qasm(ops::Vector{Op};
     opaques = Set{String}()
 
     # op → QASM lines
-    function _op_to_qasm(op::Op)::Vector{String}
+    function _op_to_qasm(op::QuantumOps)::Vector{String}
+        # Special-case: reset is represented internally as OpQC("res", ...) (γ=1)
+        if op isa OpQC
+            nameU = _clean_upper(op.name)
+            if nameU == "RES" || nameU == "RESET"
+                qi = _qi0(op.qubit)
+                return ["reset $qreg[$qi];"]
+            end
+            throw(ArgumentError("Cannot export quantum channel '$(op.name)' to OpenQASM; only RES/RESET (γ=1) is supported."))
+        end
+
+        # Everything else: export only plain Op
+        op isa Op || throw(ArgumentError("Unsupported operation for export: $(typeof(op))."))
+        op = op::Op
+
         q = op.qubit; t = op.target_qubit; c = op.control
         qi = _qi0(q)
         ti = t >= 1 ? _qi0(t) : t
@@ -78,6 +93,11 @@ function to_qasm(ops::Vector{Op};
             return ["h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];"]
         elseif nameU == "MY" || nameU == "M(Y)"
             return ["sdg $qreg[$qi];", "h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];"]
+        end
+
+        # reset
+        if nameU == "RES" || nameU == "RESET"
+            return ["reset $qreg[$qi];"]
         end
 
         # 1-qubit (incl. parametrized) + optional control
@@ -214,8 +234,13 @@ _q2(argstr::AbstractString) = begin
     (_q1(parts[1]), _q1(parts[2]))
 end
 
-function from_qasm(qasm::AbstractString)::Vector{Op}
-    ops = Op[]
+
+"""
+qasm_content = read("/Users/deger/CODES/BLUETANGLE/Extras/circuit.qasm", String)
+ops=from_qasm(qasm_content);
+"""
+function from_qasm(qasm::AbstractString)::Vector{QuantumOps}
+    ops = Vector{QuantumOps}()
 
     # strip // comments and normalize
     src = replace(qasm, r"//.*" => "")
@@ -236,6 +261,13 @@ function from_qasm(qasm::AbstractString)::Vector{Op}
         # measure
         if (m = match(r"^measure\s+([^\s]+)\s*->\s*([^\s]+)\s*;", s)) !== nothing
             qi = _q1(m.captures[1]); push!(ops, Op("MZ", qi)); continue
+        end
+
+        # reset
+        if (m = match(r"^reset\s+([^\s;]+)\s*;", s)) !== nothing
+            qi = _q1(m.captures[1])
+            push!(ops, Op("RES", qi))
+            continue
         end
 
         # unary no-param
