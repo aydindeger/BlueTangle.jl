@@ -22,7 +22,7 @@ _qi0(i::Int) = i - 1  # 1→0
 _qi1(s) = parse(Int, s) + 1  # 0→1
 
 """
-    to_qasm(ops::Vector{Op};
+    to_qasm(ops::Vector{<:QuantumOps};
             nqubits::Union{Int,Nothing}=nothing,
             qreg::AbstractString="q",
             creg::AbstractString="c") -> String
@@ -156,9 +156,19 @@ function to_qasm(ops::Vector{<:QuantumOps};
         if base == "CX" || base == "CNOT"
             if c >= 1; return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] else return ["cx $qreg[$qi],$qreg[$ti];"] end
         elseif base == "CY"
-            if c >= 1; return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"] else return ["cy $qreg[$qi],$qreg[$ti];"] end
+            if c >= 1
+                push!(opaques, "gate ccy a,b,c { s c; ccx a,b,c; sdg c; }")
+                return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+            else
+                return ["cy $qreg[$qi],$qreg[$ti];"]
+            end
         elseif base == "CZ"
-            if c >= 1; return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"] else return ["cz $qreg[$qi],$qreg[$ti];"] end
+            if c >= 1
+                push!(opaques, "gate ccz a,b,c { h c; ccx a,b,c; h c; }")
+                return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+            else
+                return ["cz $qreg[$qi],$qreg[$ti];"]
+            end
         elseif base == "SWAP"
             if c >= 1; return ["cswap $qreg[$ci],$qreg[$qi],$qreg[$ti];"] else return ["swap $qreg[$qi],$qreg[$ti];"] end
         elseif base == "ISWAP"
@@ -190,8 +200,14 @@ function to_qasm(ops::Vector{<:QuantumOps};
         end
 
         if base == "CCX";   return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
-        if base == "CCY";   return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
-        if base == "CCZ";   return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
+        if base == "CCY"
+            push!(opaques, "gate ccy a,b,c { s c; ccx a,b,c; sdg c; }")
+            return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+        end
+        if base == "CCZ"
+            push!(opaques, "gate ccz a,b,c { h c; ccx a,b,c; h c; }")
+            return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+        end
         if base == "CSWAP"; return ["cswap $qreg[$ci],$qreg[$qi],$qreg[$ti];"] end
 
         throw(ArgumentError("Unsupported operation for export: $(op.name)"))
@@ -206,6 +222,33 @@ function to_qasm(ops::Vector{<:QuantumOps};
     opaque_lines = sort!(collect(opaques))
     return join(vcat(header, opaque_lines, decls, body), '\n') * '\n'
 end
+
+"""
+    to_qasm(ops::Vector{<:QuantumOps}, filename::AbstractString;
+            nqubits::Union{Int,Nothing}=nothing,
+            qreg::AbstractString="q",
+            creg::AbstractString="c") -> String
+
+Like `to_qasm(ops; kwargs...)`, but also writes the emitted OpenQASM to `filename`.
+"""
+function to_qasm(ops::Vector{<:QuantumOps}, filename::AbstractString; kwargs...)::String
+    isempty(filename) && throw(ArgumentError("filename must be a non-empty string"))
+    qasm = to_qasm(ops; kwargs...)
+    open(filename, "w") do io
+        write(io, qasm)
+    end
+    return qasm
+end
+
+"""
+    to_qasm(circuit::Circuit; kwargs...) -> String
+    to_qasm(circuit::Circuit, filename::AbstractString; kwargs...) -> String
+
+Convenience overloads that export a compiled `Circuit` by flattening `circuit.layers`.
+"""
+to_qasm(circuit::Circuit; kwargs...)::String = to_qasm(vcat(circuit.layers...); kwargs...)
+to_qasm(circuit::Circuit, filename::AbstractString; kwargs...)::String =
+    to_qasm(vcat(circuit.layers...), filename; kwargs...)
 
 
 ########################
