@@ -196,7 +196,7 @@ function to_qasm(ops::Vector{<:QuantumOps};
         elseif base == "FSIM"
             push!(opaques, "opaque fsim(theta,phi) a,b;"); return ["fsim($(args)) $qreg[$qi],$qreg[$ti];"]
         elseif base == "SWAPA"
-            push!(opaques, "opaque swapa(a) a,b;"); return ["swapa($(args)) $qreg[$qi],$qreg[$ti];"]
+            push!(opaques, "opaque swapa(alpha) a,b;"); return ["swapa($(args)) $qreg[$qi],$qreg[$ti];"]
         end
 
         if base == "CCX";   return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end

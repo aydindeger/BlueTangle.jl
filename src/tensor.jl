@@ -248,20 +248,60 @@ fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
 #     return SvN
 # end
 
-function entanglement_entropy(psi::it.MPS) #fix
-    #pastaq
-    ψ = la.normalize!(copy(psi))
+# function entanglement_entropy(psi::it.MPS) #fix
+#     #pastaq
+#     ψ = la.normalize!(copy(psi))
+#     N = length(ψ)
+#     bond = N ÷ 2
+#     it.orthogonalize!(ψ, bond)
+  
+#     row_inds = (it.linkind(ψ, bond - 1), it.siteind(ψ, bond))
+#     u, s, v = it.svd(ψ[bond], row_inds)
+  
+#     S = 0.0
+#     for n in 1:it.maxdim(s, 1)
+#       λ = s[n, n]^2
+#       S -= λ * log(λ + 1e-20)
+#     end
+#     return S
+# end
+
+function entanglement_entropy(psi::it.MPS, b::Int; spectrum_bool::Bool=false)
+    ψ = copy(psi)
     N = length(ψ)
-    bond = N ÷ 2
-    it.orthogonalize!(ψ, bond)
-  
-    row_inds = (it.linkind(ψ, bond - 1), it.siteind(ψ, bond))
-    u, s, v = it.svd(ψ[bond], row_inds)
-  
-    S = 0.0
-    for n in 1:it.maxdim(s, 1)
-      λ = s[n, n]^2
-      S -= λ * log(λ + 1e-20)
+    @assert 1 ≤ b < N "b must satisfy 1 ≤ b < N (cut between b and b+1)."
+
+    s = it.siteinds(ψ)
+    it.orthogonalize!(ψ, b)
+
+    left_inds = (it.linkind(ψ, b-1), s[b])
+    _, S, _ = it.svd(ψ[b], left_inds)
+
+    d = it.dim(it.commonind(S))
+    p = Vector{Float64}(undef, d)
+    for n in 1:d
+        p[n] = abs2(S[n,n])          # <-- safer than (S[n,n])^2
     end
-    return S
+
+    # normalise (crucial!)
+    Z = sum(p)
+    if Z == 0.0
+        return spectrum_bool ? (0.0, Float64[]) : 0.0
+    end
+    p ./= Z
+
+    # remove/clamp numerical junk (more robust than just > 0.0)
+    p = clamp.(p, eps(Float64), 1.0)
+
+    SvN = -sum(p .* log.(p))
+
+    if spectrum_bool
+        spectrum = sort(-log.(p))    # sort helps many downstream routines
+        return SvN, spectrum
+    else
+        return SvN
+    end
 end
+
+entanglement_entropy(psi::it.MPS; spectrum_bool::Bool=false) =
+    entanglement_entropy(psi, length(psi) ÷ 2; spectrum_bool=spectrum_bool)
