@@ -657,12 +657,13 @@ struct QECState
 end
 
 """
-matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
+matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=true)
 
-Create a nearest-neighbor matchgate (Gaussian) circuit using GIVENS rotations,
-optionally interleaved with single-qubit RZ phases.
+Create a nearest-neighbor matchgate (Gaussian) circuit. By default this alternates
+pairing layers (RXX/RYY) with number-conserving GIVENS layers so |0...0⟩ does not
+remain trivial.
 """
-function matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
+function matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=true)
     ops = Op[]
     for layer in 1:depth
         if include_z
@@ -672,9 +673,15 @@ function matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
             end
         end
         start = isodd(layer) ? 1 : 2
+        use_pairing = include_pairing && isodd(layer)
         for i in start:2:(n - 1)
             θ = randn() * π
-            push!(ops, Op("GIVENS($(θ))", i, i + 1))
+            if use_pairing
+                gate = rand(Bool) ? "RXX" : "RYY"
+                push!(ops, Op("$(gate)($(θ))", i, i + 1))
+            else
+                push!(ops, Op("GIVENS($(θ))", i, i + 1))
+            end
         end
     end
     return ops
