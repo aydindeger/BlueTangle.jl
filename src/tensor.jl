@@ -274,7 +274,11 @@ function entanglement_entropy(psi::it.MPS, b::Int; spectrum_bool::Bool=false)
     s = it.siteinds(ψ)
     it.orthogonalize!(ψ, b)
 
-    left_inds = (it.linkind(ψ, b-1), s[b])
+    if b == 1
+        left_inds = (s[b],)  # no left link at site 1
+    else
+        left_inds = (it.linkind(ψ, b-1), s[b])
+    end
     _, S, _ = it.svd(ψ[b], left_inds)
 
     d = it.dim(it.commonind(S))

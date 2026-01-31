@@ -657,9 +657,34 @@ struct QECState
 end
 
 """
+matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
+
+Create a nearest-neighbor matchgate (Gaussian) circuit using GIVENS rotations,
+optionally interleaved with single-qubit RZ phases.
+"""
+function matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
+    ops = Op[]
+    for layer in 1:depth
+        if include_z
+            for i in 1:n
+                θ = randn() * π
+                push!(ops, Op("RZ($(θ))", i))
+            end
+        end
+        start = isodd(layer) ? 1 : 2
+        for i in start:2:(n - 1)
+            θ = randn() * π
+            push!(ops, Op("GIVENS($(θ))", i, i + 1))
+        end
+    end
+    return ops
+end
+
+"""
 qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
 
 Note you still need to apply encoding circuit to the physical state to get the encoded state
+state_init_sym supports :zero, :one, :plus, :minus, :zero_plus, :random, :gaussian (or :matchgate)
 """
 function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false)
     # state_init_sym=:random
@@ -721,6 +746,21 @@ function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_ini
     elseif state_init_sym == :random
 
         ops_random = BlueTangle.random_ops(len_k, random_op_count)
+
+        for o = ops_random
+            state_logical = o * state_logical
+            if o.q == 1
+                state = Op(o.name, logical_indices[o.qubit]) * state
+            elseif o.q == 2
+                state = Op(o.name, logical_indices[o.qubit], logical_indices[o.target_qubit]) * state
+            end
+        end
+        if return_random == true
+            return state, state_logical, ops_random
+        end
+    elseif state_init_sym == :gaussian || state_init_sym == :matchgate
+
+        ops_random = matchgate_ops(len_k, random_op_count)
 
         for o = ops_random
             state_logical = o * state_logical
