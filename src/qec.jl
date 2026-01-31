@@ -639,7 +639,7 @@ struct QECState
     dims::Vector{Int} #[dim_logical,dim_physical]
     ops_random::Vector{Op}
 
-    function QECState(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false)
+    function QECState(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false, cutoff::Union{Nothing,Real}=nothing)
         if return_random
             state_physical, state_logical, ops_random = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
         else
@@ -649,6 +649,11 @@ struct QECState
         sym = isa(state_init_sym, Symbol) ? state_init_sym : :unknown
         is_mps = !isa(n, Int)
 
+        if is_mps && cutoff !== nothing
+            it.truncate!(state_logical; cutoff=cutoff)
+            it.truncate!(state_physical; cutoff=cutoff)
+        end
+
         dims = is_mps ? [it.maxlinkdim(state_logical), it.maxlinkdim(state_physical)] : [length(state_logical), length(state_physical)]
 
         new(state_logical, state_physical, sym, is_mps, dims, ops_random)
@@ -657,13 +662,13 @@ struct QECState
 end
 
 """
-matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=true)
+matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=false)
 
-Create a nearest-neighbor matchgate (Gaussian) circuit. By default this alternates
-pairing layers (RXX/RYY) with number-conserving GIVENS layers so |0...0⟩ does not
-remain trivial.
+Create a nearest-neighbor matchgate (Gaussian) circuit. By default this is
+number-conserving (GIVENS + RZ). Set include_pairing=true to add pairing layers
+(RXX/RYY) so |0...0⟩ does not remain trivial.
 """
-function matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=true)
+function matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=false)
     ops = Op[]
     for layer in 1:depth
         if include_z
@@ -692,6 +697,7 @@ qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symb
 
 Note you still need to apply encoding circuit to the physical state to get the encoded state
 state_init_sym supports :zero, :one, :plus, :minus, :zero_plus, :random, :gaussian (or :matchgate)
+:gaussian starts from a random half-filled computational basis state on the logical qubits.
 """
 function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false)
     # state_init_sym=:random
@@ -766,6 +772,15 @@ function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_ini
             return state, state_logical, ops_random
         end
     elseif state_init_sym == :gaussian || state_init_sym == :matchgate
+        n_filled = len_k ÷ 2
+        if isodd(len_k) && rand(Bool)
+            n_filled += 1
+        end
+        occ = n_filled == 0 ? Int[] : sb.sample(1:len_k, n_filled; replace=false)
+        for i in occ
+            state = Op("X", logical_indices[i]) * state
+            state_logical = Op("X", i) * state_logical
+        end
 
         ops_random = matchgate_ops(len_k, random_op_count)
 
