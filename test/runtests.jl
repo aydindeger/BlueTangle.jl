@@ -211,9 +211,20 @@ using LinearAlgebra
 
         all_ok = true
         for backend in (:statevector, :tensor)
-            all_ok &= (run(ops_reset, 1; backend=backend)[1] == [1, 0])
+            all_ok &= (run(ops_reset, 1; backend=backend)[1] == [0])
             all_ok &= (run(ops_ifop, 1; backend=backend)[1] == [1])
-            all_ok &= (run(ops_mid_mz, 1; backend=backend)[1] == [1, 1])
+            all_ok &= (run(ops_mid_mz, 1; backend=backend)[1] == [1])
+
+            init1 = backend==:statevector ? zero_state(1) : zero_state(N_MPS(1))
+            _,m_reset_apply = apply(ops_reset, init1; track_measurements=true)
+            _,m_ifop_apply = apply(ops_ifop, init1; track_measurements=true)
+
+            init3 = backend==:statevector ? zero_state(3) : zero_state(N_MPS(3))
+            _,m_mid_apply = apply(ops_mid_mz, init3; track_measurements=true)
+
+            all_ok &= (m_reset_apply == [0])
+            all_ok &= (m_ifop_apply == [1])
+            all_ok &= (m_mid_apply == [1])
         end
         all_ok
     end

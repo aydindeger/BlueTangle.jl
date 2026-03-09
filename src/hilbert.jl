@@ -321,19 +321,21 @@ end
 """
 function apply_noise(state::AbstractVectorS,op::QuantumOps,noise::NoiseModel)
 
-    if op.noisy==true
-    
-        if op.q==1
-            if op.control == -2 
-                return noise.q1.apply(state,op.qubit)
-            else
-                return noise.q2.apply(state,op.control,op.qubit)
-            end
-        elseif op.q==2
-            return noise.q2.apply(state,op.qubit,op.target_qubit)
-        end
-
+    if !(hasproperty(op,:noisy) && op.noisy==true)
+        return state
     end
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q1.apply(state,op.qubit)
+        else
+            return noise.q2.apply(state,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(state,op.qubit,op.target_qubit)
+    end
+
+    return state
 
 end
 
@@ -343,19 +345,21 @@ apply noise on qubit or target_qubit of a given density matrix and noise model
 """
 function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
 
-    if op.noisy==true
-    
-        if op.q==1
-            if op.control == -2 
-                return noise.q1.apply(rho,op.qubit)
-            else
-                return noise.q2.apply(rho,op.control,op.qubit)
-            end
-        elseif op.q==2
-            return noise.q2.apply(rho,op.qubit,op.target_qubit)
-        end
-
+    if !(hasproperty(op,:noisy) && op.noisy==true)
+        return rho
     end
+    
+    if op.q==1
+        if op.control == -2 
+            return noise.q1.apply(rho,op.qubit)
+        else
+            return noise.q2.apply(rho,op.control,op.qubit)
+        end
+    elseif op.q==2
+        return noise.q2.apply(rho,op.qubit,op.target_qubit)
+    end
+
+    return rho
 
 end
 
@@ -373,11 +377,18 @@ Apply a quantum gate operation to a state vector in place.
 
 Modifies the state vector directly.
 """
-function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)
+function apply(
+    state::AbstractVectorS,
+    op::QuantumOps;
+    noise::Union{NoiseModel,Bool}=false,
+    track_measurements::Bool=false,
+    kwargs...
+)
     
     _unsupported_keyword_check(kwargs,[:pars]) #:pars are for variational gates
 
     N=get_N(state)
+    mid_measurements=Int[]
 
     # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
     #     throw("non-local gate $(op.name) is not allowed!")
@@ -386,13 +397,18 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
     if isa(op,OpF)
         state=op.apply(state)
     elseif isa(op,OpQC)
-        state=op.apply(state)
+        if uppercase(op.name)=="RES" || uppercase(op.name)=="RESET"
+            state,_=_reset_Z(state,op.qubit)
+        else
+            state=op.apply(state)
+        end
     elseif op.type=="🔬"
         if isa(op,ifOp)
             state,ind=op.born_apply(state,noise)
         else
             state,ind=_born_measure(state,op)
         end
+        track_measurements && push!(mid_measurements,ind)
         # println("measurement result=$(ind)")
     elseif op.type=="f" #for variational circuits
         state=op.expand(N,kwargs[:pars]...)*state
@@ -405,29 +421,46 @@ function apply(state::AbstractVectorS,op::QuantumOps;noise::Union{NoiseModel,Boo
         state=apply_noise(state,op,noise)
     end
 
-    return state
+    return track_measurements ? (state,mid_measurements) : state
 
 end
 
-function apply(vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},psi::Union{AbstractVectorS,it.MPS};noise::Union{NoiseModel,Bool}=false,kwargs...)
+function apply(
+    vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},
+    psi::Union{AbstractVectorS,it.MPS};
+    noise::Union{NoiseModel,Bool}=false,
+    track_measurements::Bool=false,
+    kwargs...
+)
+    mid_measurements=Int[]
     
     if isa(vector_of_ops, Vector{<:QuantumOps})
 
         for op in vector_of_ops
-            psi = apply(psi, op; noise=noise, kwargs...)
+            if track_measurements
+                psi,new_vals = apply(psi, op; noise=noise, track_measurements=true, kwargs...)
+                append!(mid_measurements,new_vals)
+            else
+                psi = apply(psi, op; noise=noise, kwargs...)
+            end
         end
 
     elseif isa(vector_of_ops, AbstractVector{<:Tuple})
 
         for str in vector_of_ops
-            psi = apply(psi, Op(str...); noise=noise, kwargs...)
+            if track_measurements
+                psi,new_vals = apply(psi, Op(str...); noise=noise, track_measurements=true, kwargs...)
+                append!(mid_measurements,new_vals)
+            else
+                psi = apply(psi, Op(str...); noise=noise, kwargs...)
+            end
         end
 
     else
         throw(ArgumentError("ops are not valid!"))
     end
 
-    return psi
+    return track_measurements ? (psi,mid_measurements) : psi
 end
 
 apply(op::QuantumOps, psi::Union{it.MPS,AbstractVectorS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
@@ -441,11 +474,18 @@ function _unsupported_keyword_check(kwargs, keys_to_check::Vector)
     end
 end
 
-function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kwargs...)#,cutoff=1e-10,maxdim=500)
+function apply(
+    psi::it.MPS,
+    op::QuantumOps;
+    noise::Union{NoiseModel,Bool}=false,
+    track_measurements::Bool=false,
+    kwargs...
+)#,cutoff=1e-10,maxdim=500)
     
     _unsupported_keyword_check(kwargs,[:cutoff,:maxdim,:pars])
 
     M=get_M(psi)
+    mid_measurements=Int[]
     # Decide which parameter to pass: if cutoff is defined then use it, otherwise use maxdim.
     dim_kw = Dict{Symbol,Any}()
     if haskey(kwargs, :cutoff)
@@ -474,6 +514,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
         else
             psi,ind=_born_measure(psi,op)
         end
+        track_measurements && push!(mid_measurements,ind)
         # println("measurement result=$(ind)")
     elseif op.type=="f" #for variational circuits
         psi=la.normalize(it.apply(op.expand(M,kwargs[:pars]...),psi; dim_kw...))
@@ -487,7 +528,7 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
         # state=apply_noise(state,op,noise)
     end
     
-    return psi
+    return track_measurements ? (psi,mid_measurements) : psi
 
 end
 

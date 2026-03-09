@@ -285,8 +285,10 @@ ops=from_qasm(qasm_content);
 function from_qasm(qasm::AbstractString)::Vector{QuantumOps}
     ops = Vector{QuantumOps}()
 
+    qasm_text = isfile(qasm) ? read(qasm, String) : String(qasm)
+
     # strip // comments and normalize
-    src = replace(qasm, r"//.*" => "")
+    src = replace(qasm_text, r"//.*" => "")
     src = join(split(src, '\n') .|> strip, '\n')
     stmts = [strip(s)*";" for s in split(src, ';') if !isempty(strip(s))]
 

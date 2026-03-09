@@ -1,5 +1,5 @@
 using PyCall
-ENV["PYCALL_JL_RUNTIME_PYTHON"] = joinpath(@__DIR__, "BlueTangle.jl", "src", "extra", ".venv", "bin", "python")
+ENV["PYCALL_JL_RUNTIME_PYTHON"] = joinpath(@__DIR__, ".venv", "bin", "python")
 
 
 # ============================================
@@ -57,7 +57,9 @@ function plotqiskit(
     qiskit = pyimport("qiskit")
     QuantumCircuit = qiskit.QuantumCircuit
 
-    qc = QuantumCircuit(n)
+    _is_measure_name(name::AbstractString) = uppercase(strip(split(String(name), "(")[1])) in ("MZ","MX","MY","MR")
+    has_measurements = any(isa(op, Op) && _is_measure_name(op.name) for op in ops)
+    qc = has_measurements ? QuantumCircuit(n, n) : QuantumCircuit(n)
 
     _parse_angle_expr(expr::AbstractString) = begin
         ex = replace(strip(expr), "π" => "pi", "PI" => "pi")
@@ -73,7 +75,13 @@ function plotqiskit(
     # Gate name mapping from BlueTangle to Qiskit
     # BlueTangle uses 1-indexed qubits, Qiskit uses 0-indexed
     for op in ops
-        if !isa(op, Op)
+        if isa(op, OpQC)
+            name_qc = uppercase(op.name)
+            if name_qc == "RES" || name_qc == "RESET"
+                qc.reset(op.qubit - 1)
+            end
+            continue
+        elseif !isa(op, Op)
             continue  # Skip non-Op quantum operations (OpF, ifOp, etc.)
         end
 
@@ -85,13 +93,59 @@ function plotqiskit(
         # Handle controlled gates (CCX, CCZ, etc.)
         if ctrl >= 0
             if name == "CX" || name == "CNOT" || name == "CCX"
-                qc.ccx(ctrl, q, tq)
+                if tq >= 0
+                    qc.ccx(ctrl, q, tq)
+                else
+                    qc.cx(ctrl, q)
+                end
             elseif name == "CZ" || name == "CCZ"
-                qc.ccz(ctrl, q, tq)
+                if tq >= 0
+                    qc.ccz(ctrl, q, tq)
+                else
+                    qc.cz(ctrl, q)
+                end
             elseif name == "X"
-                qc.ccx(ctrl, q, q)  # This would be CX with extra control
+                qc.cx(ctrl, q)
             elseif name == "Z"
-                qc.ccz(ctrl, q, q)
+                qc.cz(ctrl, q)
+            elseif name == "Y"
+                qc.cy(ctrl, q)
+            elseif name == "H"
+                qc.ch(ctrl, q)
+            elseif name == "S"
+                qc.cs(ctrl, q)
+            elseif name == "SD" || name == "SDG" || name == "SDAG"
+                if hasproperty(qc, :csdg)
+                    qc.csdg(ctrl, q)
+                else
+                    qc.cp(-π / 2, ctrl, q)
+                end
+            elseif name == "T"
+                qc.cp(π / 4, ctrl, q)
+            elseif name == "TD" || name == "TDG" || name == "TDAG"
+                qc.cp(-π / 4, ctrl, q)
+            elseif name == "SX"
+                qc.csx(ctrl, q)
+            elseif occursin("RX", name)
+                m = match(r"RX\(([^)]+)\)", name)
+                m === nothing && error("Could not parse controlled RX parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.crx(angle, ctrl, q)
+            elseif occursin("RY", name)
+                m = match(r"RY\(([^)]+)\)", name)
+                m === nothing && error("Could not parse controlled RY parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.cry(angle, ctrl, q)
+            elseif occursin("RZ", name)
+                m = match(r"RZ\(([^)]+)\)", name)
+                m === nothing && error("Could not parse controlled RZ parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.crz(angle, ctrl, q)
+            elseif occursin("P", name) || occursin("PHASE", name) || occursin("U1", name)
+                m = match(r"(?:P(?:HASE)?|U1)\(([^)]+)\)", name)
+                m === nothing && error("Could not parse controlled phase parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.cp(angle, ctrl, q)
             else
                 error("Unsupported controlled gate '$name' in plotqiskit.")
             end
@@ -164,7 +218,18 @@ function plotqiskit(
         end
 
         # Single-qubit gates
-        if name == "X"
+        if name == "MZ" || name == "M(Z)"
+            qc.measure(q, q)
+        elseif name == "MX" || name == "M(X)"
+            qc.h(q)
+            qc.measure(q, q)
+        elseif name == "MY" || name == "M(Y)"
+            qc.sdg(q)
+            qc.h(q)
+            qc.measure(q, q)
+        elseif name == "MR" || name == "M(R)"
+            qc.measure(q, q)
+        elseif name == "X"
             qc.x(q)
         elseif name == "Y"
             qc.y(q)
@@ -180,7 +245,7 @@ function plotqiskit(
             qc.t(q)
         elseif name == "TD" || name == "TDG" || name == "TDAG"
             qc.tdg(q)
-        elseif name == "SX"
+        elseif name == "SX" || name == "XSQRT"
             qc.sx(q)
         elseif name == "SXDG"
             qc.sxdg(q)
@@ -260,13 +325,7 @@ function plotqiskit(
     n::Int=0,
     fold::Union{Nothing,Int}=nothing,
 )
-    ops = if isfile(qasm_input)
-        from_qasm_file(qasm_input)
-    elseif occursin("OPENQASM", uppercase(qasm_input))
-        from_qasm(qasm_input)
-    else
-        error("String input to plotqiskit must be a QASM file path or OPENQASM string.")
-    end
+    ops = from_qasm(qasm_input)
     return plotqiskit(ops, output, filename; n=n, fold=fold)
 end
 
@@ -281,17 +340,17 @@ end
 
 
 """
-    from_qasm(qasm_content::AbstractString) -> Vector{Op}
+    from_qasm_qiskit(qasm_content::AbstractString) -> Vector{Op}
 
 Import OpenQASM text and convert it to BlueTangle `Op` objects.
 """
-function from_qasm(qasm_content::AbstractString)
+function from_qasm_qiskit(qasm_content::AbstractString)
     qc = try
         qasm2 = pyimport("qiskit.qasm2")
         pycall(qasm2.loads, PyObject, qasm_content)
     catch
         qiskit = pyimport("qiskit")
-        qiskit.QuantumCircuit.from_qasm_str(qasm_content)
+        qiskit.QuantumCircuit.from_qasm_qiskit_str(qasm_content)
     end
 
     gate_finder = _load_gate_finder_bridge(force_reload=false)
@@ -300,4 +359,7 @@ function from_qasm(qasm_content::AbstractString)
     return _py_encoding_circuit_to_ops(normalized)
 end
 
-from_qasm_file(path::AbstractString) = from_qasm(read(path, String))
+
+from_qasm_qiskit(path::Vector{UInt8}) = from_qasm_qiskit(String(path))
+
+from_qasm_qiskit_file(path::AbstractString) = from_qasm_qiskit(read(path, String))

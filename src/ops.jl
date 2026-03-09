@@ -552,166 +552,24 @@ function _samples_to_measurement(sample::Vector{Int},circuit::Circuit)
     return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,length(sample),circuit.options.circuit_name,N,rho_construct)
 end
 
-function _apply_with_tracking(state::AbstractVectorS,op::QuantumOps,noise::Union{NoiseModel,Bool},mid_measurements::Vector{Int})
-    name_upper = uppercase(op.name)
-
-    if isa(op,OpQC) && (name_upper=="RES" || name_upper=="RESET")
-        state,outcome = _reset_Z(state,op.qubit)
-        push!(mid_measurements,outcome)
-        return state
-    elseif op.type=="🔬"
-        if isa(op,ifOp)
-            state,outcome=op.born_apply(state,noise)
-        else
-            state,outcome=_born_measure(state,op)
-        end
-        push!(mid_measurements,outcome)
-        if isa(noise, NoiseModel)
-            state=apply_noise(state,op,noise)
-        end
-        return state
-    end
-
-    return apply(state,op;noise=noise)
-end
-
-function _apply_with_tracking(psi::it.MPS,op::QuantumOps,mid_measurements::Vector{Int};kwargs...)
-    name_upper = uppercase(op.name)
-
-    if isa(op,OpQC)
-        if name_upper=="RES" || name_upper=="RESET"
-            psi,outcome = _reset_Z(psi,op.qubit)
-            push!(mid_measurements,outcome)
-            return psi
-        end
-        throw("Quantum Channel MPS is not supported (except RES/RESET)")
-    elseif op.type=="🔬"
-        if isa(op,ifOp)
-            psi,outcome=op.born_apply(psi,false)
-        else
-            psi,outcome=_born_measure(psi,op)
-        end
-        push!(mid_measurements,outcome)
-        return psi
-    end
-
-    return apply(psi,op;kwargs...)
-end
-
-function _execute_statevector(circuit::Circuit,id::Int=0;track_mid::Bool=false)
-    N=circuit.stats.N
-    state=zero_state(N)
-    nm=circuit.options.noise
-
-    mid_measurements=Int[]
-
-    for op=vcat(circuit.layers...)
-        if isa(op,OpF)
-            if track_mid
-                state=_apply_with_tracking(state,op,nm,mid_measurements)
-            else
-                state=apply(state,op;noise=nm)
-            end
-            continue
-        end
-
+function _expanded_ops_for_shot(circuit::Circuit,id::Int=0)
+    local_ops=Vector{QuantumOps}()
+    for op in vcat(circuit.layers...)
         if id>0 && _is_cnot_like(op)
             for _=1:2id+1
                 if circuit.options.twirl==true
-                    for t_op in apply_twirl(op)
-                        if track_mid
-                            state=_apply_with_tracking(state,t_op,nm,mid_measurements)
-                        else
-                            state=apply(state,t_op;noise=nm)
-                        end
-                    end
+                    append!(local_ops,apply_twirl(op))
                 else
-                    if track_mid
-                        state=_apply_with_tracking(state,op,nm,mid_measurements)
-                    else
-                        state=apply(state,op;noise=nm)
-                    end
+                    push!(local_ops,op)
                 end
             end
         elseif circuit.options.twirl==true && _is_cnot_like(op)
-            for t_op in apply_twirl(op)
-                if track_mid
-                    state=_apply_with_tracking(state,t_op,nm,mid_measurements)
-                else
-                    state=apply(state,t_op;noise=nm)
-                end
-            end
+            append!(local_ops,apply_twirl(op))
         else
-            if track_mid
-                state=_apply_with_tracking(state,op,nm,mid_measurements)
-            else
-                state=apply(state,op;noise=nm)
-            end
+            push!(local_ops,op)
         end
     end
-
-    return state,mid_measurements
-end
-
-function _execute_tensor_network(circuit::Circuit,id::Int=0;track_mid::Bool=false,kwargs...)
-    N=circuit.stats.N
-    psi=zero_state(N_MPS(N))
-
-    if isa(circuit.options.noise,NoiseModel)
-        throw("Noisy MPS is not supported")
-    end
-    if circuit.options.readout_noise!=false
-        throw("MPS readout noise is not supported")
-    end
-
-    mid_measurements=Int[]
-
-    for op=vcat(circuit.layers...)
-        if isa(op,OpF)
-            if track_mid
-                psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
-            else
-                psi=apply(psi,op;kwargs...)
-            end
-            continue
-        end
-
-        if id>0 && _is_cnot_like(op)
-            for _=1:2id+1
-                if circuit.options.twirl==true
-                    for t_op in apply_twirl(op)
-                        if track_mid
-                            psi=_apply_with_tracking(psi,t_op,mid_measurements;kwargs...)
-                        else
-                            psi=apply(psi,t_op;kwargs...)
-                        end
-                    end
-                else
-                    if track_mid
-                        psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
-                    else
-                        psi=apply(psi,op;kwargs...)
-                    end
-                end
-            end
-        elseif circuit.options.twirl==true && _is_cnot_like(op)
-            for t_op in apply_twirl(op)
-                if track_mid
-                    psi=_apply_with_tracking(psi,t_op,mid_measurements;kwargs...)
-                else
-                    psi=apply(psi,t_op;kwargs...)
-                end
-            end
-        else
-            if track_mid
-                psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
-            else
-                psi=apply(psi,op;kwargs...)
-            end
-        end
-    end
-
-    return psi,mid_measurements
+    return local_ops
 end
 
 function _final_measurement(psi::it.MPS,options::Options;kwargs...)
@@ -802,21 +660,33 @@ function run(circuit::Circuit,number_of_experiment::Int=1;
              backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("`number_of_experiment` must be positive."))
 
+    N=circuit.stats.N
     backend_name = _resolve_backend(backend)
     measurements = Vector{Vector{Int}}(undef,number_of_experiment)
 
     if backend_name=="statevector"
         _unsupported_keyword_check(kwargs,[])
+        nm=circuit.options.noise
 
         for shot=1:number_of_experiment
-            _,mid_values = _execute_statevector(circuit,id;track_mid=true)
+            state=zero_state(N)
+            ops_shot=_expanded_ops_for_shot(circuit,id)
+            _,mid_values = apply(ops_shot,state;noise=nm,track_measurements=true)
             measurements[shot] = mid_values
         end
     else
         _unsupported_keyword_check(kwargs,[:cutoff,:maxdim])
+        if isa(circuit.options.noise,NoiseModel)
+            throw("Noisy MPS is not supported")
+        end
+        if circuit.options.readout_noise!=false
+            throw("MPS readout noise is not supported")
+        end
 
         for shot=1:number_of_experiment
-            _,mid_values = _execute_tensor_network(circuit,id;track_mid=true,kwargs...)
+            psi=zero_state(N_MPS(N))
+            ops_shot=_expanded_ops_for_shot(circuit,id)
+            _,mid_values = apply(ops_shot,psi;track_measurements=true,kwargs...)
             measurements[shot] = mid_values
         end
     end
@@ -921,8 +791,9 @@ Convert a quantum circuit to a state vector.
 Returns a state vector representing the circuit.
 """
 function to_state(circuit::Circuit,id::Int=0)
-    state,_ = _execute_statevector(circuit,id;track_mid=false)
-    return state
+    state=zero_state(circuit.stats.N)
+    ops_shot=_expanded_ops_for_shot(circuit,id)
+    return apply(ops_shot,state;noise=circuit.options.noise)
 
 end
 
