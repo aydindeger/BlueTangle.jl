@@ -6,7 +6,7 @@ ENV["PYCALL_JL_RUNTIME_PYTHON"] = joinpath(@__DIR__, "BlueTangle.jl", "src", "ex
 # ============================================
 
 """
-    plotqiskit(ops::Vector{<:QuantumOps}, output::String="text"; n::Int=0 filename::String="")
+    plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl"; n::Int=0 filename::String="")
 
 Convert BlueTangle ops to a Qiskit circuit and draw it.
 
@@ -32,7 +32,7 @@ plotqiskit(ops; output="mpl", filename="circuit.png")
 # Works with OpF too
 plotqiskit(my_opf)
 """
-function plotqiskit(ops::Vector{<:QuantumOps}, output::String="text", filename::String=""; n::Int=0)
+function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::String=""; n::Int=0)
 
     # Auto-detect number of qubits if not provided
     if n == 0

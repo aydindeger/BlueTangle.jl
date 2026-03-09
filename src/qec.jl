@@ -634,12 +634,23 @@ end
 struct QECState
     logical::Union{AbstractVectorS,it.MPS}
     physical::Union{AbstractVectorS,it.MPS}
+    encoded_state::Union{Nothing,AbstractVectorS,it.MPS}
     sym::Symbol
     is_mps::Bool
     dims::Vector{Int} #[dim_logical,dim_physical]
     ops_random::Vector{Op}
+    qubit_mapping::Vector{Int}
 
-    function QECState(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false, cutoff::Union{Nothing,Real}=nothing)
+    function QECState(
+        n::Union{Int,Vector},
+        logical_indices::Vector,
+        state_init_sym::Union{Symbol,Vector}=:zero;
+        random_op_count::Int=20,
+        return_random::Bool=false,
+        cutoff::Union{Nothing,Real}=nothing,
+        encoding_circuit::Union{Nothing,AbstractVector{<:QuantumOps}}=nothing,
+        qubit_mapping::AbstractVector{<:Integer}=Int[],
+    )
         if return_random
             state_physical, state_logical, ops_random = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
         else
@@ -654,21 +665,32 @@ struct QECState
             it.truncate!(state_physical; cutoff=cutoff)
         end
 
+        final_qubit_mapping = Int.(collect(qubit_mapping))
+        encoded_state = nothing
+        if encoding_circuit !== nothing
+            encoding_ops_no_swap, final_qubit_mapping = relabel_swap(collect(encoding_circuit), final_qubit_mapping)
+            encoded_state_input = deepcopy(state_physical)
+            if cutoff === nothing
+                encoded_state = apply(encoding_ops_no_swap, encoded_state_input)
+            else
+                encoded_state = apply(encoding_ops_no_swap, encoded_state_input; cutoff=cutoff)
+            end
+        end
+
         dims = is_mps ? [it.maxlinkdim(state_logical), it.maxlinkdim(state_physical)] : [length(state_logical), length(state_physical)]
 
-        new(state_logical, state_physical, sym, is_mps, dims, ops_random)
+        new(state_logical, state_physical, encoded_state, sym, is_mps, dims, ops_random, final_qubit_mapping)
     end
 
 end
 
 """
-matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=false)
+matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
 
 Create a nearest-neighbor matchgate (Gaussian) circuit. By default this is
-number-conserving (GIVENS + RZ). Set include_pairing=true to add pairing layers
-(RXX/RYY) so |0...0⟩ does not remain trivial.
+number-conserving (GIVENS + RZ).
 """
-function matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing::Bool=false)
+function matchgate_ops(n::Int, depth::Int; include_z::Bool=true)
     ops = Op[]
     for layer in 1:depth
         if include_z
@@ -678,15 +700,9 @@ function matchgate_ops(n::Int, depth::Int; include_z::Bool=true, include_pairing
             end
         end
         start = isodd(layer) ? 1 : 2
-        use_pairing = include_pairing && isodd(layer)
         for i in start:2:(n - 1)
             θ = randn() * π
-            if use_pairing
-                gate = rand(Bool) ? "RXX" : "RYY"
-                push!(ops, Op("$(gate)($(θ))", i, i + 1))
-            else
-                push!(ops, Op("GIVENS($(θ))", i, i + 1))
-            end
+            push!(ops, Op("GIVENS($(θ))", i, i + 1))
         end
     end
     return ops
@@ -695,7 +711,8 @@ end
 """
 qec_state_prep(n::Union{Int,Vector},logical_indices::Vector,state_init_sym::Symbol=:zero;random_op_count::Int=20)
 
-Note you still need to apply encoding circuit to the physical state to get the encoded state
+If you want `QECState` to also build the encoded state, pass `encoding_circuit=...`
+to the constructor so it can relabel away SWAPs and return the final qubit mapping.
 state_init_sym supports :zero, :one, :plus, :minus, :zero_plus, :random, :gaussian (or :matchgate)
 :gaussian starts from a random half-filled computational basis state on the logical qubits.
 """

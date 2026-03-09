@@ -57,8 +57,8 @@ end
 
 ##========== state preparation ==========
 
-maxdim(MPS::it.MPS)=it.maxlinkdim(MPS)
-maxdim(MPO::it.MPO)=it.maxlinkdim(MPO)
+maxlinkdim(MPS::it.MPS)=it.maxlinkdim(MPS)
+maxlinkdim(MPO::it.MPO)=it.maxlinkdim(MPO)
 
 
 expect(psi::it.MPS, op_str::String)=it.expect(psi, op_str)
@@ -241,7 +241,7 @@ fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
 #     it.orthogonalize!(psi, b)
 #     _,S = it.svd(psi[b], (it.linkind(psi, b-1), s[b]))
 #     SvN = 0.0
-#     for n in 1:it.maxdim(S, 1)
+#     for n in 1:it.maxlinkdim(S, 1)
 #       p = S[n,n]^2
 #       SvN -= p * log(p)
 #     end
@@ -259,7 +259,7 @@ fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
 #     u, s, v = it.svd(ψ[bond], row_inds)
   
 #     S = 0.0
-#     for n in 1:it.maxdim(s, 1)
+#     for n in 1:it.maxlinkdim(s, 1)
 #       λ = s[n, n]^2
 #       S -= λ * log(λ + 1e-20)
 #     end

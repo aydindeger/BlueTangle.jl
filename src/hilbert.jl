@@ -237,7 +237,7 @@ function _swap_control_target(matrix::Union{AbstractMatrixS,Function})
 end
 
 """
-    relabel_swap(ops::Vector{Op}) -> Tuple{Vector{Op}, Vector{Int}}
+    relabel_swap(ops::Vector{Op}, qubit_mapping::Vector{Int}=Int[]) -> Tuple{Vector{Op}, Vector{Int}}
 
 Relabel qubit indices in a sequence of quantum operations, simulating the effect of SWAP gates without actually performing them.
 
@@ -245,6 +245,8 @@ This function processes a list of quantum operations, updating qubit indices to 
 
 # Arguments
 - `ops::Vector{Op}`: A vector of `Op` objects representing quantum operations.
+- `qubit_mapping::Vector{Int}=Int[]`: Existing qubit mapping to continue from. If omitted,
+  the mapping starts from the identity permutation.
 
 # Returns
 - `Tuple{Vector{Op}, Vector{Int}}`: A tuple containing:
@@ -254,14 +256,35 @@ This function processes a list of quantum operations, updating qubit indices to 
 # Details
 - SWAP operations are used to update the qubit mapping but are not included in the output operations.
 - For non-SWAP operations, qubit indices are updated based on the current mapping.
-- The function assumes qubit indices start from 1.
+- The function assumes qubit indices start from 1 and that any provided `qubit_mapping`
+  is a permutation of `1:N`. If later operations reference higher-index qubits that were
+  not tracked yet, the mapping is extended with identity entries for those qubits.
 
 relabeled_ops, final_mapping = relabel_swap(ops)
 ```
 """
-function relabel_swap(ops::Vector{T}) where T<:QuantumOps
-    N = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
-    qubit_mapping = collect(1:N)
+function relabel_swap(ops::Vector{T}, qubit_mapping::Vector{Int}=Int[]) where T<:QuantumOps
+    if isempty(ops)
+        return Op[], isempty(qubit_mapping) ? Int[] : copy(qubit_mapping)
+    end
+
+    max_qubit = maximum(max(op.qubit, op.target_qubit, op.control) for op in ops)
+
+    if isempty(qubit_mapping)
+        qubit_mapping = collect(1:max_qubit)
+    else
+        N = length(qubit_mapping)
+
+        if sort(qubit_mapping) != collect(1:N)
+            throw(ArgumentError("qubit_mapping must be a permutation of 1:$(N)"))
+        end
+
+        qubit_mapping = copy(qubit_mapping)
+        if max_qubit > N
+            append!(qubit_mapping, (N + 1):max_qubit)
+        end
+    end
+
     relabeled_ops = Op[]
 
     for op in ops
