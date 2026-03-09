@@ -562,20 +562,24 @@ function _measurement_mat(name::String)
     end
 end
 
-function __measurement_hilbert(N::Int,name::String,qubit::Int)
-    if uppercase(name)=="MR" || uppercase(name)=="M(R)"
-        rname=rand(["MX","MY","MZ"])
-        # println("random mid-measurement applied in $(rname) basis")
-        BlueTangle.hilbert(N,_measurement_mat(rname),qubit)
-    else
-        BlueTangle.hilbert(N,_measurement_mat(name),qubit)
+function _resolve_measurement_name(name::String)
+    uppercase_name = uppercase(name)
+    if uppercase_name=="MR" || uppercase_name=="M(R)"
+        return rand(["MX","MY","MZ"])
     end
+    return uppercase_name
 end
 
-function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise::Union{Bool,QuantumChannel})
+function __measurement_hilbert(N::Int,name::String,qubit::Int)
+    rname = _resolve_measurement_name(name)
+    BlueTangle.hilbert(N,_measurement_mat(rname),qubit)
+end
+
+function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
 
     N=get_N(state)
-    rotMat=__measurement_hilbert(N,name,qubit)
+    rname = _resolve_measurement_name(name)
+    rotMat=BlueTangle.hilbert(N,_measurement_mat(rname),qubit)
     state=rotMat*state #rotate
     state,ind=born_measure_Z(N,state,qubit)
     state=rotMat'*state #rotate back
@@ -589,7 +593,29 @@ function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector
 
 end
 
-function __ifOp_apply(rho::sa.SparseMatrixCSC,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise::Union{Bool,QuantumChannel})
+function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
+
+    if isa(noise,NoiseModel) || isa(noise,QuantumChannel)
+        throw("Noisy MPS is not supported")
+    end
+
+    M=get_M(psi)
+    rname = _resolve_measurement_name(name)
+    rotMat = _measurement_mat(rname)
+
+    psi=la.normalize(it.apply(it.op(rotMat,M[qubit]),psi)) #rotate
+    psi,ind=born_measure_Z(psi,qubit)
+    psi=la.normalize(it.apply(it.op(rotMat',M[qubit]),psi)) #rotate back
+
+    if_op_list=ind==0 ? if0 : if1
+    for ifop=if_op_list
+        psi=BlueTangle.apply(psi,ifop)
+    end
+
+    return psi,ind
+end
+
+function __ifOp_apply(rho::sa.SparseMatrixCSC,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
 
     throw("error: fix this!")
     N=get_N(rho)
@@ -655,6 +681,7 @@ struct ifOp <: QuantumOps
 
         new_expand(N::Int)=__measurement_hilbert(N,name,qubit)
         new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
+        new_born_apply(psi::it.MPS,noise=false)=__ifOp_apply(psi,name,qubit,if0,if1,noise)
         new_born_apply(rho::sa.SparseMatrixCSC,noise=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise)
 
         function new_expand(sites::Vector)

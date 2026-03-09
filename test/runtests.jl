@@ -191,4 +191,31 @@ using LinearAlgebra
 
     end
 
+    @test begin
+        # Mid-circuit measurement/reset exact checks (single consolidated test)
+        ops_reset = [Op("X",1), Op("RES",1), Op("MZ",1)]
+        ops_ifop = [Op("X",1), ifOp("MZ",1,Op("I",1),Op("X",1))]
+        ops_mid_mz = [
+            Op("X",1),
+            Op("X",2),
+            Op("CX",2,3),
+            Op("CX",1,2),
+            Op("X",2),
+            Op("MZ",2),
+            Op("RES",2),
+            Op("CX",2,3),
+            Op("CX",1,2),
+            Op("CX",2,3),
+            Op("X",1)
+        ]
+
+        all_ok = true
+        for backend in (:statevector, :tensor)
+            all_ok &= (run(ops_reset, 1; backend=backend)[1] == [1, 0])
+            all_ok &= (run(ops_ifop, 1; backend=backend)[1] == [1])
+            all_ok &= (run(ops_mid_mz, 1; backend=backend)[1] == [1, 1])
+        end
+        all_ok
+    end
+
 end

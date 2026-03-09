@@ -1,12 +1,13 @@
 using PyCall
 ENV["PYCALL_JL_RUNTIME_PYTHON"] = joinpath(@__DIR__, "BlueTangle.jl", "src", "extra", ".venv", "bin", "python")
 
+
 # ============================================
 # Qiskit Circuit Drawing
 # ============================================
 
 """
-    plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl"; n::Int=0 filename::String="")
+    plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl"; n::Int=0, fold=nothing, filename::String="")
 
 Convert BlueTangle ops to a Qiskit circuit and draw it.
 
@@ -14,6 +15,7 @@ Convert BlueTangle ops to a Qiskit circuit and draw it.
 - `ops`: Vector of BlueTangle Op objects
 - `n`: Number of qubits (auto-detected if 0)
 - `output`: Drawing output format: "text", "mpl" (matplotlib), or "latex"
+- `fold`: Optional Qiskit fold value. If omitted, uses 1.5x Qiskit's default fold (25 -> 38).
 - `filename`: If provided, save the figure to this file (only for "mpl" output)
 
 # Returns
@@ -24,15 +26,21 @@ Convert BlueTangle ops to a Qiskit circuit and draw it.
 # Example
 # In your Julia session after including src.jl
 ops = [Op("H", 1), Op("CX", 1, 2), Op("T", 2), Op("CZ", 2, 3)]
-plotqiskit(ops)  # Returns text drawing
-# For matplotlib figure
-plotqiskit(ops; output="mpl")
+plotqiskit(ops)  # Returns matplotlib figure (default)
+# For text drawing
+plotqiskit(ops, "text")
 # Save to file
-plotqiskit(ops; output="mpl", filename="circuit.png")
+plotqiskit(ops, "mpl", "circuit.png")
 # Works with OpF too
 plotqiskit(my_opf)
 """
-function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::String=""; n::Int=0)
+function plotqiskit(
+    ops::Vector{<:QuantumOps},
+    output::String="mpl",
+    filename::String="";
+    n::Int=0,
+    fold::Union{Nothing,Int}=nothing,
+)
 
     # Auto-detect number of qubits if not provided
     if n == 0
@@ -51,6 +59,17 @@ function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::S
 
     qc = QuantumCircuit(n)
 
+    _parse_angle_expr(expr::AbstractString) = begin
+        ex = replace(strip(expr), "π" => "pi", "PI" => "pi")
+        try
+            val = eval(Meta.parse(ex))
+            val isa Number || error("not numeric")
+            Float64(val)
+        catch
+            error("Failed to parse gate angle expression '$expr' in plotqiskit.")
+        end
+    end
+
     # Gate name mapping from BlueTangle to Qiskit
     # BlueTangle uses 1-indexed qubits, Qiskit uses 0-indexed
     for op in ops
@@ -65,17 +84,16 @@ function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::S
 
         # Handle controlled gates (CCX, CCZ, etc.)
         if ctrl >= 0
-            if name == "CX" || name == "CNOT"
+            if name == "CX" || name == "CNOT" || name == "CCX"
                 qc.ccx(ctrl, q, tq)
-            elseif name == "CZ"
+            elseif name == "CZ" || name == "CCZ"
                 qc.ccz(ctrl, q, tq)
             elseif name == "X"
                 qc.ccx(ctrl, q, q)  # This would be CX with extra control
             elseif name == "Z"
                 qc.ccz(ctrl, q, q)
             else
-                # For other controlled gates, try adding control
-                @warn "Controlled gate $name may not be supported directly"
+                error("Unsupported controlled gate '$name' in plotqiskit.")
             end
             continue
         end
@@ -96,47 +114,51 @@ function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::S
                 qc.ch(q, tq)
             elseif name == "CS"
                 qc.cs(q, tq)
+            elseif name == "CSD" || name == "CSDG" || name == "CSDAG"
+                if hasproperty(qc, :csdg)
+                    qc.csdg(q, tq)
+                else
+                    qc.cp(-π / 2, q, tq)
+                end
+            elseif name == "CT"
+                qc.cp(π / 4, q, tq)
+            elseif name == "CTD" || name == "CTDG" || name == "CTDAG"
+                qc.cp(-π / 4, q, tq)
             elseif name == "CSX"
                 qc.csx(q, tq)
             elseif occursin("CRX", name)
                 # Extract angle from CRX(angle)
-                m = match(r"CRX\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.crx(angle, q, tq)
-                end
+                m = match(r"CRX\(([^)]+)\)", name)
+                m === nothing && error("Could not parse CRX parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.crx(angle, q, tq)
             elseif occursin("CRY", name)
-                m = match(r"CRY\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.cry(angle, q, tq)
-                end
+                m = match(r"CRY\(([^)]+)\)", name)
+                m === nothing && error("Could not parse CRY parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.cry(angle, q, tq)
             elseif occursin("CRZ", name)
-                m = match(r"CRZ\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.crz(angle, q, tq)
-                end
+                m = match(r"CRZ\(([^)]+)\)", name)
+                m === nothing && error("Could not parse CRZ parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.crz(angle, q, tq)
             elseif occursin("RXX", name)
-                m = match(r"RXX\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.rxx(angle, q, tq)
-                end
+                m = match(r"RXX\(([^)]+)\)", name)
+                m === nothing && error("Could not parse RXX parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.rxx(angle, q, tq)
             elseif occursin("RYY", name)
-                m = match(r"RYY\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.ryy(angle, q, tq)
-                end
+                m = match(r"RYY\(([^)]+)\)", name)
+                m === nothing && error("Could not parse RYY parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.ryy(angle, q, tq)
             elseif occursin("RZZ", name)
-                m = match(r"RZZ\(([-\d.]+)\)", name)
-                if m !== nothing
-                    angle = parse(Float64, m.captures[1])
-                    qc.rzz(angle, q, tq)
-                end
+                m = match(r"RZZ\(([^)]+)\)", name)
+                m === nothing && error("Could not parse RZZ parameters from '$name' in plotqiskit.")
+                angle = _parse_angle_expr(m.captures[1])
+                qc.rzz(angle, q, tq)
             else
-                @warn "Two-qubit gate $name not directly supported, skipping"
+                error("Unsupported two-qubit gate '$name' in plotqiskit.")
             end
             continue
         end
@@ -165,74 +187,88 @@ function plotqiskit(ops::Vector{<:QuantumOps}, output::String="mpl", filename::S
         elseif name == "I" || name == "ID"
             qc.id(q)
         elseif occursin("RX", name)
-            m = match(r"RX\(([-\d.]+)\)", name)
-            if m !== nothing
-                angle = parse(Float64, m.captures[1])
-                qc.rx(angle, q)
-            end
+            m = match(r"RX\(([^)]+)\)", name)
+            m === nothing && error("Could not parse RX parameters from '$name' in plotqiskit.")
+            angle = _parse_angle_expr(m.captures[1])
+            qc.rx(angle, q)
         elseif occursin("RY", name)
-            m = match(r"RY\(([-\d.]+)\)", name)
-            if m !== nothing
-                angle = parse(Float64, m.captures[1])
-                qc.ry(angle, q)
-            end
+            m = match(r"RY\(([^)]+)\)", name)
+            m === nothing && error("Could not parse RY parameters from '$name' in plotqiskit.")
+            angle = _parse_angle_expr(m.captures[1])
+            qc.ry(angle, q)
         elseif occursin("RZ", name)
-            m = match(r"RZ\(([-\d.]+)\)", name)
-            if m !== nothing
-                angle = parse(Float64, m.captures[1])
-                qc.rz(angle, q)
-            end
+            m = match(r"RZ\(([^)]+)\)", name)
+            m === nothing && error("Could not parse RZ parameters from '$name' in plotqiskit.")
+            angle = _parse_angle_expr(m.captures[1])
+            qc.rz(angle, q)
         elseif occursin("P", name) || occursin("PHASE", name)
-            m = match(r"P(?:HASE)?\(([-\d.]+)\)", name)
-            if m !== nothing
-                angle = parse(Float64, m.captures[1])
-                qc.p(angle, q)
-            end
+            m = match(r"P(?:HASE)?\(([^)]+)\)", name)
+            m === nothing && error("Could not parse P/PHASE parameters from '$name' in plotqiskit.")
+            angle = _parse_angle_expr(m.captures[1])
+            qc.p(angle, q)
         elseif occursin("U1", name)
-            m = match(r"U1\(([-\d.]+)\)", name)
-            if m !== nothing
-                angle = parse(Float64, m.captures[1])
-                qc.p(angle, q)  # U1 = P gate in modern Qiskit
-            end
+            m = match(r"U1\(([^)]+)\)", name)
+            m === nothing && error("Could not parse U1 parameters from '$name' in plotqiskit.")
+            angle = _parse_angle_expr(m.captures[1])
+            qc.p(angle, q)  # U1 = P gate in modern Qiskit
         elseif occursin("U2", name)
-            m = match(r"U2\(([-\d.]+),([-\d.]+)\)", name)
-            if m !== nothing
-                phi = parse(Float64, m.captures[1])
-                lam = parse(Float64, m.captures[2])
-                qc.u(π / 2, phi, lam, q)
-            end
+            m = match(r"U2\(([^,]+),([^)]+)\)", name)
+            m === nothing && error("Could not parse U2 parameters from '$name' in plotqiskit.")
+            phi = _parse_angle_expr(m.captures[1])
+            lam = _parse_angle_expr(m.captures[2])
+            qc.u(π / 2, phi, lam, q)
         elseif occursin("U3", name) || occursin("U(", name)
-            m = match(r"U[3]?\(([-\d.]+),([-\d.]+),([-\d.]+)\)", name)
-            if m !== nothing
-                theta = parse(Float64, m.captures[1])
-                phi = parse(Float64, m.captures[2])
-                lam = parse(Float64, m.captures[3])
-                qc.u(theta, phi, lam, q)
-            end
+            m = match(r"U[3]?\(([^,]+),([^,]+),([^)]+)\)", name)
+            m === nothing && error("Could not parse U/U3 parameters from '$name' in plotqiskit.")
+            theta = _parse_angle_expr(m.captures[1])
+            phi = _parse_angle_expr(m.captures[2])
+            lam = _parse_angle_expr(m.captures[3])
+            qc.u(theta, phi, lam, q)
         else
-            @warn "Gate $name not recognized, skipping"
+            error("Unsupported single-qubit gate '$name' in plotqiskit.")
         end
     end
 
+    # Qiskit default fold is 25 for mpl; use 1.5x when user doesn't specify.
+    fold_use = fold === nothing ? 50 : fold
+
     # Draw the circuit
     if output == "text"
-        return qc.draw(output="text")
+        return qc.draw(output="text", fold=fold_use)
     elseif output == "mpl"
-        fig = qc.draw(output="mpl")
+        fig = qc.draw(output="mpl", fold=fold_use)
         if !isempty(filename)
             fig.savefig(filename, dpi=150, bbox_inches="tight")
             println("Saved to $filename")
         end
         return fig
     elseif output == "latex"
-        return qc.draw(output="latex_source")
+        return qc.draw(output="latex_source", fold=fold_use)
     else
-        return qc.draw(output=output)
+        return qc.draw(output=output, fold=fold_use)
     end
 end
 
 # Convenience method for single Op
 plotqiskit(op::Op; kwargs...) = plotqiskit([op]; kwargs...)
+
+# Convenience method for QASM file path or QASM string
+function plotqiskit(
+    qasm_input::AbstractString,
+    output::String="mpl",
+    filename::String="";
+    n::Int=0,
+    fold::Union{Nothing,Int}=nothing,
+)
+    ops = if isfile(qasm_input)
+        from_qasm_file(qasm_input)
+    elseif occursin("OPENQASM", uppercase(qasm_input))
+        from_qasm(qasm_input)
+    else
+        error("String input to plotqiskit must be a QASM file path or OPENQASM string.")
+    end
+    return plotqiskit(ops, output, filename; n=n, fold=fold)
+end
 
 # Method for OpF that contains vector of ops
 function plotqiskit(opf::OpF; kwargs...)
@@ -242,3 +278,26 @@ function plotqiskit(opf::OpF; kwargs...)
         error("OpF does not contain a vector of ops")
     end
 end
+
+
+"""
+    from_qasm(qasm_content::AbstractString) -> Vector{Op}
+
+Import OpenQASM text and convert it to BlueTangle `Op` objects.
+"""
+function from_qasm(qasm_content::AbstractString)
+    qc = try
+        qasm2 = pyimport("qiskit.qasm2")
+        pycall(qasm2.loads, PyObject, qasm_content)
+    catch
+        qiskit = pyimport("qiskit")
+        qiskit.QuantumCircuit.from_qasm_str(qasm_content)
+    end
+
+    gate_finder = _load_gate_finder_bridge(force_reload=false)
+    raw = gate_finder._qiskit_circuit_to_gate_tuples(qc)
+    normalized = [gate_finder._normalize_gate_tuple(g) for g in raw]
+    return _py_encoding_circuit_to_ops(normalized)
+end
+
+from_qasm_file(path::AbstractString) = from_qasm(read(path, String))

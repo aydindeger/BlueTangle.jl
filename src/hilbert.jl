@@ -463,12 +463,14 @@ function apply(psi::it.MPS,op::QuantumOps;noise::Union{NoiseModel,Bool}=false,kw
     if isa(op,OpF)
         psi = op.apply(psi; dim_kw...)
     elseif isa(op,OpQC)
-        throw("Quantum Channel MPS is not supported")
-        # psi=op.apply(psi)
+        if uppercase(op.name)=="RES" || uppercase(op.name)=="RESET"
+            psi,_ = _reset_Z(psi,op.qubit)
+        else
+            throw("Quantum Channel MPS is not supported (except RES/RESET)")
+        end
     elseif op.type=="🔬"
         if isa(op,ifOp)
-            throw("MPS ifOp measurement is not supported")
-            # psi,ind=op.born_apply(psi,noise)
+            psi,ind=op.born_apply(psi,noise)
         else
             psi,ind=_born_measure(psi,op)
         end
@@ -600,7 +602,7 @@ end
 function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
 
     born_ops=[gate.P0, gate.P1]
-    si=it.siteinds(psi, qubit)
+    si=get_M(psi)[qubit]
 
     it.orthogonalize!(psi, qubit)
     psij=psi[qubit]
@@ -612,6 +614,24 @@ function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
 
     return psi,ind
 
+end
+
+function _reset_Z(state::AbstractVectorS,qubit::Int)
+    N=get_N(state)
+    state,ind=born_measure_Z(N,state,qubit)
+    if ind==1
+        state=Op("X",qubit)*state
+    end
+    return state,ind
+end
+
+function _reset_Z(psi::it.MPS,qubit::Int)
+    psi,ind=born_measure_Z(psi,qubit)
+    if ind==1
+        M=get_M(psi)
+        psi=la.normalize(it.apply(it.op(gate.X,M[qubit]),psi))
+    end
+    return psi,ind
 end
 
 function _born_measure(rho::sa.SparseMatrixCSC,o::QuantumOps)

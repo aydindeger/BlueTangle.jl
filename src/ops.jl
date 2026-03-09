@@ -74,23 +74,15 @@ Convert a sample of outcomes into probabilities.
 Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
 """
 function get_probs_from_sample(sample::Vector, N::Int)
-    # Preallocate the frequency array
-    freq = zeros(Int, 2^N)
-
-    # Increment frequencies
+    counts = Dict{Int,Int}()
     for outcome in sample
-        freq[outcome + 1] += 1  # +1 because Julia arrays are 1-indexed
+        oi = Int(outcome)
+        counts[oi] = get(counts, oi, 0) + 1
     end
 
     total_samples = length(sample)
-
-    # Convert frequencies to probabilities
-    probabilities = freq ./ total_samples
-
-    # Filter out non-zero probabilities and their corresponding outcomes
-    nonzero_indices = findall(x -> x > 0, probabilities)
-    outcomes = nonzero_indices .- 1  # Adjusting back to 0-indexed outcomes
-    probs = probabilities[nonzero_indices]
+    outcomes = collect(keys(counts))
+    probs = [counts[o] / total_samples for o in outcomes]
 
     return sort_vectors(outcomes, probs)
 end
@@ -523,7 +515,7 @@ end
 
 function measure(sample::Vector{Int},N::Int)
 
-    rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
+    rho_construct = _measurement_rho_placeholder(N)
 
     bitstr,avg_prob=get_probs_from_sample(sample,N)
 
@@ -533,6 +525,217 @@ function measure(sample::Vector{Int},N::Int)
 
     return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",length(sample),"sample to measurement",N,rho_construct)
     
+end
+
+_is_cnot_like(op::QuantumOps)=op.q==2 && (uppercase(op.name)=="CNOT" || uppercase(op.name)=="CX")
+
+function _measurement_rho_placeholder(N::Int)
+    if N > 16
+        return sa.spzeros(ComplexF64,0,0)
+    end
+    return sa.spzeros(ComplexF64,2^N,2^N)
+end
+
+function _samples_to_measurement(sample::Vector{Int},circuit::Circuit)
+    N=circuit.stats.N
+    rho_construct = _measurement_rho_placeholder(N)
+
+    bitstr,avg_prob=get_probs_from_sample(sample,N)
+    if circuit.options.measurement_mitigate==true && isa(circuit.options.readout_noise,QuantumChannel)
+        avg_prob=la.normalize(abs.(_measurement_mitigate_inv_matrix(N,circuit.options.readout_noise)*avg_prob),1)
+    end
+
+    fock=int2bin.(bitstr,N)
+    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
+    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
+
+    return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,length(sample),circuit.options.circuit_name,N,rho_construct)
+end
+
+function _apply_with_tracking(state::AbstractVectorS,op::QuantumOps,noise::Union{NoiseModel,Bool},mid_measurements::Vector{Int})
+    name_upper = uppercase(op.name)
+
+    if isa(op,OpQC) && (name_upper=="RES" || name_upper=="RESET")
+        state,outcome = _reset_Z(state,op.qubit)
+        push!(mid_measurements,outcome)
+        return state
+    elseif op.type=="🔬"
+        if isa(op,ifOp)
+            state,outcome=op.born_apply(state,noise)
+        else
+            state,outcome=_born_measure(state,op)
+        end
+        push!(mid_measurements,outcome)
+        if isa(noise, NoiseModel)
+            state=apply_noise(state,op,noise)
+        end
+        return state
+    end
+
+    return apply(state,op;noise=noise)
+end
+
+function _apply_with_tracking(psi::it.MPS,op::QuantumOps,mid_measurements::Vector{Int};kwargs...)
+    name_upper = uppercase(op.name)
+
+    if isa(op,OpQC)
+        if name_upper=="RES" || name_upper=="RESET"
+            psi,outcome = _reset_Z(psi,op.qubit)
+            push!(mid_measurements,outcome)
+            return psi
+        end
+        throw("Quantum Channel MPS is not supported (except RES/RESET)")
+    elseif op.type=="🔬"
+        if isa(op,ifOp)
+            psi,outcome=op.born_apply(psi,false)
+        else
+            psi,outcome=_born_measure(psi,op)
+        end
+        push!(mid_measurements,outcome)
+        return psi
+    end
+
+    return apply(psi,op;kwargs...)
+end
+
+function _execute_statevector(circuit::Circuit,id::Int=0;track_mid::Bool=false)
+    N=circuit.stats.N
+    state=zero_state(N)
+    nm=circuit.options.noise
+
+    mid_measurements=Int[]
+
+    for op=vcat(circuit.layers...)
+        if isa(op,OpF)
+            if track_mid
+                state=_apply_with_tracking(state,op,nm,mid_measurements)
+            else
+                state=apply(state,op;noise=nm)
+            end
+            continue
+        end
+
+        if id>0 && _is_cnot_like(op)
+            for _=1:2id+1
+                if circuit.options.twirl==true
+                    for t_op in apply_twirl(op)
+                        if track_mid
+                            state=_apply_with_tracking(state,t_op,nm,mid_measurements)
+                        else
+                            state=apply(state,t_op;noise=nm)
+                        end
+                    end
+                else
+                    if track_mid
+                        state=_apply_with_tracking(state,op,nm,mid_measurements)
+                    else
+                        state=apply(state,op;noise=nm)
+                    end
+                end
+            end
+        elseif circuit.options.twirl==true && _is_cnot_like(op)
+            for t_op in apply_twirl(op)
+                if track_mid
+                    state=_apply_with_tracking(state,t_op,nm,mid_measurements)
+                else
+                    state=apply(state,t_op;noise=nm)
+                end
+            end
+        else
+            if track_mid
+                state=_apply_with_tracking(state,op,nm,mid_measurements)
+            else
+                state=apply(state,op;noise=nm)
+            end
+        end
+    end
+
+    return state,mid_measurements
+end
+
+function _execute_tensor_network(circuit::Circuit,id::Int=0;track_mid::Bool=false,kwargs...)
+    N=circuit.stats.N
+    psi=zero_state(N_MPS(N))
+
+    if isa(circuit.options.noise,NoiseModel)
+        throw("Noisy MPS is not supported")
+    end
+    if circuit.options.readout_noise!=false
+        throw("MPS readout noise is not supported")
+    end
+
+    mid_measurements=Int[]
+
+    for op=vcat(circuit.layers...)
+        if isa(op,OpF)
+            if track_mid
+                psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
+            else
+                psi=apply(psi,op;kwargs...)
+            end
+            continue
+        end
+
+        if id>0 && _is_cnot_like(op)
+            for _=1:2id+1
+                if circuit.options.twirl==true
+                    for t_op in apply_twirl(op)
+                        if track_mid
+                            psi=_apply_with_tracking(psi,t_op,mid_measurements;kwargs...)
+                        else
+                            psi=apply(psi,t_op;kwargs...)
+                        end
+                    end
+                else
+                    if track_mid
+                        psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
+                    else
+                        psi=apply(psi,op;kwargs...)
+                    end
+                end
+            end
+        elseif circuit.options.twirl==true && _is_cnot_like(op)
+            for t_op in apply_twirl(op)
+                if track_mid
+                    psi=_apply_with_tracking(psi,t_op,mid_measurements;kwargs...)
+                else
+                    psi=apply(psi,t_op;kwargs...)
+                end
+            end
+        else
+            if track_mid
+                psi=_apply_with_tracking(psi,op,mid_measurements;kwargs...)
+            else
+                psi=apply(psi,op;kwargs...)
+            end
+        end
+    end
+
+    return psi,mid_measurements
+end
+
+function _final_measurement(psi::it.MPS,options::Options;kwargs...)
+    if options.measurement_basis=="Z"
+        return psi
+    elseif options.measurement_basis=="X"
+        for qubit=1:get_N(psi)
+            psi=apply(psi,Op("H",qubit);kwargs...)
+        end
+        return psi
+    elseif options.measurement_basis=="Y"
+        for qubit=1:get_N(psi)
+            psi=apply(psi,Op("HSP",qubit);kwargs...)
+        end
+        return psi
+    elseif options.measurement_basis=="R"
+        final_basis = ("H","HSP","I")
+        for qubit=1:get_N(psi)
+            psi=apply(psi,Op(final_basis[rand(1:3)],qubit);kwargs...)
+        end
+        return psi
+    end
+
+    throw("measurement_basis error!")
 end
 
 function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
@@ -582,6 +785,78 @@ function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
 
     return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
     
+end
+
+function _resolve_backend(backend::Union{Symbol,AbstractString})
+    backend_s = lowercase(String(backend))
+    if backend_s in ["statevector","state_vector","state","sv"]
+        return "statevector"
+    elseif backend_s in ["tensor","tensor_network","tn","mps"]
+        return "tensor"
+    else
+        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector` or `:tensor`."))
+    end
+end
+
+function run(circuit::Circuit,number_of_experiment::Int=1;
+             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,kwargs...)
+    number_of_experiment > 0 || throw(ArgumentError("`number_of_experiment` must be positive."))
+
+    backend_name = _resolve_backend(backend)
+    measurements = Vector{Vector{Int}}(undef,number_of_experiment)
+
+    if backend_name=="statevector"
+        _unsupported_keyword_check(kwargs,[])
+
+        for shot=1:number_of_experiment
+            _,mid_values = _execute_statevector(circuit,id;track_mid=true)
+            measurements[shot] = mid_values
+        end
+    else
+        _unsupported_keyword_check(kwargs,[:cutoff,:maxdim])
+
+        for shot=1:number_of_experiment
+            _,mid_values = _execute_tensor_network(circuit,id;track_mid=true,kwargs...)
+            measurements[shot] = mid_values
+        end
+    end
+
+    return measurements
+end
+
+function _qasm_to_source(qasm_or_path::AbstractString; is_file::Union{Nothing,Bool}=nothing)
+    if is_file===true
+        return read(qasm_or_path, String)
+    elseif is_file===false
+        return String(qasm_or_path)
+    end
+
+    if isfile(qasm_or_path)
+        return read(qasm_or_path, String)
+    end
+
+    qasm_text = String(qasm_or_path)
+    if occursin(';', qasm_text) || occursin('\n', qasm_text) || occursin("openqasm", lowercase(qasm_text))
+        return qasm_text
+    end
+
+    throw(ArgumentError("Input is neither an existing file nor recognizable OpenQASM text: `$qasm_or_path`"))
+end
+
+function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
+             options::Options=Options(),layout::Union{Layout,Int}=-1,
+             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,kwargs...)
+    circuit = compile(ops, options; layout=layout)
+    return run(circuit,number_of_experiment;backend=backend,id=id,kwargs...)
+end
+
+function run(qasm_or_path::AbstractString,number_of_experiment::Int=1;
+             options::Options=Options(),layout::Union{Layout,Int}=-1,
+             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,
+             is_file::Union{Nothing,Bool}=nothing,kwargs...)
+    qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
+    ops = from_qasm(qasm)
+    return run(ops,number_of_experiment;options=options,layout=layout,backend=backend,id=id,kwargs...)
 end
 
 
@@ -646,55 +921,7 @@ Convert a quantum circuit to a state vector.
 Returns a state vector representing the circuit.
 """
 function to_state(circuit::Circuit,id::Int=0)
-
-    N=circuit.stats.N
-    state=zero_state(N)
-    nm=circuit.options.noise #noisemodel
-
-    # for layer in circuit.layers
-
-        # if circuit.options.zne==false && circuit.options.twirl==false #fix this
-        #     state=hilbert_layer(N,layer,state)
-        # else_final_measurement
-
-            for op=vcat(circuit.layers...)
-
-                if isa(op,OpF)
-                    state=apply(state,op;noise=nm)
-                    continue
-                end
-
-                if id>0 && op.q==2 && (uppercase(op.name)=="CNOT" || uppercase(op.name)=="CX") #apply ZNE
-                
-                    for cnot_pair=1:2id+1 #number of id = extra CNOT pair
-
-                        if circuit.options.twirl==true #for each CNOT, twirl applies
-                            t_ops = apply_twirl(op)
-                            for t_op in t_ops
-                                state=apply(state,t_op;noise=nm)
-                            end
-                        else #twirl false but ZNE still applies
-                            state=apply(state,op;noise=nm)
-                        end
-
-                    end
-        
-                elseif op.q==2 && circuit.options.twirl==true #apply twirling when id==0
-        
-                    t_ops = apply_twirl(op)
-                    for t_op in t_ops
-                        state=apply(state,t_op;noise=nm)
-                    end
-
-                else #no twirling or ZNE
-                    state=apply(state,op;noise=nm)
-                end
-            end
-
-        # end
-        
-    # end
-
+    state,_ = _execute_statevector(circuit,id;track_mid=false)
     return state
 
 end
@@ -927,4 +1154,3 @@ end
     hamming_distance(v1::Vector{Int}, v2::Vector{Int})
 """
 hamming_distance(v1::Vector{Int}, v2::Vector{Int})=sum(v1 .⊻ v2)
-

@@ -11,6 +11,8 @@ import PRIMA as pr
 const AbstractVectorS = Union{AbstractVector,sa.SparseVector}
 const AbstractMatrixS = Union{AbstractMatrix,sa.SparseMatrixCSC}
 
+import Base: *, run
+
 include("struct.jl")
 include("decompose.jl")
 include("hilbert.jl")
@@ -36,7 +38,6 @@ macro docVSC(fn)
     return :(display("text/markdown", Base.doc($fn)))
 end
 
-import Base: *
 *(o::QuantumOps, state::AbstractVectorS) = apply(state, o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi, o)
 *(tensor::its.ITensor, psi::it.MPS) = it.apply(tensor, psi) #exact
