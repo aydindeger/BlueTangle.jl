@@ -363,6 +363,95 @@ function apply_noise(rho::sa.SparseMatrixCSC,op::QuantumOps,noise::NoiseModel)
 
 end
 
+function _apply_quantum_channel_mps(
+    psi::it.MPS,
+    channel::QuantumChannel,
+    qubit::Int;
+    kwargs...
+)
+    return _apply_quantum_channel_mps(psi,channel.kraus,qubit;kwargs...)
+end
+
+function _apply_quantum_channel_mps(
+    psi::it.MPS,
+    kraus_ops::Vector{<:AbstractMatrix},
+    qubit::Int;
+    kwargs...
+)
+    M=get_M(psi)
+    probs=BlueTangle.__calc_prob(to_state(psi),kraus_ops,qubit)
+    ind=BlueTangle._weighted_sample(probs)
+
+    dim_kw = Dict{Symbol,Any}()
+    if haskey(kwargs, :cutoff)
+        dim_kw[:cutoff] = kwargs[:cutoff]
+    end
+    if haskey(kwargs, :maxdim)
+        dim_kw[:maxdim] = kwargs[:maxdim]
+    end
+    dim_kw = (; dim_kw...)
+
+    return la.normalize(it.apply(it.op(kraus_ops[ind],M[qubit]),psi; dim_kw...))
+end
+
+function _apply_quantum_channel_mps(
+    psi::it.MPS,
+    channel::QuantumChannel,
+    qubit::Int,
+    target_qubit::Int;
+    kwargs...
+)
+    return _apply_quantum_channel_mps(psi,channel.kraus,qubit,target_qubit;kwargs...)
+end
+
+function _apply_quantum_channel_mps(
+    psi::it.MPS,
+    kraus_ops::Vector{<:AbstractMatrix},
+    qubit::Int,
+    target_qubit::Int;
+    kwargs...
+)
+    M=get_M(psi)
+    probs=BlueTangle.__calc_prob(to_state(psi),kraus_ops,qubit,target_qubit)
+    ind=BlueTangle._weighted_sample(probs)
+
+    dim_kw = Dict{Symbol,Any}()
+    if haskey(kwargs, :cutoff)
+        dim_kw[:cutoff] = kwargs[:cutoff]
+    end
+    if haskey(kwargs, :maxdim)
+        dim_kw[:maxdim] = kwargs[:maxdim]
+    end
+    dim_kw = (; dim_kw...)
+
+    return la.normalize(it.apply(it.op(kraus_ops[ind],M[target_qubit],M[qubit]),psi; dim_kw...))
+end
+
+function apply_noise(psi::it.MPS,op::QuantumOps,noise::NoiseModel;kwargs...)
+
+    if !(hasproperty(op,:noisy) && op.noisy==true)
+        return psi
+    end
+
+    if op.q==1
+        if op.control == -2
+            if isa(noise.q1,QuantumChannel)
+                return _apply_quantum_channel_mps(psi,noise.q1,op.qubit;kwargs...)
+            end
+        else
+            if isa(noise.q2,QuantumChannel)
+                return _apply_quantum_channel_mps(psi,noise.q2,op.control,op.qubit;kwargs...)
+            end
+        end
+    elseif op.q==2
+        if isa(noise.q2,QuantumChannel)
+            return _apply_quantum_channel_mps(psi,noise.q2,op.qubit,op.target_qubit;kwargs...)
+        end
+    end
+
+    return psi
+end
+
 
 
 # apply(op::QuantumOps,state::AbstractVectorS;noise::Union{NoiseModel,Bool}=false)=apply(state,op;noise=noise)
@@ -505,8 +594,12 @@ function apply(
     elseif isa(op,OpQC)
         if uppercase(op.name)=="RES" || uppercase(op.name)=="RESET"
             psi,_ = _reset_Z(psi,op.qubit)
+        elseif op.q==1
+            psi = _apply_quantum_channel_mps(psi,op.kraus,op.qubit; dim_kw...)
+        elseif op.q==2
+            psi = _apply_quantum_channel_mps(psi,op.kraus,op.qubit,op.target_qubit; dim_kw...)
         else
-            throw("Quantum Channel MPS is not supported (except RES/RESET)")
+            throw("Quantum Channel MPS is not supported for q=$(op.q)")
         end
     elseif op.type=="🔬"
         if isa(op,ifOp)
@@ -522,10 +615,9 @@ function apply(
         psi=la.normalize(it.apply(op.expand(M),psi; dim_kw...))
     end
 
-    ##aply noise.
+    ##apply noise.
     if isa(noise, NoiseModel)
-        throw("Noisy MPS is not supported")
-        # state=apply_noise(state,op,noise)
+        psi=apply_noise(psi,op,noise; dim_kw...)
     end
     
     return track_measurements ? (psi,mid_measurements) : psi

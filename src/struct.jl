@@ -595,10 +595,6 @@ end
 
 function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
 
-    if isa(noise,NoiseModel) || isa(noise,QuantumChannel)
-        throw("Noisy MPS is not supported")
-    end
-
     M=get_M(psi)
     rname = _resolve_measurement_name(name)
     rotMat = _measurement_mat(rname)
@@ -609,7 +605,7 @@ function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::V
 
     if_op_list=ind==0 ? if0 : if1
     for ifop=if_op_list
-        psi=BlueTangle.apply(psi,ifop)
+        psi=BlueTangle.apply(psi,ifop;noise=noise)
     end
 
     return psi,ind

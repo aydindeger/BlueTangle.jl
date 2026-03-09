@@ -676,9 +676,6 @@ function run(circuit::Circuit,number_of_experiment::Int=1;
         end
     else
         _unsupported_keyword_check(kwargs,[:cutoff,:maxdim])
-        if isa(circuit.options.noise,NoiseModel)
-            throw("Noisy MPS is not supported")
-        end
         if circuit.options.readout_noise!=false
             throw("MPS readout noise is not supported")
         end
@@ -686,7 +683,7 @@ function run(circuit::Circuit,number_of_experiment::Int=1;
         for shot=1:number_of_experiment
             psi=zero_state(N_MPS(N))
             ops_shot=_expanded_ops_for_shot(circuit,id)
-            _,mid_values = apply(ops_shot,psi;track_measurements=true,kwargs...)
+            _,mid_values = apply(ops_shot,psi;noise=circuit.options.noise,track_measurements=true,kwargs...)
             measurements[shot] = mid_values
         end
     end

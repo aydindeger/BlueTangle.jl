@@ -1,6 +1,7 @@
 using BlueTangle
 using Test
 using LinearAlgebra
+using Random
 
 @testset "BlueTangle.jl" begin
 
@@ -226,6 +227,60 @@ using LinearAlgebra
             all_ok &= (m_ifop_apply == [1])
             all_ok &= (m_mid_apply == [1])
         end
+        all_ok
+    end
+
+    @test begin
+        # Noisy MPS should match noisy statevector under the same RNG seed.
+        ops_noisy = [
+            Op("H",1),
+            Op("CX",1,2),
+            Op("RY(0.37)",1),
+            Op("RZ(0.19)",2),
+            Op("MZ",1),
+            Op("X",2),
+            Op("MZ",2)
+        ]
+        nm = NoiseModel("depolarizing",0.03)
+
+        all_ok = true
+        for seed in 1:40
+            Random.seed!(1000 + seed)
+            sv_state,sv_mid = apply(ops_noisy,zero_state(2);noise=nm,track_measurements=true)
+
+            Random.seed!(1000 + seed)
+            tn_state,tn_mid = apply(ops_noisy,zero_state(N_MPS(2));noise=nm,cutoff=1e-12,track_measurements=true)
+
+            all_ok &= (sv_mid == tn_mid)
+            all_ok &= isapprox(la.norm(sv_state - to_state(tn_state)),0.0;atol=1e-8)
+        end
+
+        all_ok
+    end
+
+    @test begin
+        # OpQC channels should match between statevector and MPS under the same RNG seed.
+        ops_opqc = [
+            Op("H",1),
+            Op("CX",1,2),
+            OpQC("depolarizing",0.07,1),
+            OpQC("depolarizing",0.04,1,2),
+            Op("MZ",1),
+            Op("MZ",2)
+        ]
+
+        all_ok = true
+        for seed in 1:40
+            Random.seed!(2000 + seed)
+            sv_state,sv_mid = apply(ops_opqc,zero_state(2);track_measurements=true)
+
+            Random.seed!(2000 + seed)
+            tn_state,tn_mid = apply(ops_opqc,zero_state(N_MPS(2));cutoff=1e-12,track_measurements=true)
+
+            all_ok &= (sv_mid == tn_mid)
+            all_ok &= isapprox(la.norm(sv_state - to_state(tn_state)),0.0;atol=1e-8)
+        end
+
         all_ok
     end
 
