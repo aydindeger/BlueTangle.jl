@@ -148,6 +148,7 @@ function to_qasm(ops::Vector{<:QuantumOps};
                 if     nameU == "T";      return ["t $qreg[$qi];"] end
                 if     nameU == "TD";     return ["tdg $qreg[$qi];"] end
                 if     nameU == "SX" || nameU == "XSQRT"; return ["sx $qreg[$qi];"] end
+                if     nameU == "SXDG" || nameU == "SXD" || nameU == "XSQRTDG" || nameU == "XSQRTD"; return ["sxdg $qreg[$qi];"] end
                 throw(ArgumentError("Unsupported 1-qubit op: $(op.name)"))
             end
         end
@@ -316,9 +317,9 @@ function from_qasm(qasm::AbstractString)::Vector{QuantumOps}
         end
 
         # unary no-param
-        if (m = match(r"^(x|y|z|h|s|sdg|t|tdg|sx)\s+([^\s;]+)\s*;", s)) !== nothing
+        if (m = match(r"^(x|y|z|h|s|sdg|t|tdg|sx|sxdg)\s+([^\s;]+)\s*;", s)) !== nothing
             kw = m.captures[1]; qi = _q1(m.captures[2])
-            oname = kw == "sdg" ? "SD" : kw == "tdg" ? "TD" : kw == "sx" ? "XSQRT" : uppercase(kw)
+            oname = kw == "sdg" ? "SD" : kw == "tdg" ? "TD" : kw == "sx" ? "XSQRT" : kw == "sxdg" ? "SXDG" : uppercase(kw)
             push!(ops, Op(oname, qi)); continue
         end
 

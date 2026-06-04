@@ -24,6 +24,10 @@ const gate = (
     X  = [0 1.; 1 0],
     SX  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
     XSQRT  = (1/2)*[1+1im 1.0-1im; 1-1im 1+1im],# SX ==RX(pi/2)*exp(1im*pi/4)
+    SXDG  = (1/2)*[1-1im 1.0+1im; 1+1im 1-1im],# SXDG ==RX(-pi/2)*exp(-1im*pi/4)
+    SXD  = (1/2)*[1-1im 1.0+1im; 1+1im 1-1im],# alias for SXDG
+    XSQRTDG  = (1/2)*[1-1im 1.0+1im; 1+1im 1-1im],# alias for SXDG
+    XSQRTD  = (1/2)*[1-1im 1.0+1im; 1+1im 1-1im],# alias for SXDG
     Y  = [0 -im; im 0],
     Z  = [1.0 0; 0 -1],
     H  = (1/sqrt(2)) * [1.0 1; 1 -1],
@@ -61,7 +65,7 @@ const gate = (
 ##
 
 #update below
-one_qubit_gates=["I","X","Y","Z","SX","XSQRT","H","T","S","SD","P","U2","U3"]
+one_qubit_gates=["I","X","Y","Z","SX","XSQRT","SXDG","SXD","XSQRTDG","XSQRTD","H","T","S","SD","P","U2","U3"]
 two_qubit_gates=["CX","CNOT","CY","CZ","CP","RXX","RYY","RZZ","RXY","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"]
 
 """

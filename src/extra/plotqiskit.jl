@@ -36,8 +36,8 @@ plotqiskit(my_opf)
 """
 function plotqiskit(
     ops::Vector{<:QuantumOps},
-    output::String="mpl",
     filename::String="";
+    output::String="mpl",
     n::Int=0,
     fold::Union{Nothing,Int}=nothing,
 )
@@ -124,7 +124,7 @@ function plotqiskit(
                 qc.cp(π / 4, ctrl, q)
             elseif name == "TD" || name == "TDG" || name == "TDAG"
                 qc.cp(-π / 4, ctrl, q)
-            elseif name == "SX"
+            elseif name == "SX" || name == "XSQRT"
                 qc.csx(ctrl, q)
             elseif occursin("RX", name)
                 m = match(r"RX\(([^)]+)\)", name)
@@ -247,7 +247,7 @@ function plotqiskit(
             qc.tdg(q)
         elseif name == "SX" || name == "XSQRT"
             qc.sx(q)
-        elseif name == "SXDG"
+        elseif name == "SXDG" || name == "SXD" || name == "XSQRTDG" || name == "XSQRTD"
             qc.sxdg(q)
         elseif name == "I" || name == "ID"
             qc.id(q)
