@@ -647,14 +647,15 @@ struct QECState
         state_init_sym::Union{Symbol,Vector}=:zero;
         random_op_count::Int=20,
         return_random::Bool=false,
+        random_u3_count::Int=0,
         cutoff::Union{Nothing,Real}=nothing,
         encoding_circuit::Union{Nothing,AbstractVector{<:QuantumOps}}=nothing,
         qubit_mapping::AbstractVector{<:Integer}=Int[],
     )
         if return_random
-            state_physical, state_logical, ops_random = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
+            state_physical, state_logical, ops_random = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random, random_u3_count=random_u3_count)
         else
-            state_physical, state_logical = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random)
+            state_physical, state_logical = qec_state_prep(n, logical_indices, state_init_sym; random_op_count=random_op_count, return_random=return_random, random_u3_count=random_u3_count)
             ops_random = Op[]
         end
         sym = isa(state_init_sym, Symbol) ? state_init_sym : :unknown
@@ -715,60 +716,65 @@ If you want `QECState` to also build the encoded state, pass `encoding_circuit=.
 to the constructor so it can relabel away SWAPs and return the final qubit mapping.
 state_init_sym supports :zero, :one, :plus, :minus, :zero_plus, :random, :gaussian (or :matchgate)
 :gaussian starts from a random half-filled computational basis state on the logical qubits.
+random_u3_count randomly picks count logical qubits and prepares them as random U3|0⟩ product states.
 """
-function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_init_sym::Union{Symbol,Vector}=:zero; random_op_count::Int=20, return_random::Bool=false)
+function qec_state_prep(
+    n::Union{Int,Vector},
+    logical_indices::Vector,
+    state_init_sym::Union{Symbol,Vector}=:zero;
+    random_op_count::Int=20,
+    return_random::Bool=false,
+    random_u3_count::Int=0,
+)
     # state_init_sym=:random
 
     mps_bool = isa(n, Integer) ? false : true
 
     len_k = length(logical_indices)
+    if random_u3_count < 0 || random_u3_count > len_k
+        throw(ArgumentError("random_u3_count must be between 0 and $(len_k)"))
+    end
+    if random_u3_count > 0 && state_init_sym in (:random, :gaussian, :matchgate)
+        throw(ArgumentError("random_u3_count is only supported for product initial states"))
+    end
+    random_u3_sites = random_u3_count == 0 ? Int[] : sort(Int.(sb.sample(1:len_k, random_u3_count; replace=false)))
+
     k = mps_bool == false ? len_k : n[1:len_k]
 
     state = zero_state(n)
     state_logical = zero_state(k)
+    ops_random_u3 = Op[]
 
     if (state_init_sym == :zeros) || (state_init_sym == :zero)
-        return state, state_logical
+        nothing
     elseif (state_init_sym == :ones) || (state_init_sym == :one) #check this
 
-        for i = logical_indices
-            state = Op("X", i) * state
-        end
         for i = 1:len_k
+            i in random_u3_sites && continue
+            state = Op("X", logical_indices[i]) * state
             state_logical = Op("X", i) * state_logical
         end
 
     elseif state_init_sym == :plus
-        for i = logical_indices
-            state = Op("H", i) * state
-        end
         for i = 1:len_k
+            i in random_u3_sites && continue
+            state = Op("H", logical_indices[i]) * state
             state_logical = Op("H", i) * state_logical
         end
     elseif state_init_sym == :minus #check this
 
-        for i = logical_indices
-            state = Op("X", i) * state
-            state = Op("H", i) * state
-        end
         for i = 1:len_k
+            i in random_u3_sites && continue
+            state = Op("X", logical_indices[i]) * state
+            state = Op("H", logical_indices[i]) * state
             state_logical = Op("X", i) * state_logical
             state_logical = Op("H", i) * state_logical
         end
-        # elseif state_init_sym == :bell
-        #     # Bell state on first two logical qubits: (|00⟩ + |11⟩)/√2 ⊗ |0...0⟩
-        #     # Requires at least 2 logical qubits
-        #     if len_k < 2
-        #         throw(ArgumentError("Bell state requires at least 2 logical qubits"))
-        #     end
-        #     state = Op("H", logical_indices[1]) * state
-        #     state = Op("CX", logical_indices[1], logical_indices[2]) * state
-        #     state_logical = Op("H", 1) * state_logical
-        #     state_logical = Op("CX", 1, 2) * state_logical
 
     elseif state_init_sym == :zero_plus
         # |0⟩⊗|+⟩^(k-1): first qubit in |0⟩, rest in |+⟩
         for i = 2:len_k
+            i in random_u3_sites && continue
             state = Op("H", logical_indices[i]) * state
             state_logical = Op("H", i) * state_logical
         end
@@ -821,6 +827,19 @@ function qec_state_prep(n::Union{Int,Vector}, logical_indices::Vector, state_ini
         #     state=mps_bool==true ? product_state(n,state_fock) : product_state(state_fock)
     else
         throw(ArgumentError("invalid state name"))
+    end
+
+    for i in random_u3_sites
+        theta = acos(1 - 2 * rand())
+        phi = 2 * pi * rand()
+        op = Op("U3($(theta),$(phi),0)", i)
+        push!(ops_random_u3, op)
+        state_logical = op * state_logical
+        state = Op(op.name, logical_indices[i]) * state
+    end
+
+    if return_random == true
+        return state, state_logical, ops_random_u3
     end
 
     return state, state_logical
