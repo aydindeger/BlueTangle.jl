@@ -238,7 +238,11 @@ function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
 end
 
 """
-get_layers for a given set of ops
+    get_layers(ops::Vector{<:QuantumOps})
+
+Return parallel layers, preserving operation order on every shared qubit.
+Conditional operations reserve all branch qubits, and `OpF` separates layers.
+Use this to inspect or select layers; `plotq(ops)` computes them automatically.
 """
 function get_layers(ops::Vector{<:QuantumOps})
     layers = Vector{Vector{QuantumOps}}()

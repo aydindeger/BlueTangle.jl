@@ -1,7 +1,7 @@
 # Shared circuit layout for the text and optional graphical renderers.
 function _circuit_plot_data(input::AbstractVector; nqubits::Union{Nothing,Int}=nothing)
     groups = if all(op -> op isa QuantumOps, input)
-        [QuantumOps[op] for op in input]
+        get_layers(QuantumOps[input...])
     elseif all(group -> group isa AbstractVector && all(op -> op isa QuantumOps, group), input)
         [QuantumOps[group...] for group in input]
     else
@@ -247,6 +247,9 @@ end
 Show a circuit or measurement without extra dependencies. The default text
 backend uses gate boxes, conventional controls, and q1 at the top (or the left
 of outcome bitstrings). `plotqt` is the direct circuit-text interface.
+Operation lists are automatically grouped into parallel layers; explicitly
+supplied layers keep their grouping. Overlapping connectors may require extra
+drawing columns within a layer.
 
 For a graphical figure, load `PyPlot` and request `backend=:pyplot` explicitly.
 Graphical calls return a figure that can be saved with `savefigure(fig, path)`.

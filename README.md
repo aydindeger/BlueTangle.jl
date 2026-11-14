@@ -171,7 +171,8 @@ Save operations and settings with
 
 ## Optional packages
 
-`plotq(ops)` prints a boxed circuit diagram without a plotting dependency.
+`plotq(ops)` automatically groups operations into parallel layers and prints a
+boxed circuit diagram without a plotting dependency.
 `plotqt` provides direct text rendering. For graphical output,
 install and load PyPlot, then select it explicitly:
 
