@@ -650,10 +650,6 @@ function op_amplifier!(ops::Vector{<:QuantumOps},op_pair=0)
 end
 
 
-"""Expand an operation on an N-qubit Hilbert space (legacy alias)."""
-hilbert_op(op::QuantumOps, N::Int) = op.expand(N)
-
-
 """
 `expand_multi_op(list_of_operators::String, qubits_applied::Vector, N::Int) -> Matrix`
 

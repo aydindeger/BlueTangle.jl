@@ -327,13 +327,6 @@ function apply(
     return track_measurements ? (psi,mid_measurements) : psi
 end
 
-apply(ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},
-      psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS}; kwargs...) = apply(psi, ops; kwargs...)
-
-apply(op::QuantumOps, psi::Union{it.MPS,AbstractVectorS,AbstractMatrixS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
-
-apply(str::Tuple, psi::Union{it.MPS,AbstractVectorS,AbstractMatrixS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, Op(str...); noise=noise, kwargs...)
-
 function _unsupported_keyword_check(kwargs, keys_to_check::Vector)
     invalid_keys = filter(k -> k ∉ keys_to_check, keys(kwargs))
     if !isempty(invalid_keys)

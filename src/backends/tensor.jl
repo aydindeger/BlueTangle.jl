@@ -378,9 +378,9 @@ function apply(
     if isa(op,OpF)
         if op.data isa Vector{<:QuantumOps}
             if track_measurements
-                psi, mid_measurements = apply(op.data, psi; noise=noise, track_measurements=true, dim_kw...)
+                psi, mid_measurements = apply(psi, op.data; noise=noise, track_measurements=true, dim_kw...)
             else
-                psi = apply(op.data, psi; noise=noise, dim_kw...)
+                psi = apply(psi, op.data; noise=noise, dim_kw...)
             end
         else
             psi = op.apply(psi; dim_kw...)

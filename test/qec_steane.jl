@@ -17,7 +17,7 @@
         @test all(op -> div(op.qubit-1, 7) != div(op.target_qubit-1, 7), code.ops(name, q, t))
     end
     algorithm = [Op("H", 2), Op("S", 1), Op("CX", 2, 1), Op("SD", 2)]
-    @test code.decode(apply(code.ops(algorithm), encoded)) ≈ apply(algorithm, logical)
+    @test code.decode(apply(encoded, code.ops(algorithm))) ≈ apply(logical, algorithm)
     @test_throws KeyError code.ops("T", 1)
     # Logical compilation must not silently drop a control or a custom matrix.
     for invalid in (Op("X", 1; control=2), Op("H", gate.S, 1), Op("X", gate.Z, 1))
@@ -32,11 +32,11 @@
     single = steane_code()
     psi = normalize(ComplexF64[1, 0.2+0.5im])
     gates_logical = [Op("H", 1), Op("S", 1), Op("Y", 1)]
-    target = apply(gates_logical, psi)
+    target = apply(psi, gates_logical)
     rho = single.encode(psi * psi')
-    @test single.decode(apply(single.ops(gates_logical), rho)) ≈ target * target'
+    @test single.decode(apply(rho, single.ops(gates_logical))) ≈ target * target'
     mps = single.encode(to_MPS(psi, N_MPS(1); cutoff=0.0))
-    @test to_state(single.decode(apply(single.ops(gates_logical), mps))) ≈ target
+    @test to_state(single.decode(apply(mps, single.ops(gates_logical)))) ≈ target
 end
 
 @testset "Steane block decoder" begin

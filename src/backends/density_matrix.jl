@@ -17,9 +17,9 @@ function apply(rho::AbstractMatrixS, op::QuantumOps;
     if op isa OpF
         if op.data isa Vector{<:QuantumOps}
             if track_measurements
-                rho, bits = apply(op.data, rho; noise=noise, track_measurements=true, kwargs...)
+                rho, bits = apply(rho, op.data; noise=noise, track_measurements=true, kwargs...)
             else
-                rho = apply(op.data, rho; noise=noise, kwargs...)
+                rho = apply(rho, op.data; noise=noise, kwargs...)
             end
         else
             rho = op.apply(rho)

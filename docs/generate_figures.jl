@@ -165,7 +165,7 @@ exact_energy = eigmin(Hermitian(Matrix(H)))
 ops = QuantumOps[Op("RY", _RY, q) for q in 1:N]
 append!(ops, [Op("CX", q, q+1) for q in 1:N-1])
 energy(parameters) = real(expect(variational_apply(parameters, ops), H))
-initial = fill(0.3, nparameters(ops))
+initial = fill(0.3, N)
 result = train(energy, initial; iterations=40)
 @assert result.loss >= exact_energy - 1e-10
 @assert result.loss <= energy(initial) + 1e-10

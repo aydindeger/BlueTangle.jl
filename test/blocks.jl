@@ -6,14 +6,14 @@
     for initial in states
         operations = QuantumOps[Op("X", 1)]
         block = Op("X block", operations)
-        expected = apply(operations, initial; noise=damping)
+        expected = apply(initial, operations; noise=damping)
         @test comparable(apply(initial, block; noise=damping)) ≈ comparable(expected)
         @test comparable(variational_apply(Float64[], QuantumOps[block]; init=initial, noise=damping)) ≈ comparable(expected)
         @test comparable(expected) ≈ comparable(initial)
 
         protected_operations = QuantumOps[Op("X", 1; noisy=false)]
         protected = Op("protected X", protected_operations)
-        protected_expected = apply(protected_operations, initial; noise=damping)
+        protected_expected = apply(initial, protected_operations; noise=damping)
         @test comparable(apply(initial, protected; noise=damping)) ≈ comparable(protected_expected)
         @test comparable(variational_apply(Float64[], QuantumOps[protected]; init=initial, noise=damping)) ≈ comparable(protected_expected)
         @test expect(protected_expected, Op("Z", 1)) ≈ -1.0
@@ -25,7 +25,7 @@
         recorded_operations = QuantumOps[Op("X", 1; noisy=false), Op("MZ", 1)]
         measured = Op("measured block", recorded_operations)
         nested_measured = Op("nested measured block", QuantumOps[measured])
-        expected_state, expected_bits = apply(recorded_operations, initial; noise=damping, track_measurements=true)
+        expected_state, expected_bits = apply(initial, recorded_operations; noise=damping, track_measurements=true)
         @test expected_bits == [1]
         for measured_block in (measured, nested_measured)
             result_state, result_bits = apply(initial, measured_block; noise=damping, track_measurements=true)
@@ -74,7 +74,7 @@ end
     operations = QuantumOps[Op("RY(1.1)", 1), Op("RY(0.8)", 2), Op("CX", 1, 2)]
     block = Op("entangling block", operations)
     nested = Op("nested entangling block", QuantumOps[block])
-    expected = apply(operations, initial; cutoff=0.5, maxdim=1)
+    expected = apply(initial, operations; cutoff=0.5, maxdim=1)
     for wrapped in (block, nested)
         result = apply(initial, wrapped; cutoff=0.5, maxdim=1)
         @test to_state(result) ≈ to_state(expected)
@@ -88,6 +88,5 @@ end
     # Parameters remain attached to top-level local gates. A named static
     # block does not introduce recursive variational parameter binding.
     parameterized_block = Op("parameterized block", QuantumOps[Op("RY", _RY, 1)])
-    @test nparameters(QuantumOps[parameterized_block]) == 0
     @test_throws DimensionMismatch variational_apply([0.3], QuantumOps[parameterized_block])
 end

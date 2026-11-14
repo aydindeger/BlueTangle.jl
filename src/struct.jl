@@ -603,10 +603,10 @@ end
 function _apply_conditional_branch(state, bit, if0, if1, noise; track_measurements=false, kwargs...)
     ops = bit == 0 ? if0 : if1
     if track_measurements
-        state, bits = apply(ops, state; noise=noise, track_measurements=true, kwargs...)
+        state, bits = apply(state, ops; noise=noise, track_measurements=true, kwargs...)
         return state, vcat(bit, bits)
     end
-    return apply(ops, state; noise=noise, kwargs...), bit
+    return apply(state, ops; noise=noise, kwargs...), bit
 end
 
 function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false;
@@ -651,7 +651,7 @@ function __ifOp_apply(rho::AbstractMatrixS, name::String, qubit::Int,
     result = zero(rho)
     for basis in bases
         for (branch, ops) in zip(_density_measurement_branches(rho, basis, qubit), (if0, if1))
-            result += apply(ops, branch; noise=noise, kwargs...) / length(bases)
+            result += apply(branch, ops; noise=noise, kwargs...) / length(bases)
         end
     end
     return result, nothing
@@ -732,7 +732,7 @@ struct OpF <: QuantumOps
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
 
         function new_apply_mat2(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS};kwargs...)
-            return apply(ops, state; kwargs...)
+            return apply(state, ops; kwargs...)
         end
 
         return new(1,name,new_apply_mat2,ops)

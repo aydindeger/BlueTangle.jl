@@ -68,7 +68,7 @@
     end
     conditional = ifOp("MZ",1,Op("custom",gate.CX,1,3),Op("I",1))
     ops = [Op("H",3),conditional]
-    @test apply(zero_state(3), ops) ≈ apply(ops,zero_state(3))
+    @test apply(zero_state(3), ops) ≈ kron(zero_state(2), plus_state(1))
     @test isempty([name for name in names(BlueTangle) if !isdefined(BlueTangle,name)])
 end
 
@@ -258,7 +258,7 @@ end
 @testset "Conditional MPS truncation settings" begin
     branch = [Op("H", 1), Op("CX", 1, 2)]
     conditional = ifOp("MZ", 3, branch, Op("I", 3))
-    expected = apply(branch, zero_state(N_MPS(3)); maxdim=1, cutoff=0.0)
+    expected = apply(zero_state(N_MPS(3)), branch; maxdim=1, cutoff=0.0)
     for track in (false, true)
         result = apply(zero_state(N_MPS(3)), conditional;
                        maxdim=1, cutoff=0.0, track_measurements=track)

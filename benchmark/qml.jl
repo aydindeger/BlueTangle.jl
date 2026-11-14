@@ -34,7 +34,7 @@ end
 
 function compare_qml(N, layers, repetitions, training_steps)
     ops = generate_ansatz_circuit(N, layers, ["RY", "RZ", "CX"])
-    parameters = collect(range(0.17, step=0.013, length=nparameters(ops)))
+    parameters = collect(range(0.17, step=0.013, length=2*N*layers))
     initial = Vector(zero_state(N))
     # Z expectation on q1; q1 is the most significant basis-state bit.
     z = [iszero((i-1) & (1 << (N-1))) ? 1.0 : -1.0 for i in eachindex(initial)]

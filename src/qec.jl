@@ -626,7 +626,7 @@ struct StabilizerCode #alpha version
                 end
                 state[physical_basis+1] = logical_state[basis]
             end
-            return apply(isempty(encoding) ? ops_encoding : encoding, state; noise=noise)
+            return apply(state, isempty(encoding) ? ops_encoding : encoding; noise=noise)
         end
 
         function new_encode(logical_rho::AbstractMatrixS; noise::Union{Bool,NoiseModel}=false, encoding::Vector=[])
@@ -634,14 +634,14 @@ struct StabilizerCode #alpha version
             indices = _partial_trace_offsets(fill(2, n), logical_indices) .+ 1
             rho = sa.spzeros(promote_type(ComplexF64, eltype(logical_rho)), 2^n, 2^n)
             rho[indices, indices] = logical_rho
-            return apply(isempty(encoding) ? ops_encoding : encoding, rho; noise=noise)
+            return apply(rho, isempty(encoding) ? ops_encoding : encoding; noise=noise)
         end
 
         function new_encode(logical_state::it.MPS; noise::Union{Bool,NoiseModel}=false, encoding::Vector=[])
             length(logical_state) == k || throw(DimensionMismatch("encoding requires a $k-qubit logical MPS"))
             state = _qec_append_ancillas(logical_state, n-k)
             state = it.movesites(state, collect(1:k) .=> logical_indices; cutoff=0.0)
-            return apply(isempty(encoding) ? ops_encoding : encoding, state; noise=noise)
+            return apply(state, isempty(encoding) ? ops_encoding : encoding; noise=noise)
         end
 
         function new_decode(state::AbstractVectorS; noise::Union{Bool,NoiseModel}=false, decoding::Vector=[])
@@ -661,7 +661,7 @@ struct StabilizerCode #alpha version
         function new_decode(rho::AbstractMatrixS; noise::Union{Bool,NoiseModel}=false, decoding::Vector=[])
             N = get_N(rho)
             N in (n, n+m) || throw(DimensionMismatch("decoding requires $n data qubits, optionally followed by $m ancillas"))
-            rho = apply(isempty(decoding) ? ops_encoding' : decoding, rho; noise=noise)
+            rho = apply(rho, isempty(decoding) ? ops_encoding' : decoding; noise=noise)
             reduced = partial_trace(rho, fill(2, N), setdiff(1:N, logical_indices))
             permutation = [findfirst(==(q), sort(logical_indices)) for q in logical_indices]
             indices = _partial_trace_offsets(fill(2, k), permutation) .+ 1
@@ -670,7 +670,7 @@ struct StabilizerCode #alpha version
 
         function new_decode(psi::it.MPS; noise::Union{Bool,NoiseModel}=false, decoding::Vector=[])
             length(psi) in (n, n+m) || throw(DimensionMismatch("decoding requires $n data qubits, optionally followed by $m ancillas"))
-            psi = apply(isempty(decoding) ? ops_encoding' : decoding, psi; noise=noise)
+            psi = apply(psi, isempty(decoding) ? ops_encoding' : decoding; noise=noise)
             return reduce_and_relabel_qubits(psi, logical_indices)
         end
 
@@ -680,7 +680,7 @@ struct StabilizerCode #alpha version
             end
 
             state_encoded_ancillas = _qec_append_ancillas(state_encoded, m)
-            state_encoded_ancillas, syndrome_vec = apply(ops_syndrome, state_encoded_ancillas;
+            state_encoded_ancillas, syndrome_vec = apply(state_encoded_ancillas, ops_syndrome;
                                                          noise=noise, track_measurements=true)
             op_error = _qec_recovery(syndrome_vec, generator, decoder)
             for i in 1:m
@@ -722,7 +722,7 @@ struct StabilizerCode #alpha version
             if noise isa NoiseModel
                 # Keep noisy ancilla gates coherent until their final measurement.
                 joint = _qec_append_ancillas(sa.sparse(rho), m)
-                joint = apply(ops_syndrome[1:end-m], joint; noise=noise)
+                joint = apply(joint, ops_syndrome[1:end-m]; noise=noise)
                 for outcome in 0:2^m-1
                     indices = (outcome+1):2^m:2^(n+m)
                     branch = joint[indices, indices]
@@ -864,9 +864,9 @@ struct QECState
             encoding_ops_no_swap, final_qubit_mapping = relabel_swap(collect(encoding_circuit), final_qubit_mapping)
             encoded_state_input = deepcopy(state_physical)
             if cutoff === nothing || !is_mps
-                encoded_state = apply(encoding_ops_no_swap, encoded_state_input)
+                encoded_state = apply(encoded_state_input, encoding_ops_no_swap)
             else
-                encoded_state = apply(encoding_ops_no_swap, encoded_state_input; cutoff=cutoff)
+                encoded_state = apply(encoded_state_input, encoding_ops_no_swap; cutoff=cutoff)
             end
         end
 

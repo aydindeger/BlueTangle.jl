@@ -28,7 +28,7 @@
         selected, bits = apply(storage(plus_y * plus_y'), Op("MY", 1); track_measurements=true)
         @test selected ≈ plus_y * plus_y'
         @test bits == [0]
-        selected, bits = apply([Op("X", 1), ifOp("MZ", 1, "I", "X")], storage(zero); track_measurements=true)
+        selected, bits = apply(storage(zero), [Op("X", 1), ifOp("MZ", 1, "I", "X")]; track_measurements=true)
         @test selected ≈ zero
         @test bits == [1]
 

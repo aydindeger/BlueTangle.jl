@@ -28,23 +28,23 @@
     for op in roundtrip_ops
         imported = from_qasm(to_qasm([op]; nqubits=3))
         @test get_N(imported) == 3
-        @test apply(imported, initial) ≈ apply(initial, op)
+        @test apply(initial, imported) ≈ apply(initial, op)
     end
 
     # Non-Z measurements must preserve the post-measurement state too.
     for name in ("MX", "M(X)", "MY", "M(Y)", "MZ", "M(Z)")
         ops = [Op(name,1), Op("H",1)]
         Random.seed!(314)
-        direct, values = apply(ops, initial; track_measurements=true)
+        direct, values = apply(initial, ops; track_measurements=true)
         Random.seed!(314)
-        imported, qasm_values = apply(from_qasm(to_qasm(ops; nqubits=3)), initial; track_measurements=true)
+        imported, qasm_values = apply(initial, from_qasm(to_qasm(ops; nqubits=3)); track_measurements=true)
         @test values == qasm_values
         @test direct ≈ imported
     end
 
     multireg = from_qasm("OPENQASM 2.0; qreg data[2]; qreg anc[1]; x anc[0];")
     @test get_N(multireg) == 3
-    @test apply(multireg, zero_state(3)) ≈ apply(zero_state(3), Op("X",3))
+    @test apply(zero_state(3), multireg) ≈ apply(zero_state(3), Op("X",3))
     @test get_N(from_qasm("OPENQASM 2.0; qreg q[4]; x q[0];")) == 4
     @test get_N(from_qasm("OPENQASM 2.0; qreg q[2];")) == 2
     @test_throws ArgumentError from_qasm("qreg q[2]; x q[2];")
@@ -57,9 +57,9 @@
 
     broadcast = from_qasm("qreg a[2]; qreg b[2]; h a; cx a,b;";is_file=false)
     expected_ops = [Op("H",1),Op("H",2),Op("CX",1,3),Op("CX",2,4)]
-    @test apply(broadcast,zero_state(4)) ≈ apply(expected_ops,zero_state(4))
+    @test apply(zero_state(4), broadcast) ≈ apply(zero_state(4), expected_ops)
     measurement = from_qasm("qreg q[2]; creg c[2]; x q; measure q -> c; reset q;")
-    measured_state, record = apply(measurement,zero_state(2);track_measurements=true)
+    measured_state, record = apply(zero_state(2), measurement;track_measurements=true)
     @test record == [1,1]
     @test measured_state ≈ zero_state(2)
     @test only(from_qasm("U(pi,0,pi) q[0];")).mat ≈ gate.X
@@ -74,7 +74,7 @@
     mktempdir() do directory
         path = joinpath(directory,"circuit.qasm")
         to_qasm([Op("H",1),Op("CX",1,2)],path)
-        @test apply(from_qasm(path;is_file=true),zero_state(2)) ≈ apply([Op("H",1),Op("CX",1,2)],zero_state(2))
+        @test apply(zero_state(2), from_qasm(path;is_file=true)) ≈ apply(zero_state(2), [Op("H",1),Op("CX",1,2)])
         write(path,bad_source)
         error = try from_qasm(path); catch e; e; end
         @test occursin("$path:4:",sprint(showerror,error))

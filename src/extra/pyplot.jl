@@ -209,7 +209,6 @@ function _plotq_pyplot(input::AbstractVector;
 end
 
 _plotq_pyplot(op::QuantumOps; kwargs...) = _plotq_pyplot([op]; kwargs...)
-_plotq_pyplot(ansatz::AnsatzOptions; kwargs...) = _plotq_pyplot(ansatz.ops; kwargs...)
 
 """
     savefigure(path; kwargs...)
@@ -225,5 +224,3 @@ function savefigure(figure::PyPlot.Figure, path::AbstractString; bbox_inches="ti
     figure.savefig(path; bbox_inches=bbox_inches, kwargs...)
     return path
 end
-
-plotq_text(args...; kwargs...) = plotqt(args...; kwargs...)

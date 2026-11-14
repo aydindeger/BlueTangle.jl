@@ -50,10 +50,10 @@ end
 *(tensor::its.ITensor, psi::it.MPS) = it.apply(tensor, psi) #exact
 
 *(str::Tuple, state::AbstractVectorS) = apply(state, Op(str...))
-*(vector_str::AbstractVector{<:Tuple}, state::AbstractVectorS) = apply(vector_str, state)
+*(vector_str::AbstractVector{<:Tuple}, state::AbstractVectorS) = apply(state, vector_str)
 
-*(vector_str::Tuple, psi::it.MPS) = apply(vector_str, psi)
-*(vector_str::AbstractVector{<:Tuple}, psi::it.MPS) = apply(vector_str, psi)
+*(str::Tuple, psi::it.MPS) = apply(psi, Op(str...))
+*(vector_str::AbstractVector{<:Tuple}, psi::it.MPS) = apply(psi, vector_str)
 
 """
     ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron
@@ -61,7 +61,6 @@ end
 ⊗(x::AbstractMatrixS, y::AbstractMatrixS) = kron(x, y)
 
 fields(m) = fieldnames(typeof(m))
-attributes(m) = fields(m)
 
 """
 ro3(x)=round(x,sigdigits=3)

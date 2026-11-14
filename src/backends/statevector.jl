@@ -30,9 +30,9 @@ function apply(
     if isa(op,OpF)
         if op.data isa Vector{<:QuantumOps}
             if track_measurements
-                state, mid_measurements = apply(op.data, state; noise=noise, track_measurements=true, kwargs...)
+                state, mid_measurements = apply(state, op.data; noise=noise, track_measurements=true, kwargs...)
             else
-                state = apply(op.data, state; noise=noise, kwargs...)
+                state = apply(state, op.data; noise=noise, kwargs...)
             end
         else
             state = op.apply(state)

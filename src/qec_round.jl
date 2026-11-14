@@ -30,7 +30,7 @@ function qec_round(code::StabilizerCode, state::Union{AbstractVectorS,it.MPS}; d
     for row in eachrow(code.generator)
         # S is Hermitian, including Y factors; no binary-Pauli phase is omitted.
         pauli_ops = Op[Op(name, q; noisy=false) for (name, q) in logical_vec_2_ops(collect(row))]
-        Spsi = apply(pauli_ops, psi)
+        Spsi = apply(psi, pauli_ops)
         p_zero = clamp((1 + real(inner(psi, Spsi))) / 2, 0, 1)
         bit = Int(rand() >= p_zero)
         psi = _qec_project_pure(psi, Spsi, 1 - 2bit)

@@ -12,7 +12,7 @@ import PhasePoly
         [Op("H",1),Op("Y",2;control=1),Op("S",3;control=2)],
     ]
     for ops in programs
-        expected = apply(ops,zero_state(3))
+        expected = apply(zero_state(3),ops)
         compact = phasepoly(ops; nqubits=3)
         @test get_N(compact) == 3
         @test to_state(compact) ≈ expected atol=1e-9

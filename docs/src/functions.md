@@ -105,9 +105,8 @@ evolve
 
 ## Quantum Machine Learning
 
-The [QML API reference](qml.md#API-reference) documents trainable circuit
-construction, ansatz generators, `train`, and the legacy `AnsatzOptions`, `VQA`,
-and `VQE` interfaces alongside executable examples.
+The [QML API reference](qml.md#API-reference) documents ansatz generators,
+`variational_apply`, and `train` alongside executable examples.
 
 ## Index
 

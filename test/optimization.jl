@@ -57,7 +57,7 @@ end
     custom = [Op("X", gate.X, 1), Op("X", gate.H, 1)]
     optimized = get_optimized_layers(custom)
     @test length(optimized) == 2
-    @test apply(vcat(optimized...), zero_state(1)) ≈ minus_state(1)
+    @test apply(zero_state(1), vcat(optimized...)) ≈ minus_state(1)
     @test length(get_optimized_layers([Op("X", gate.H, 1), Op("X", gate.X, 1)])) == 2
     @test length(get_optimized_layers([Op("CX", gate.CX, 1, 2), Op("CX", gate.SWAP, 1, 2)])) == 2
 

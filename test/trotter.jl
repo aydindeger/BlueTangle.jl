@@ -11,8 +11,8 @@
     N = 3
     H = hamiltonian(N,terms)
     expected = evolve(zero_state(N),H,0.23)
-    coarse = apply(hamiltonian_exp(N,0.23,terms;dt=0.05),zero_state(N))
-    fine = apply(hamiltonian_exp(N,0.23,terms;dt=0.005),zero_state(N))
+    coarse = apply(zero_state(N), hamiltonian_exp(N,0.23,terms;dt=0.05))
+    fine = apply(zero_state(N), hamiltonian_exp(N,0.23,terms;dt=0.005))
     @test norm(fine-expected) < norm(coarse-expected)/5
     @test evolve(zero_state(N)*zero_state(N)',H,0.23) ≈ expected*expected'
     @test isempty(hamiltonian_exp(2,0.0,terms))

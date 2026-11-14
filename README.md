@@ -259,7 +259,7 @@ Define a scalar loss and train its parameter vector directly:
 ```julia
 ops = [Op("RY", _RY, 1)]
 energy(parameters) = real(expect(variational_apply(parameters, ops), gate.Z))
-result = train(energy, fill(0.3, nparameters(ops)); iterations=30)
+result = train(energy, [0.3]; iterations=30)
 result.loss, result.parameters, result.history
 ```
 
@@ -268,7 +268,6 @@ an `init` state, so one circuit can evaluate many feature inputs. The
 [QML section](https://deger.xyz/BlueTangle.jl/qml/) brings together VQE, regression
 and XOR classification with held-out checks, gradient validation, deterministic
 noise, MPS truncation, and the QML API reference.
-`AnsatzOptions`, `VQA`, and `VQE` remain available for existing code.
 
 ## Import and export OpenQASM
 

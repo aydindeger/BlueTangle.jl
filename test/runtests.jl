@@ -218,11 +218,11 @@ Random.seed!(1234)
             all_ok &= (run(ops_mid_mz, 1; backend=backend)[1] == [1])
 
             init1 = backend==:statevector ? zero_state(1) : zero_state(N_MPS(1))
-            _,m_reset_apply = apply(ops_reset, init1; track_measurements=true)
-            _,m_ifop_apply = apply(ops_ifop, init1; track_measurements=true)
+            _,m_reset_apply = apply(init1, ops_reset; track_measurements=true)
+            _,m_ifop_apply = apply(init1, ops_ifop; track_measurements=true)
 
             init3 = backend==:statevector ? zero_state(3) : zero_state(N_MPS(3))
-            _,m_mid_apply = apply(ops_mid_mz, init3; track_measurements=true)
+            _,m_mid_apply = apply(init3, ops_mid_mz; track_measurements=true)
 
             all_ok &= (m_reset_apply == [0])
             all_ok &= (m_ifop_apply == [1])
@@ -247,10 +247,10 @@ Random.seed!(1234)
         all_ok = true
         for seed in 1:40
             Random.seed!(1000 + seed)
-            sv_state,sv_mid = apply(ops_noisy,zero_state(2);noise=nm,track_measurements=true)
+            sv_state,sv_mid = apply(zero_state(2),ops_noisy;noise=nm,track_measurements=true)
 
             Random.seed!(1000 + seed)
-            tn_state,tn_mid = apply(ops_noisy,zero_state(N_MPS(2));noise=nm,cutoff=1e-12,track_measurements=true)
+            tn_state,tn_mid = apply(zero_state(N_MPS(2)),ops_noisy;noise=nm,cutoff=1e-12,track_measurements=true)
 
             all_ok &= (sv_mid == tn_mid)
             all_ok &= isapprox(la.norm(sv_state - to_state(tn_state)),0.0;atol=1e-8)
@@ -273,10 +273,10 @@ Random.seed!(1234)
         all_ok = true
         for seed in 1:40
             Random.seed!(2000 + seed)
-            sv_state,sv_mid = apply(ops_opqc,zero_state(2);track_measurements=true)
+            sv_state,sv_mid = apply(zero_state(2),ops_opqc;track_measurements=true)
 
             Random.seed!(2000 + seed)
-            tn_state,tn_mid = apply(ops_opqc,zero_state(N_MPS(2));cutoff=1e-12,track_measurements=true)
+            tn_state,tn_mid = apply(zero_state(N_MPS(2)),ops_opqc;cutoff=1e-12,track_measurements=true)
 
             all_ok &= (sv_mid == tn_mid)
             all_ok &= isapprox(la.norm(sv_state - to_state(tn_state)),0.0;atol=1e-8)

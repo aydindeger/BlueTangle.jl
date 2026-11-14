@@ -178,7 +178,7 @@ end
 
     for initial in (logical, to_MPS(logical, N_MPS(1); cutoff=0.0))
         encoded = code.encode(initial)
-        damaged = apply(recovery, encoded)
+        damaged = apply(encoded, recovery)
         measured, syndrome, candidate = code.syndrome(damaged; decoder=decoder)
         @test syndrome == bits
         @test getproperty.(candidate, :qubit) == [1, 2]
@@ -192,7 +192,7 @@ end
 
     logical_rho = logical * logical'
     encoded_rho = code.encode(logical_rho)
-    noisy_rho = 0.4encoded_rho + 0.6apply(recovery, encoded_rho)
+    noisy_rho = 0.4encoded_rho + 0.6apply(encoded_rho, recovery)
     @test code.decode(code.correct(noisy_rho; decoder=decoder)) ≈ logical_rho
     # This enters the explicit noisy-ancilla density branch, even at p=0.
     @test code.decode(code.correct(noisy_rho; decoder=decoder,

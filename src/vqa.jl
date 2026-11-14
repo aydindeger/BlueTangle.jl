@@ -141,23 +141,11 @@ end
 
 _parameter_count(op::QuantumOps) = op isa Op && op.mat isa Function ? _find_argument_number(op.mat) : 0
 
-"""
-    nparameters(ops)
-
-Count the consecutive parameters consumed by local function-valued gates.
-Fixed gates, channels, and measurements consume no parameters.
-Binding applies to the top-level operation list; keep trainable gates outside
-named static blocks.
-"""
-nparameters(ops::AbstractVector{<:QuantumOps}) = sum(_parameter_count, ops; init=0)
-
 const _prima_models = (:prima, :cobyla, :uobyqa, :newuoa, :bobyqa, :lincoa)
 const _gradient_models = (:adam, :descent, :gradient, :radam, :momentum, :nesterov, :lbfgs)
 _optimizer_name(model) = Symbol(lowercase(String(model)))
 
 function _new_optimizer(model, parameters, iterations, learning_rate)
-    model = _optimizer_name(model)
-    model in _prima_models && return nothing
     model == :lbfgs && return OptimKit.LBFGS(; maxiter=iterations, verbosity=0)
     rule = if model == :adam
         Optimisers.Adam(learning_rate)
@@ -176,89 +164,11 @@ function _new_optimizer(model, parameters, iterations, learning_rate)
 end
 
 """
-    AnsatzOptions(; N, ops, loss, model="cobyla", pars_initial=[], kwargs...)
-
-Compatibility configuration for `VQA`/`VQE`. New workflows can use an operation
-list, `variational_apply(parameters, ops)`, and `train(loss, parameters)` directly.
-`ops` accepts explicit operations or gate-name layers. Initial states can be
-vectors, density matrices, or MPS states. A matrix/MPO `loss` denotes
-an expectation value; a function receives the final state.
-
-`number_of_iterations=1000` sets the iteration limit (evaluation budget for
-PRIMA), `learning_rate=0.01` controls first-order optimizers, and `history=true`
-keeps the legacy history return. `paramshift=true` requires a matrix/MPO loss
-and supported built-in gate functions. Use an explicit density matrix for
-automatic differentiation through noise, and avoid differentiating sampled
-measurement outcomes. MPS truncation is not differentiable by ForwardDiff;
-use `train(...; gradient=:finite_difference)` for a deterministic truncated loss.
-
-`noise=false`, `init=zero_state(N)`, `cutoff=-1`, and `deep_circuit=false` retain
-the existing defaults. Longer initial parameter vectors are truncated for
-compatibility; `nparameters(ops)` gives the exact required size for new code.
-"""
-struct AnsatzOptions{F,S,O}
-    N::Int
-    ops::Vector{<:QuantumOps}
-    args::Vector{Int}
-    loss::F
-    noise::Union{NoiseModel,Bool}
-    dim::Int
-    pars_initial::Vector
-    init::S
-    number_of_iterations::Int
-    model::String
-    learning_rate::Float64
-    cutoff::Number
-    deep_circuit::Bool
-    optimizer::Union{Optimisers.Leaf,OptimKit.LBFGS,Nothing}
-    paramshift::Bool
-    history::Bool
-    observable::O
-end
-
-function AnsatzOptions(; N::Int, ops::Union{Vector{String},Vector{<:QuantumOps}},
-                       loss::Union{Function,AbstractMatrix,it.MPO}, noise=false,
-                       init=sa.sparse([]), model::String="cobyla",
-                       number_of_iterations::Int=1000, learning_rate::Real=0.01,
-                       cutoff::Real=-1, pars_initial::AbstractVector=[],
-                       deep_circuit::Bool=false, paramshift::Bool=false,
-                       history::Bool=true)
-    N > 0 || throw(ArgumentError("N must be positive"))
-    number_of_iterations > 0 || throw(ArgumentError("number_of_iterations must be positive"))
-    isfinite(learning_rate) && learning_rate > 0 || throw(ArgumentError("learning_rate must be positive and finite"))
-    name = _optimizer_name(model)
-    name in (_prima_models..., _gradient_models...) || throw(ArgumentError("unknown optimizer: $model"))
-    cutoff == -1 || (isfinite(cutoff) && cutoff >= 0) || throw(ArgumentError("cutoff must be -1 or nonnegative"))
-    state = init isa AbstractVector && isempty(init) ? zero_state(N) : copy(init)
-    state isa Union{AbstractVector,AbstractMatrix,it.MPS} || throw(ArgumentError("init must be a vector, density matrix, or MPS"))
-    cutoff != -1 && !(state isa it.MPS) && throw(ArgumentError("cutoff applies only to MPS states"))
-    loss isa it.MPO && !(state isa it.MPS) && throw(ArgumentError("an MPO loss requires an MPS initial state"))
-    get_N(state) == N || throw(DimensionMismatch("initial state does not have N qubits"))
-    loss isa AbstractMatrix && size(loss) != (2^N,2^N) && throw(DimensionMismatch("loss matrix must act on N qubits"))
-    operations = ops isa Vector{String} ? _variational_circuit_from_string(N,ops; deep_circuit=deep_circuit)[1] : copy(ops)
-    get_N(operations) <= N || throw(DimensionMismatch("an ansatz operation exceeds N qubits"))
-    counts = Int[_parameter_count(op) for op in operations]
-    dim = sum(counts)
-    parameters = isempty(pars_initial) ? rand(dim)*pi : collect(float.(pars_initial))
-    length(parameters) >= dim || throw(DimensionMismatch("the ansatz requires $dim initial parameters"))
-    parameters = parameters[1:dim]
-    all(isfinite, parameters) || throw(ArgumentError("initial parameters must be finite"))
-    observable = loss isa Union{AbstractMatrix,it.MPO} ? loss : nothing
-    paramshift && isnothing(observable) && throw(ArgumentError("parameter shifts require a matrix/MPO expectation loss; differentiate nonlinear losses with train instead"))
-    paramshift && state isa it.MPS && cutoff > 0 && throw(ArgumentError("MPS truncation invalidates exact parameter shifts; use cutoff=0 or finite differences"))
-    objective = isnothing(observable) ? loss : state -> real(expect(state, observable))
-    optimizer = _new_optimizer(name, parameters, number_of_iterations, learning_rate)
-    return AnsatzOptions(N, operations, counts, objective, noise, dim, parameters,
-                         state, number_of_iterations, String(name), Float64(learning_rate),
-                         cutoff, deep_circuit, optimizer, paramshift, history, observable)
-end
-
-"""
     EfficientSU2(N, reps=1, gates=["RY", "RZ"]; deep_circuit=true)
 
 Return `reps+1` local rotation layers, separated by `reps` CX layers. Adjacent
 CXs form a chain when `deep_circuit=true`; otherwise their bonds alternate in
-disjoint layers. `nparameters(ops)` counts the resulting trainable angles.
+disjoint layers.
 """
 function EfficientSU2(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ"];
                       deep_circuit::Bool=true)
@@ -268,7 +178,7 @@ function EfficientSU2(N::Int, reps::Int=1, gates::Vector{String}=["RY", "RZ"];
         append!(names, gates)
         layer < reps && push!(names, "CX")
     end
-    return _variational_circuit_from_string(N, names; deep_circuit=deep_circuit)[1]
+    return _variational_circuit_from_string(N, names; deep_circuit=deep_circuit)
 end
 
 """
@@ -282,7 +192,7 @@ function generate_ansatz_circuit(N::Int, reps::Int=1, gates::Vector{String}=["RY
                                  deep_circuit::Bool=true)
     reps >= 0 || throw(ArgumentError("reps must be nonnegative"))
     names = repeat(gates, reps)
-    return _variational_circuit_from_string(N, names; deep_circuit=deep_circuit)[1]
+    return _variational_circuit_from_string(N, names; deep_circuit=deep_circuit)
 end
 
 function _variational_circuit_from_string(N::Int, names::Vector{String}; deep_circuit::Bool=false)
@@ -304,8 +214,7 @@ function _variational_circuit_from_string(N::Int, names::Vector{String}; deep_ci
         end
         two_qubit_layer += two_qubit
     end
-    counts = Int[_parameter_count(op) for op in operations]
-    return operations, counts, sum(counts)
+    return operations
 end
 
 _stochastic_operation(op::QuantumOps) = op isa Union{OpQC,ifOp} || (op isa Op && op.type == "🔬")
@@ -322,19 +231,19 @@ function _check_variational_gradient(state, differentiating, noise, stochastic)
     if !(state isa AbstractMatrix) && (noise isa NoiseModel || stochastic)
         throw(ArgumentError("automatic differentiation through sampled noise/measurements is not an ensemble gradient; use a density-matrix initial state"))
     end
-    state isa it.MPS && throw(ArgumentError("ForwardDiff cannot reliably differentiate MPS decompositions; use train(...; gradient=:finite_difference) or an untruncated expectation parameter shift"))
+    state isa it.MPS && throw(ArgumentError("ForwardDiff cannot reliably differentiate MPS decompositions; use train(...; gradient=:finite_difference)"))
     return nothing
 end
 
 """
     variational_apply(parameters, ops; init=nothing, N=get_N(ops), noise=false, kwargs...)
-    variational_apply(parameters, options::AnsatzOptions; noise_override=nothing, kwargs...)
 
 Apply consecutive parameters to an operation list and return the final state.
 The default input is `zero_state(N)`; explicit vector, density-matrix, and MPS
-inputs are supported and are not modified. `nparameters(ops)` gives the required
-parameter count. Vector gates act directly on amplitudes without building
-full-register operators. Noise and conditional branches use ordinary `apply`
+inputs are supported and are not modified. Each function-valued local gate
+consumes one parameter per argument; fixed operations consume none. Vector
+gates act directly on amplitudes without building full-register operators.
+Noise and conditional branches use ordinary `apply`
 semantics. Differentiating sampled trajectories is rejected: use a density
 matrix for an exact noisy ensemble, or define an explicit sampling estimator.
 """
@@ -346,10 +255,7 @@ function variational_apply(parameters::AbstractVector, ops::Vector{<:QuantumOps}
     state isa Union{AbstractVector,AbstractMatrix,it.MPS} || throw(ArgumentError("invalid initial state"))
     get_N(state) == N || throw(DimensionMismatch("initial state does not have N qubits"))
     get_N(ops) <= N || throw(DimensionMismatch("an operation exceeds N qubits"))
-    return _variational_apply(parameters, ops, Int[_parameter_count(op) for op in ops], state, noise; kwargs...)
-end
-
-function _variational_apply(parameters, ops, counts, state, noise; kwargs...)
+    counts = Int[_parameter_count(op) for op in ops]
     dim = sum(counts)
     length(parameters) == dim || throw(DimensionMismatch("the circuit requires $dim parameters"))
     differentiating = _has_dual_numbers(parameters) || _has_dual_numbers(state) ||
@@ -374,14 +280,6 @@ function _variational_apply(parameters, ops, counts, state, noise; kwargs...)
         offset += count
     end
     return state
-end
-
-function variational_apply(parameters::AbstractVector, opt::AnsatzOptions;
-                           noise_override::Union{Nothing,Bool,NoiseModel}=nothing, kwargs...)
-    noise = isnothing(noise_override) ? opt.noise : noise_override
-    settings = opt.init isa it.MPS && opt.cutoff != -1 ? merge((cutoff=opt.cutoff,), (;kwargs...)) : (;kwargs...)
-    opt.init isa it.MPS && opt.paramshift && opt.cutoff == -1 && (settings = merge((cutoff=0.0,), settings))
-    return _variational_apply(parameters, opt.ops, opt.args, opt.init, noise; settings...)
 end
 
 # One derivative implementation is shared by all gradient optimizers. Reuse
@@ -432,7 +330,8 @@ deterministic, non-AD-compatible calculations such as truncated MPS evolution.
 A gradient function is also accepted. Sampled noise requires a deliberately
 chosen stochastic estimator; use density evolution for deterministic noisy
 training. Supported optimizers are LBFGS, Adam, descent, RAdam, momentum,
-Nesterov, and the legacy PRIMA methods. PRIMA uses an objective-evaluation budget.
+Nesterov, and the derivative-free PRIMA methods. PRIMA uses an
+objective-evaluation budget.
 Histories record accepted iterates for LBFGS, updated iterates for first-order
 methods, and objective evaluations for PRIMA; `history=false` returns an empty
 history. `loss` always corresponds to the returned parameters.
@@ -440,14 +339,6 @@ history. `loss` always corresponds to the returned parameters.
 function train(loss, initial_parameters::AbstractVector; optimizer=:lbfgs,
                iterations::Int=100, learning_rate::Real=0.01,
                gradient=:forward, history::Bool=true)
-    result = _train(loss, initial_parameters; optimizer=optimizer, iterations=iterations,
-                    learning_rate=learning_rate, gradient=gradient, history=history)
-    return (loss=result.loss, parameters=result.parameters, history=result.history)
-end
-
-function _train(loss, initial_parameters; optimizer=:lbfgs, iterations=100,
-                learning_rate=0.01, gradient=:forward, history=true,
-                value_gradient=nothing, optimizer_state=nothing, parameter_history=false)
     iterations >= 0 || throw(ArgumentError("iterations must be nonnegative"))
     isfinite(learning_rate) && learning_rate > 0 || throw(ArgumentError("learning_rate must be positive and finite"))
     all(p -> p isa Real && isfinite(p), initial_parameters) || throw(ArgumentError("initial parameters must be finite real numbers"))
@@ -455,12 +346,10 @@ function _train(loss, initial_parameters; optimizer=:lbfgs, iterations=100,
     model = _optimizer_name(optimizer)
     model in (_prima_models..., _gradient_models...) || throw(ArgumentError("unknown optimizer: $optimizer"))
     losses = Float64[]
-    parameter_values = Vector{typeof(parameters)}()
     if isempty(parameters) || iterations == 0
         value = loss(parameters)
         history && push!(losses, value)
-        parameter_history && push!(parameter_values, copy(parameters))
-        return (loss=value, parameters=parameters, history=losses, parameter_history=parameter_values)
+        return (loss=value, parameters=parameters, history=losses)
     end
     if model in _prima_models
         objective = p -> begin
@@ -469,10 +358,10 @@ function _train(loss, initial_parameters; optimizer=:lbfgs, iterations=100,
             value
         end
         parameters, info = getproperty(pr, model)(objective, parameters; maxfun=iterations)
-        return (loss=info.fx, parameters=parameters, history=losses, parameter_history=parameter_values)
+        return (loss=info.fx, parameters=parameters, history=losses)
     end
-    fg = isnothing(value_gradient) ? _value_gradient(loss, parameters, gradient) : value_gradient
-    state = isnothing(optimizer_state) ? _new_optimizer(model, parameters, iterations, learning_rate) : optimizer_state
+    fg = _value_gradient(loss, parameters, gradient)
+    state = _new_optimizer(model, parameters, iterations, learning_rate)
     if model == :lbfgs
         parameters, value, _, _, trace = OptimKit.optimize(fg, parameters, state)
         history && append!(losses, trace[:,1])
@@ -481,84 +370,8 @@ function _train(loss, initial_parameters; optimizer=:lbfgs, iterations=100,
             _, derivative = fg(parameters)
             state, parameters = Optimisers.update(state, parameters, derivative)
             history && push!(losses, loss(parameters))
-            parameter_history && push!(parameter_values, copy(parameters))
         end
         value = history ? last(losses) : loss(parameters)
     end
-    return (loss=value, parameters=parameters, history=losses, parameter_history=parameter_values)
-end
-
-"""
-    VQA(options::AnsatzOptions)
-    VQE(options::AnsatzOptions)
-
-Compatibility entry points. With `history=false`, return `(loss, parameters)`.
-With history enabled, LBFGS returns `(history, parameters)`, first-order methods
-return `(history, parameters, parameter_history)`, and PRIMA returns
-`(loss, parameters)`. New code can use `train` for a consistent named result.
-"""
-function VQA(opt::AnsatzOptions)
-    result = _train(p -> _loss(p,opt), opt.pars_initial; optimizer=opt.model,
-                    iterations=opt.number_of_iterations, learning_rate=opt.learning_rate,
-                    history=opt.history, optimizer_state=opt.optimizer,
-                    value_gradient=opt.paramshift ? p -> loss_and_grad_paramshift(p,opt) : nothing,
-                    parameter_history=opt.history && _optimizer_name(opt.model) in _gradient_models && opt.model != "lbfgs")
-    !opt.history || _optimizer_name(opt.model) in _prima_models ||
-        return opt.model == "lbfgs" ? (result.history,result.parameters) : (result.history,result.parameters,result.parameter_history)
-    return result.loss, result.parameters
-end
-"""`VQE(options)` is the energy-minimization alias of [`VQA`](@ref)."""
-VQE(opt::AnsatzOptions) = VQA(opt)
-_loss(parameters, opt) = opt.loss(variational_apply(parameters, opt))
-
-function _parameter_shift_rule(op::Op, parameter::Int)
-    name = _clean_name(op.name)
-    gate_function = op.mat
-    if gate_function isa _AdjointGate
-        gate_function = gate_function.parent
-        name = rstrip(name, '†')
-    end
-    get(_parameterized_gates, name, nothing) === gate_function ||
-        throw(ArgumentError("Parameter shifts require a built-in gate function; use automatic differentiation for custom functions."))
-
-    # A generator with two eigenvalues separated by frequency ω has the
-    # two-point rule ω/2 [f(θ+π/(2ω)) - f(θ-π/(2ω))].
-    if name == "SWAPA"
-        return ((0.5, pi/2),)
-    end
-    three_eigenvalues = name in ("GIVENS", "RXY") || (name == "FSIM" && parameter == 1)
-    frequency = name in ("RXX", "RYY") ? 2.0 : 1.0
-    pauli_rotation = name in ("RX", "RY", "RZ", "RXX", "RYY", "RZZ") || (name == "U3" && parameter == 1)
-    if three_eigenvalues || (op.control > 0 && pauli_rotation)
-        # Eigenvalues {-r,0,r} produce frequencies r and 2r. These two
-        # symmetric shifts differentiate both frequencies exactly.
-        r = three_eigenvalues ? 1.0 : frequency/2
-        return ((pi/(4r), r/2*(1 + inv(sqrt(2)))),
-                (3pi/(4r), r/2*(inv(sqrt(2)) - 1)))
-    end
-    return ((pi/(2frequency), frequency/2),)
-end
-
-function loss_and_grad_paramshift(p::AbstractVector{<:Real}, opt::AnsatzOptions)
-    # Parameter-shift differentiation assumes loss is an expectation value
-    # (linear in the output density matrix), as in VQE.
-    isnothing(opt.observable) && throw(ArgumentError("parameter shifts require an expectation loss"))
-    ℓ = _loss(p, opt)
-    g = zeros(eltype(p), length(p))
-    base = copy(p)
-    i = 1
-    for (op, fn) in zip(opt.ops, opt.args)
-        for parameter in 1:fn
-            for (shift, weight) in _parameter_shift_rule(op, parameter)
-                base[i] = p[i] + shift
-                fp = _loss(base, opt)
-                base[i] = p[i] - shift
-                fm = _loss(base, opt)
-                g[i] += weight * (fp - fm)
-            end
-            base[i] = p[i]
-            i += 1
-        end
-    end
-    return (ℓ, g)
+    return (loss=value, parameters=parameters, history=losses)
 end

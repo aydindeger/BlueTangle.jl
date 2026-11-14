@@ -189,6 +189,3 @@ function hamiltonian_exp(shape::Union{Tuple{Int,Int},Vector{Int}}, total_time::R
     pending_group == 0 || _apply_trotter_group!(result, local_terms, groups[pending_group], pending_duration)
     return result
 end
-
-# Historical experimental name now shares the verified implementation.
-hamiltonian_exp_test(args...; kwargs...) = hamiltonian_exp(args...; kwargs...)

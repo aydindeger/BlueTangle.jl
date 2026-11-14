@@ -20,8 +20,6 @@ fixes its angle:
 using BlueTangle
 ops = [Op("RY", _RY, 1)]       # one trainable angle
 fixed = [Op("RY(0.3)", 1)]    # a fixed gate
-@assert nparameters(ops) == 1
-@assert nparameters(fixed) == 0
 state = variational_apply([0.3], ops)
 @assert state ≈ apply(zero_state(1), fixed)
 plotq(ops)
@@ -29,8 +27,9 @@ nothing # hide
 ```
 
 Parameters follow operation order; multi-argument gates consume consecutive
-entries. Use `nparameters(ops)` to size the initial vector. By default the input
-is `|0…0⟩`; pass `init=state` to evaluate the same circuit on another input.
+entries. Supply one initial value for each trainable angle; fixed gates consume
+none. By default the input is `|0…0⟩`; pass `init=state` to evaluate the same
+circuit on another input.
 Keep trainable gates in this top-level list; named blocks can group fixed
 subcircuits, including their noise and measurement operations.
 
@@ -46,7 +45,7 @@ H = hamiltonian(2, [-1.0, "Z,Z", -0.7, "X"])
 ops = [Op("RY", _RY, 1), Op("RY", _RY, 2), Op("CX", 1, 2),
        Op("RY", _RY, 1), Op("RY", _RY, 2)]
 energy(parameters) = real(expect(variational_apply(parameters, ops), H))
-initial = fill(0.3, nparameters(ops))
+initial = fill(0.3, 4)
 result = train(energy, initial; iterations=40)
 exact_energy = eigmin(Hermitian(Matrix(H)))
 @assert result.loss >= exact_energy - 1e-10
@@ -80,11 +79,11 @@ exact_energy = eigmin(Hermitian(Matrix(H)))
 ops = QuantumOps[Op("RY", _RY, q) for q in 1:N]
 append!(ops, [Op("CX", q, q+1) for q in 1:N-1])
 energy(parameters) = real(expect(variational_apply(parameters, ops), H))
-initial = fill(0.3, nparameters(ops))
+initial = fill(0.3, N)
 result = train(energy, initial; iterations=40)
 @assert result.loss >= exact_energy - 1e-10
 @assert result.loss <= energy(initial) + 1e-10
-(exact=exact_energy, variational=result.loss, parameters=nparameters(ops))
+(exact=exact_energy, variational=result.loss)
 ```
 
 ![Variational circuit for the three-site Ising model](assets/figs/vqe_c.png)
@@ -103,7 +102,6 @@ assigned consecutively from the parameter vector:
 using BlueTangle
 custom_ops = QuantumOps[Op("local RY", theta -> _RY(theta), 1),
                        Op("CX", 1, 2), Op("local RZ", theta -> _RZ(theta), 2)]
-@assert nparameters(custom_ops) == 2
 @assert get_N(variational_apply([0.2, 0.4], custom_ops)) == 2
 plotq(custom_ops)
 nothing # hide
@@ -123,14 +121,15 @@ For repeated structures, the two generators have distinct conventions:
 using BlueTangle
 su2 = EfficientSU2(2, 1, ["RY"])
 repeated = generate_ansatz_circuit(2, 2, ["RY", "CX"])
-@assert nparameters(su2) == 4
-@assert nparameters(repeated) == 4
-(su2_parameters=nparameters(su2), repeated_parameters=nparameters(repeated))
+initial = fill(0.3, 4) # two RY layers on two qubits
+su2_state = variational_apply(initial, su2)
+repeated_state = variational_apply(initial, repeated)
+nothing # hide
 ```
 
 `EfficientSU2` makes `reps+1` rotation layers separated by `reps` CX layers;
 `generate_ansatz_circuit` repeats the supplied layer list exactly `reps` times.
-Thus these circuits have the same parameter count but different final layers.
+Both circuits take four angles here, but have different final layers.
 `deep_circuit=false` alternates disjoint nearest-neighbor CX bonds instead of
 using a full adjacent chain for each entangling layer.
 
@@ -305,9 +304,9 @@ analytic = [-sin(2only(parameters))]
 For an expectation `z(theta)`, a gate's parameter-shift rule differentiates
 `z`; a nonlinear loss such as `z²` still needs the chain rule `2z*dz/dtheta`.
 Shifting the entire nonlinear loss with the expectation-value rule is generally
-wrong. Legacy `paramshift=true` is restricted to supported gates and linear
-matrix/MPO observables; it is not an alternative for arbitrary nonlinear losses
-or parameter-dependent truncation.
+wrong. If supplying a parameter-shift gradient through `train`'s `gradient`
+callback, differentiate the complete loss and check that the gate's shift rule
+applies. Parameter-dependent MPS truncation can invalidate that rule.
 
 ## Train with deterministic noise
 
@@ -363,28 +362,6 @@ retains the full two-qubit Schmidt rank and matches the dense reference. In a
 larger calculation, increase the bond cap, tighten the cutoff, and check the
 finite-difference estimate until the observables of interest converge.
 
-## Use the legacy interface
-
-Existing `AnsatzOptions`, `VQA`, and `VQE` calls remain supported. This energy
-example uses a linear observable, so its built-in parameter-shift gradient is
-valid:
-
-```@example qml_legacy
-using BlueTangle
-options = AnsatzOptions(N=1, ops=["RY"], loss=gate.Z, model="lbfgs",
-    pars_initial=[0.3], number_of_iterations=30, history=false, paramshift=true)
-energy, parameters = VQE(options)
-@assert isapprox(energy, -1; atol=1e-8)
-@assert energy ≈ real(expect(variational_apply(parameters, options), gate.Z))
-(energy=energy, parameters=parameters)
-```
-
-`VQA(options)` is the corresponding generic-loss entry point. Legacy calls with
-`history=false` return `(loss, parameters)`. With history enabled, L-BFGS returns
-`(history, parameters)`, first-order gradient optimizers also return parameter
-history, and PRIMA returns `(loss, parameters)`. New `train` calls always return
-the named fields `loss`, `parameters`, and `history`.
-
 ## Keep training efficient
 
 Construct the operation list once and precompute fixed feature states, as the
@@ -400,12 +377,8 @@ circuit, hardware, and compilation state.
 ## API reference
 
 ```@docs
-nparameters
 variational_apply
 train
 EfficientSU2
 generate_ansatz_circuit
-AnsatzOptions
-VQA
-VQE
 ```

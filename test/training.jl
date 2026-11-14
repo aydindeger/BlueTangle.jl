@@ -6,7 +6,6 @@
     target = 0.2
     objective(p) = (expect(variational_apply(p, operations), gate.Z)-target)^2 + 0.1p[2]^4
     analytic_gradient(p) = [-2(cos(p[1])-target)*sin(p[1]), 0.4p[2]^3]
-    @test nparameters(operations) == 2
     @test BlueTangle.ForwardDiff.gradient(objective, initial) ≈ analytic_gradient(initial)
     result = train(objective, initial; optimizer=:descent, iterations=1, learning_rate=0.05)
     @test keys(result) == (:loss, :parameters, :history)
@@ -59,7 +58,7 @@
     @test stopped_with_history.history == [3.25]
 end
 
-@testset "Direct variational states and noise overrides" begin
+@testset "Direct variational states and noise" begin
     operations = QuantumOps[Op("RY", _RY, 1)]
     prepared = apply(zero_state(2), [Op("X", 2)])
     parameter = [0.43]
@@ -69,10 +68,9 @@ end
     @test parameter == [0.43]
 
     damping = NoiseModel(Noise1("amplitude_damping", 1.0), false)
-    opt = AnsatzOptions(N=1, ops=["X"], loss=gate.Z, noise=damping)
-    @test variational_apply(Float64[], opt) ≈ zero_state(1)
-    @test variational_apply(Float64[], opt; noise_override=false) ≈ one_state(1)
-    @test variational_apply(Float64[], opt) ≈ zero_state(1)
+    fixed = [Op("X", 1)]
+    @test variational_apply(Float64[], fixed; noise=damping) ≈ zero_state(1)
+    @test variational_apply(Float64[], fixed) ≈ one_state(1)
 
     conditional = QuantumOps[ifOp("MZ", 1, Op("I", 2), Op("X", 2))]
     initial = product_state([1, 0])
@@ -114,15 +112,10 @@ end
 @testset "Ansatz layer construction" begin
     trainable = generate_ansatz_circuit(3, 1, ["RY"])
     fixed = generate_ansatz_circuit(3, 1, ["RY(0.3)"])
-    @test nparameters(trainable) == 3
-    @test nparameters(fixed) == 0
     @test all(op -> op.mat ≈ _RY(0.3), fixed)
     expected = kron(_RY(0.3)*[1.0, 0.0], _RY(0.3)*[1.0, 0.0], _RY(0.3)*[1.0, 0.0])
     @test variational_apply(Float64[], fixed) ≈ expected
     @test variational_apply(fill(0.3, 3), trainable) ≈ expected
-    fixed_options = AnsatzOptions(N=3, ops=["RY(0.3)"], loss=hilbert(3, gate.Z, 1))
-    @test fixed_options.dim == 0
-    @test variational_apply(Float64[], fixed_options) ≈ expected
 
     deep = generate_ansatz_circuit(5, 2, ["CX"]; deep_circuit=true)
     brick = generate_ansatz_circuit(5, 2, ["CX"]; deep_circuit=false)
@@ -132,12 +125,8 @@ end
     rotations = EfficientSU2(3, 0)
     @test [(op.name, op.qubit) for op in rotations] ==
           [("RY", 1), ("RY", 2), ("RY", 3), ("RZ", 1), ("RZ", 2), ("RZ", 3)]
-    @test nparameters(rotations) == 6
     @test isempty(generate_ansatz_circuit(3, 0))
-    @test nparameters(generate_ansatz_circuit(3, 0)) == 0
     @test variational_apply(Float64[], QuantumOps[]; N=2) ≈ zero_state(2)
-    empty_options = AnsatzOptions(N=2, ops=QuantumOps[], loss=hilbert(2, gate.Z, 1))
-    @test variational_apply(Float64[], empty_options) ≈ zero_state(2)
 
     for constructor in (EfficientSU2, generate_ansatz_circuit)
         @test_throws ArgumentError constructor(0)

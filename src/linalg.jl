@@ -10,7 +10,7 @@ Base.adjoint(op::OpF)=op
 Base.adjoint(op::ifOp)=op
 
 # Preserve the original function's parameter count when taking a variational
-# gate's adjoint, so VQA can allocate the same parameter slice.
+# gate's adjoint, so variational_apply can allocate the same parameter slice.
 struct _AdjointGate{F} <: Function
     parent::F
 end

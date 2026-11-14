@@ -63,7 +63,7 @@ end
     state = normalize(ComplexF64[1, 2im, -3, 1-im])
     original = QuantumOps[Op("SWAP", 1, 2), custom, channel]
     relabeled, _ = relabel_swap(original)
-    @test apply(apply(relabeled, state * state'), Op("SWAP", 1, 2)) ≈ apply(original, state * state')
+    @test apply(apply(state * state', relabeled), Op("SWAP", 1, 2)) ≈ apply(state * state', original)
 end
 
 @testset "Joint two-qubit Born measurement" begin

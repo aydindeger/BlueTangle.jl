@@ -52,10 +52,10 @@
     recovery = [Op("X", 1; noisy=false), Op("X", 2; noisy=false)]
     decoder = bits -> all(iszero, bits) ? Op[] : recovery
     encoded_rep = repetition.encode(logical)
-    result = qec_round(repetition, apply(recovery, encoded_rep); decoder=decoder)
+    result = qec_round(repetition, apply(encoded_rep, recovery); decoder=decoder)
     @test result.syndrome == [0, 1, 0, 0]
     @test abs2(dot(logical, repetition.decode(result.state))) ≈ 1
-    @test_throws ArgumentError qec_round(repetition, apply(recovery, encoded_rep); decoder=_ -> Op[])
+    @test_throws ArgumentError qec_round(repetition, apply(encoded_rep, recovery); decoder=_ -> Op[])
 
     @test_throws DimensionMismatch qec_round(code, zero_state(3))
     @test_throws DimensionMismatch qec_round(code, to_rho(zero_state(3)))
