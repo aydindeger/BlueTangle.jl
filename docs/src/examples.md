@@ -631,6 +631,9 @@ fourth order composes three Strang steps using
 [Yoshida's coefficients](https://doi.org/10.1016/0375-9601(90)90092-3).
 Compare against exact evolution at the same time, using exact outcome
 probabilities so that shot noise does not obscure the Trotter error.
+The examples below set ℏ = 1, so each coupling multiplied by `time` is
+dimensionless. `norm(state-exact_state)` measures the state-vector error for
+the chosen initial state.
 
 ```@example trotter
 using BlueTangle, LinearAlgebra
@@ -639,7 +642,7 @@ terms = [-1.0, "X,X", -0.8, "Z"]
 time = 0.6
 H = hamiltonian(N, terms)
 exact_state = evolve(zero_state(N), H, time)
-trotter_ops = hamiltonian_exp(N, time, terms; dt=0.05)
+trotter_ops = hamiltonian_exp(N, time, terms; dt=0.05, order=1)
 trotter_state = apply(zero_state(N), trotter_ops)
 trotter_measurement = measure(trotter_state; label="Trotter dt=0.05")
 exact_measurement = measure(exact_state; label="Exact")
@@ -650,26 +653,80 @@ finer_state = apply(zero_state(N), hamiltonian_exp(N, time, terms; dt=0.025))
  error_dt=norm(trotter_state-exact_state), error_half_dt=norm(finer_state-exact_state))
 ```
 
-Compare the error and gate count at the same step size:
+### Choosing first, second, or fourth order
+
+Omitting `order` gives first order. Construct the two higher-order circuits with
+the same Hamiltonian, total time, and step size, then compare their errors and
+gate counts:
 
 ```@example trotter
-map((1, 2, 4)) do order
-    ops = hamiltonian_exp(N, time, terms; dt=0.05, order=order)
+second_order_ops = hamiltonian_exp(N, time, terms; dt=0.05, order=2)
+fourth_order_ops = hamiltonian_exp(N, time, terms; dt=0.05, order=4)
+
+map(((1, trotter_ops), (2, second_order_ops), (4, fourth_order_ops))) do (order, ops)
     state = apply(zero_state(N), ops)
-    (order=order, gates=length(ops), error=norm(state-exact_state))
+    (order=order, gates=length(ops), cnots=count(op -> op.name == "CX", ops),
+     error=norm(state-exact_state))
 end
 ```
 
-At fixed total time, halving a sufficiently small `dt` reduces the leading error
-by approximately 2, 4, or 16 for the three orders. Fourth order uses a negative
-middle substep and more gates per step, so the cheapest choice depends on the
-Hamiltonian and desired accuracy. Consecutive commuting terms are grouped,
+Fourth order uses a negative middle substep and more gates per step, so the
+cheapest choice depends on the Hamiltonian and desired accuracy. Compare gate
+counts at the accuracy you need, rather than choosing solely by the order.
+Consecutive commuting terms are grouped,
 repeated blocks at stage and step boundaries are merged, and zero couplings
 produce no gates. If every term commutes, one exact block suffices.
 
+### Checking convergence when the step is halved
+
+Keep the total time fixed and repeat each calculation with half the step size:
+
+```@example trotter
+map((1, 2, 4)) do order
+    errors = map((0.05, 0.025)) do dt
+        ops = hamiltonian_exp(N, time, terms; dt=dt, order=order)
+        norm(apply(zero_state(N), ops) - exact_state)
+    end
+    ratio = errors[1] / errors[2]
+    @assert isapprox(ratio, 2.0^order; rtol=0.1)
+    (order=order, error_dt=errors[1], error_half_dt=errors[2], ratio=ratio)
+end
+```
+
+Here the ratios are approximately 2.003, 4.004, and 15.943. These approach 2,
+4, and 16 in the small-step limit, until numerical roundoff dominates. Check
+convergence again when you change the Hamiltonian, couplings, or total time;
+the order alone does not supply an error bound for a particular step size.
+
+### Taking one step and evolving backwards
+
 The final step is shortened to reach `time` exactly, including negative times.
 Use `full=false` to request a single step of duration `dt`, with the sign of
-`time` (positive when `time == 0`), instead of the full evolution.
+`time` (positive when `time == 0`), instead of the full evolution. In this mode,
+the magnitude of `time` is ignored:
+
+```@example trotter
+dt = 0.05
+step_ops = hamiltonian_exp(N, time, terms; dt=dt, order=2, full=false)
+backward_ops = hamiltonian_exp(N, -time, terms; dt=dt, order=2, full=false)
+after_step = apply(zero_state(N), step_ops)
+restored_state = apply(after_step, backward_ops)
+@assert isapprox(restored_state, zero_state(N); atol=1e-12)
+
+# A full backwards evolution with four steps of -0.05 and a final -0.03.
+backward_time = -0.23
+backward_full = hamiltonian_exp(N, backward_time, terms; dt=dt, order=4)
+backward_exact = evolve(zero_state(N), H, backward_time)
+(round_trip_error=norm(restored_state-zero_state(N)),
+ backward_error=norm(apply(zero_state(N), backward_full)-backward_exact))
+```
+
+A single second- or fourth-order step is symmetric, so changing its sign gives
+its inverse. For a full circuit with an unequal final step, use `adjoint(ops)`
+to undo that particular circuit exactly: a separate negative-time construction
+approximates backwards evolution but keeps the shortened step at the end.
+
+### Inspecting the first-order circuit
 
 The first 16 scheduled layers are shown below; this is only a preview of the
 full evolution circuit.
