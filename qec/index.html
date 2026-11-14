@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="referrer" content="no-referrer"/><title>Quantum error correction · BlueTangle.jl</title><meta name="title" content="Quantum error correction · BlueTangle.jl"/><meta property="og:title" content="Quantum error correction · BlueTangle.jl"/><meta property="twitter:title" content="Quantum error correction · BlueTangle.jl"/><meta name="description" content="Documentation for BlueTangle.jl."/><meta property="og:description" content="Documentation for BlueTangle.jl."/><meta property="twitter:description" content="Documentation for BlueTangle.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="BlueTangle.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">BlueTangle.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../examples/">Examples</a></li><li class="is-active"><a class="tocitem" href>Quantum error correction</a><ul class="internal"><li><a class="tocitem" href="#Encode-an-arbitrary-logical-qubit"><span>Encode an arbitrary logical qubit</span></a></li><li><a class="tocitem" href="#Inspect-and-correct-a-physical-error"><span>Inspect and correct a physical error</span></a></li><li><a class="tocitem" href="#Apply-a-logical-gate"><span>Apply a logical gate</span></a></li><li><a class="tocitem" href="#Correct-an-ensemble-of-errors"><span>Correct an ensemble of errors</span></a></li><li><a class="tocitem" href="#Use-an-MPS-without-converting-to-a-dense-vector"><span>Use an MPS without converting to a dense vector</span></a></li><li><a class="tocitem" href="#Reference"><span>Reference</span></a></li></ul></li><li><a class="tocitem" href="../qasm/">OpenQASM</a></li><li><a class="tocitem" href="../advanced/">Advanced Examples</a></li><li><a class="tocitem" href="../functions/">Functions</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Quantum error correction</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Quantum error correction</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/aydindeger/BlueTangle.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/aydindeger/BlueTangle.jl/blob/main/docs/src/qec.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Quantum-error-correction"><a class="docs-heading-anchor" href="#Quantum-error-correction">Quantum error correction</a><a id="Quantum-error-correction-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-error-correction" title="Permalink"></a></h1><p>A stabilizer code stores logical information in the simultaneous +1 eigenspace of commuting Pauli operators. An error can change their measurement outcomes without revealing the encoded amplitudes. The resulting syndrome identifies a candidate recovery operation.</p><p>BlueTangle constructs an encoding circuit from independent, commuting +1 Pauli generators. Its built-in decoder searches for a matching <strong>single-qubit Pauli</strong> error. This is sufficient for the example below; it is not a decoder for arbitrary multi-qubit errors, and setting <code>d=3</code> does not independently certify a code&#39;s distance.</p><h2 id="Encode-an-arbitrary-logical-qubit"><a class="docs-heading-anchor" href="#Encode-an-arbitrary-logical-qubit">Encode an arbitrary logical qubit</a><a id="Encode-an-arbitrary-logical-qubit-1"></a><a class="docs-heading-anchor-permalink" href="#Encode-an-arbitrary-logical-qubit" title="Permalink"></a></h2><p>The five-qubit code has four independent generators, leaving one logical qubit. Commas separate the physical qubits in each generator.</p><pre><code class="language-julia hljs">using BlueTangle, LinearAlgebra
+
+stabilizers = [
+    &quot;X,Z,Z,X,I&quot;,
+    &quot;I,X,Z,Z,X&quot;,
+    &quot;X,I,X,Z,Z&quot;,
+    &quot;Z,X,I,X,Z&quot;,
+]
+code = StabilizerCode(stabilizers; d=3)
+logical = normalize(ComplexF64[1, 0.2 + 0.7im])
+encoded = code.encode(logical)
+
+@assert code.decode(encoded) ≈ logical
+@assert all(s -&gt; isapprox(expect(encoded, string_to_matrix(s)), 1), stabilizers)
+(data_qubits=code.n, logical_qubits=code.k, syndrome_bits=code.m)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(data_qubits = 5, logical_qubits = 1, syndrome_bits = 4)</code></pre><p><code>code.encode()</code> prepares logical zero. Passing a statevector prepares its arbitrary logical superposition. The physical logical-Pauli representatives are defined by the constructed encoder; supplied logical-operation definitions take precedence.</p><h2 id="Inspect-and-correct-a-physical-error"><a class="docs-heading-anchor" href="#Inspect-and-correct-a-physical-error">Inspect and correct a physical error</a><a id="Inspect-and-correct-a-physical-error-1"></a><a class="docs-heading-anchor-permalink" href="#Inspect-and-correct-a-physical-error" title="Permalink"></a></h2><p>Apply a <code>Y</code> error to physical qubit 2, measure the generators, and inspect the proposed correction:</p><pre><code class="language-julia hljs">damaged = apply(encoded, Op(&quot;Y&quot;, 2))
+measured, bits, candidate = code.syndrome(damaged)
+@assert candidate isa Op
+(syndrome=bits, correction=(candidate.name, candidate.qubit),
+  qubits_after_extraction=get_N(measured))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(syndrome = [1, 1, 0, 1], correction = (&quot;Y&quot;, 2), qubits_after_extraction = 9)</code></pre><p>The bits follow the <strong>input generator order</strong>: 0 denotes eigenvalue +1 and 1 denotes eigenvalue −1. <code>code.syndrome</code> appends four ancillas and resets them after reading the syndrome, so the returned state contains nine qubits.</p><p>The compact text diagram below shows just the injected error and the selected Pauli correction. Syndrome extraction between them is implicit; encoding and decoding are omitted from this small diagram.</p><pre><code class="language-julia hljs">plotq(QuantumOps[Op(&quot;Y&quot;, 2), candidate]; nqubits=5)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">q1: ──────────
+
+q2: ─[Y]──[Y]─
+
+q3: ──────────
+
+q4: ──────────
+
+q5: ──────────</code></pre><pre><code class="language-julia hljs">corrected = code.correct(measured, bits)
+recovered = code.decode(corrected)
+fidelity_after_recovery = abs2(dot(logical, recovered))
+@assert isapprox(fidelity_after_recovery, 1; atol=1e-12)
+fidelity_after_recovery</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.9999999999999991</code></pre><p>The fidelity comparison ignores an irrelevant global phase. <code>decode</code> accepts the five data qubits alone or the data plus reset syndrome ancillas. For a pure state, it checks that discarded wires are in zero rather than silently throwing away unresolved information.</p><p>For a complete recovery cycle without inspecting the record:</p><pre><code class="language-julia hljs">recovered_directly = code.decode(code.correct(damaged))
+@assert isapprox(abs2(dot(logical, recovered_directly)), 1; atol=1e-12)</code></pre><p>A zero syndrome means no <em>detected</em> error. Some multi-qubit errors have a zero syndrome or share a syndrome with a single-qubit error and can change the logical state. A syndrome outside the decoder&#39;s search raises an error.</p><h2 id="Apply-a-logical-gate"><a class="docs-heading-anchor" href="#Apply-a-logical-gate">Apply a logical gate</a><a id="Apply-a-logical-gate-1"></a><a class="docs-heading-anchor-permalink" href="#Apply-a-logical-gate" title="Permalink"></a></h2><p>Here the qubit index refers to the logical register:</p><pre><code class="language-julia hljs">logical_X = code.apply(encoded, &quot;X&quot;, 1)
+decoded_X = code.decode(logical_X)
+@assert decoded_X ≈ gate.X * logical</code></pre><p>Use <code>apply(encoded, Op(&quot;X&quot;, physical_qubit))</code> when you intend a physical operation instead. A physical error and a logical gate act on different objects even when both are called <code>X</code>.</p><h2 id="Correct-an-ensemble-of-errors"><a class="docs-heading-anchor" href="#Correct-an-ensemble-of-errors">Correct an ensemble of errors</a><a id="Correct-an-ensemble-of-errors-1"></a><a class="docs-heading-anchor-permalink" href="#Correct-an-ensemble-of-errors" title="Permalink"></a></h2><p>A density matrix can describe a mixed logical input and a classical mixture of physical errors. The following mixture contains no error, <code>X₁</code>, or <code>Y₄</code>, each of which is correctable by this code:</p><pre><code class="language-julia hljs">using BlueTangle, LinearAlgebra
+code = StabilizerCode([
+    &quot;X,Z,Z,X,I&quot;, &quot;I,X,Z,Z,X&quot;, &quot;X,I,X,Z,Z&quot;, &quot;Z,X,I,X,Z&quot;
+]; d=3)
+logical_rho = ComplexF64[0.6 0.2+0.1im; 0.2-0.1im 0.4]
+encoded_rho = code.encode(logical_rho)
+noisy_rho = 0.55encoded_rho +
+            0.25apply(encoded_rho, Op(&quot;X&quot;, 1)) +
+            0.20apply(encoded_rho, Op(&quot;Y&quot;, 4))
+recovered_rho = code.decode(code.correct(noisy_rho))
+@assert recovered_rho ≈ logical_rho
+(trace=real(tr(recovered_rho)), error=norm(recovered_rho-logical_rho))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(trace = 0.9999999999999986, error = 1.1356067500511315e-15)</code></pre><p><code>code.correct(rho)</code> sums the projected syndrome sectors and their corrections <strong>deterministically</strong>. Calling <code>code.syndrome(rho)</code> instead selects one Born outcome and returns its conditional state and record:</p><pre><code class="language-julia hljs">conditional_rho, bits, candidate = code.syndrome(noisy_rho)
+recovered_branch = code.decode(code.correct(conditional_rho, bits))
+@assert recovered_branch ≈ logical_rho
+@assert isapprox(real(tr(conditional_rho)), 1; atol=1e-12)</code></pre><p>Density-matrix decoding traces out the other wires. This differs from pure-state decoding, where discarding an entangled wire cannot produce another pure vector.</p><h2 id="Use-an-MPS-without-converting-to-a-dense-vector"><a class="docs-heading-anchor" href="#Use-an-MPS-without-converting-to-a-dense-vector">Use an MPS without converting to a dense vector</a><a id="Use-an-MPS-without-converting-to-a-dense-vector-1"></a><a class="docs-heading-anchor-permalink" href="#Use-an-MPS-without-converting-to-a-dense-vector" title="Permalink"></a></h2><p>Encoding, syndrome extraction, correction, and decoding also accept MPS inputs:</p><pre><code class="language-julia hljs">using BlueTangle
+code = StabilizerCode([
+    &quot;X,Z,Z,X,I&quot;, &quot;I,X,Z,Z,X&quot;, &quot;X,I,X,Z,Z&quot;, &quot;Z,X,I,X,Z&quot;
+]; d=3)
+logical_mps = plus_state(N_MPS(1))
+encoded_mps = code.encode(logical_mps)
+damaged_mps = apply(encoded_mps, Op(&quot;Y&quot;, 2))
+recovered_mps = code.decode(code.correct(damaged_mps))
+@assert recovered_mps isa it.MPS
+@assert isapprox(abs2(inner(logical_mps, recovered_mps)), 1; atol=1e-10)
+get_N(recovered_mps)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1</code></pre><p>The MPS path samples a syndrome like a statevector trajectory. It can still become expensive when the encoding and recovery circuits generate large bond dimensions; a small example succeeding is not a scaling guarantee.</p><h2 id="Reference"><a class="docs-heading-anchor" href="#Reference">Reference</a><a id="Reference-1"></a><a class="docs-heading-anchor-permalink" href="#Reference" title="Permalink"></a></h2><article><details class="docstring" open="true"><summary id="BlueTangle.StabilizerCode"><a class="docstring-binding" href="#BlueTangle.StabilizerCode"><code>BlueTangle.StabilizerCode</code></a> — <span class="docstring-category">Type</span></summary><section><div><pre><code class="language-julia hljs">StabilizerCode(stabilizers::Vector,logicals::Dict)
+
+Construct a code from independent commuting +1 Pauli generators. Rows may
+contain I, X, Y, and Z. Automatically derived logical gates respect the
+encoder&#39;s phases; explicitly supplied mappings are retained.
+
+`code.syndrome(state)` returns the measured state with reset ancillas, the
+syndrome bits in the input-generator order, and a candidate single-qubit
+correction. `code.correct` uses this bounded decoder. Pure-state `code.decode` requires
+the discarded qubits to be in |0⟩ after inverse encoding; it does not silently
+project an uncorrected state into a pure logical vector.
+
+Density matrices encode and decode by linear evolution and partial trace.
+`code.syndrome(rho)` samples a selective record, while `code.correct(rho)`
+sums the recovered syndrome sectors deterministically. MPS preparation,
+logical gates, syndrome extraction and correction stay in tensor form.
+
+logicals=Dict()
+
+logicals[&quot;I&quot;,1]=[(&quot;I&quot;,1)]
+logicals[&quot;I&quot;,2]=[(&quot;I&quot;,1)]
+
+logicals[&quot;X&quot;,1]=[(&quot;X&quot;,1),(&quot;X&quot;,2)]
+logicals[&quot;X&quot;,2]=[(&quot;X&quot;,1),(&quot;X&quot;,4)]
+logicals[&quot;Z&quot;,1]=[(&quot;Z&quot;,1),(&quot;Z&quot;,4)]
+logicals[&quot;Z&quot;,2]=[(&quot;Z&quot;,1),(&quot;Z&quot;,2)]
+logicals[&quot;CNOT&quot;,1,2]=[(&quot;SWAP&quot;,3,4)]
+logicals[&quot;CNOT&quot;,2,1]=[(&quot;SWAP&quot;,3,4),(&quot;SWAP&quot;,2,4),(&quot;SWAP&quot;,1,2)]
+
+stabilizers=[
+    (&quot;X,X,X,X&quot;),
+    (&quot;Z,Z,Z,Z&quot;)
+]
+
+stabilizers=[
+    (&quot;X,X,X,X,I,I,I&quot;),
+    (&quot;X,X,I,I,X,X,I&quot;),
+    (&quot;X,I,X,I,X,I,X&quot;),
+    (&quot;Z,Z,Z,Z,I,I,I&quot;),
+    (&quot;Z,Z,I,I,Z,Z,I&quot;),
+    (&quot;Z,I,Z,I,Z,I,Z&quot;)
+]
+
+code=StabilizerCode(stabilizers,logicals)
+
+fields(code)
+
+
+EXAMPLES:
+
+#this encodes and decodes
+
+a=random_state(code.k)
+b=code.decode(code.encode(a))
+#a and b are same up to a global phase
+expect(a,&quot;Z&quot;)[1] ≈ expect(b,&quot;Z&quot;)[1]
+
+#error correction
+
+init_state=zero_state(code.k)
+code_zero=code.encode(init_state)
+code_zero_err=apply(code_zero,Op(&quot;Y&quot;,1)) #error on first qubit
+code_zero_ancilla,syndrome,op=code.syndrome(code_zero_err)
+code_final=code.correct(code_zero_ancilla,syndrome)
+code_decoded=code.decode(code_final)
+
+expect(init_state,&quot;Z&quot;)[1] ≈ expect(code_decoded,&quot;Z&quot;)[1]</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/aydindeger/BlueTangle.jl/blob/fa201269dad55c0dfa02aef700a36fefd5315e6a/src/qec.jl#L427-L495">source</a></section></details></article><article><details class="docstring" open="true"><summary id="BlueTangle.qec_state_prep"><a class="docstring-binding" href="#BlueTangle.qec_state_prep"><code>BlueTangle.qec_state_prep</code></a> — <span class="docstring-category">Function</span></summary><section><div><p>qec<em>state</em>prep(n::Union{Int,Vector},logical<em>indices::Vector,state</em>init<em>sym::Symbol=:zero;random</em>op_count::Int=20)</p><p>If you want <code>QECState</code> to also build the encoded state, pass <code>encoding_circuit=...</code> to the constructor so it can relabel away SWAPs and return the final qubit mapping. state<em>init</em>sym supports :zero, :one, :plus, :minus, :zero<em>plus, :random, :gaussian (or :matchgate) :gaussian starts from a random half-filled computational basis state on the logical qubits. random</em>u3_count randomly picks count logical qubits and prepares them as random U3|0⟩ product states.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/aydindeger/BlueTangle.jl/blob/fa201269dad55c0dfa02aef700a36fefd5315e6a/src/qec.jl#L854-L862">source</a></section></details></article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../examples/">« Examples</a><a class="docs-footer-nextpage" href="../qasm/">OpenQASM »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Saturday 14 November 2026 03:09">Saturday 14 November 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
