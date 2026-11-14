@@ -47,7 +47,7 @@ and saving results.
   Later examples cover Hamiltonian evolution, entanglement,
   [partial trace](@ref partial-trace), Pauli twirling, and noise amplification.
 - [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
-  classification, gradient crosschecks, noisy training, MPS truncation, and the
+  classification, gradient checks, noisy training, MPS truncation, and the
   complete QML API.
 - [Quantum Error Correction](qec.md): stabilizer codes, logical gates, code
   distances, noisy syndrome extraction, and magic-state distillation. Worked
@@ -66,7 +66,7 @@ Pkg.add(url="https://github.com/aydindeger/BlueTangle.jl")
 using BlueTangle
 ```
 
-The current PRIMA_jll 0.7.1 dependency can fail to load on Linux with glibc 2.41+
+PRIMA_jll version 0.7.1 can fail to load on Linux with glibc 2.41+
 with `cannot enable executable stack`. See the
 [upstream issue](https://github.com/libprima/PRIMA.jl/issues/46). Linux CI uses
 Ubuntu 24.04 pending an upstream binary rebuild.
@@ -77,8 +77,9 @@ For a local checkout, start Julia in its root with `julia --project=.` and run
 
 `plotq(ops)` prints a boxed text circuit without extra dependencies. For
 graphical output, install and load `PyPlot`, then call
-`plotq(ops; backend=:pyplot)` and `savefigure`. `plotqt` is also available for text. Loading `PhasePoly`
-enables `phasepoly` for its supported structured noiseless circuits; see the
+`plotq(ops; backend=:pyplot)` and `savefigure`. `plotqt` is also available for
+text output. Loading `PhasePoly` enables `phasepoly` for its supported
+structured noiseless circuits; see the
 [optional backend example](examples.md#Optional-PhasePoly-backend).
 
 Install optional packages in the environment where you use them:
@@ -96,9 +97,11 @@ measurement branches, whereas vectors and MPS states represent individual
 trajectories. MPS truncation, finite-shot sampling, and Trotter discretization
 introduce different approximations; choose and check their settings separately.
 
-The QEC decoder searches single-Pauli errors. The QASM importer supports an
-explicit OpenQASM 2 subset. PhasePoly supports a restricted gate family, and its
-cost can grow exponentially with interior Hadamards or level-4 phase terms.
+The default QEC decoder searches for a single physical Pauli error; the Steane
+decoder treats each block independently. The QASM importer supports the
+[documented OpenQASM 2 subset](qasm.md#Supported-subset). PhasePoly supports a
+restricted gate family, and its cost can grow exponentially with interior
+Hadamards or level-4 phase terms.
 The relevant examples state these limits where they affect the calculation.
 
 ## Citation

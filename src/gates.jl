@@ -2,22 +2,15 @@
 # state1=[0;1]
 
 """
-`gate`
+    gate
 
-A constant that holds common quantum gates and projectors.
+Named tuple of common gate and projector matrices, accessed as `gate.H`,
+`gate.CX`, and so on. One-qubit matrices are 2×2 and two-qubit matrices are 4×4.
 
-This includes:
-- Identity (`I`)
-- Pauli gates (`X`, `Y`, `Z`)
-- Hadamard (`H`)
-- Phase gates (`S`, `T`)
-- Special gates like `sqrt(X)` (equal to RX(pi/2)*exp(1im*pi/4))
-- Projectors (`P0` for |0><0|, `P1` for |1><1|)
-- Controlled gates such as `CX` (CNOT), `CNOT` (an alias for CX), and `CZ`
-- The `SWAP`, `ISWAP`, `FSWAP` gate
-- The `ECR`, `SYC` gate
-
-Each single-qubit gate is represented as a 2x2 matrix, while multi-qubit gates like `CNOT`, `ECR`, `SYC`, `CZ`, and `SWAP`, `ISWAP`, `FSWAP` are represented as 4x4 matrices.
+Entries include the identity and Pauli matrices, H, S, T and their adjoints,
+square roots of X, projectors `P0 = |0⟩⟨0|` and `P1 = |1⟩⟨1|`, controlled
+gates, SWAP/ISWAP/FSWAP, ECR, and SYC. `CNOT` aliases `CX`, and
+`SX = exp(im*pi/4)*RX(pi/2)`.
 """
 const gate = (
     I = [1. 0; 0 1],
@@ -275,29 +268,23 @@ end
 
 
 """
-`random_clifford(N::Int, len::Int; measure_prob::Float64=0.0, measure_basis::Vector{String}=["MX","MY","MZ"]) -> Vector{QuantumOps}`
+    random_clifford(N::Int, len::Int; measure_prob=0.0, measure_basis=["MX", "MY", "MZ"])
 
-Generate a random sequence of Clifford gates, with optional mid-circuit measurements.
+Choose `len` gates independently from X, Y, Z, H, S, CNOT, SWAP, and CZ.
+Two-qubit gates act on a randomly chosen adjacent pair; single-qubit gates act
+on a random qubit. For `N=1`, only the one-qubit gates are used. This constructs
+a random gate sequence, without sampling uniformly from the Clifford group.
 
-# Arguments
-- `N::Int`: The number of qubits in the system.
-- `len::Int`: The length of the sequence of operations to generate.
-
-# Keyword Arguments
-- `measure_prob::Float64`: The probability of adding a measurement operation after each gate.
-- `measure_basis::Vector{String}`: The basis in which measurements are performed.
-
-# Returns
-- `Vector{QuantumOps}`: A vector of randomly chosen quantum operations (`QuantumOps`), each representing a Clifford gate or a measurement operation.
-
-# Description
-This function creates a vector of quantum operations, where each operation is either a randomly chosen Clifford gate from the set {"X", "Y", "Z", "H", "S", "CNOT", "SWAP", "CZ"} or a measurement operation, based on `measure_prob`. For two-qubit gates ("CNOT", "SWAP", "CZ"), adjacent qubits (qubit `r` and qubit `r+1`) are selected. For single-qubit gates and measurements, a random qubit `r` is chosen.
+After each gate, add a measurement with probability `measure_prob`, choosing
+a random qubit and a basis uniformly from `measure_basis`. Measurements are
+additional operations, so the returned vector can contain more than `len` entries.
 
 # Example
 ```julia
 ops = random_clifford(5, 10; measure_prob=0.2, measure_basis=["MX","MZ"])
 ```
-This example generates a sequence of 10 random Clifford gates and measurements (with a 20% chance of a measurement after each gate) for a 5-qubit system.
+This creates ten Clifford gates on five qubits, with a 20% probability of adding
+an X- or Z-basis measurement after each gate.
 """
 function random_clifford(N::Int,len::Int;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
     N > 0 || throw(ArgumentError("N must be positive."))

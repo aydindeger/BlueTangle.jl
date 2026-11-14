@@ -140,13 +140,10 @@ end
 ##========== state preparation ==========
 
 """
-`product_state(list_of_qubits::Vector) -> sa.SparseVector`
+    product_state(bits::Vector)
 
-Creates a quantum state vector from a list of qubits.
-
-- `list_of_qubits`: A vector representing the state of each qubit.
-
-Returns a sparse vector representing the quantum state of the system.
+Return a sparse computational-basis statevector from a list of 0/1 bits.
+The first entry specifies qubit 1, the most significant tensor factor.
 """
 product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(Int.(sign.(list_of_qubits)))))
 # product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
@@ -175,9 +172,9 @@ neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
 random_product_state(N::Int)=product_state(rand([0,1],N))
 
 """
-zero_state(N::Int) -> sa.SparseVector
+    zero_state(N::Int)
 
-Returns a sparse vector representing the |000...> quantum state.
+Return the normalized sparse statevector |0…0⟩ for `N` qubits.
 """
 zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
 one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])

@@ -1,6 +1,6 @@
 # Functions
 
-Reference documentation for the main public APIs.
+Reference documentation for public functions and types.
 
 ## Measurement functions
 

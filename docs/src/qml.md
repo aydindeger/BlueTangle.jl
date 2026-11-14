@@ -2,19 +2,19 @@
 
 A variational calculation has three pieces: an operation list, a vector of
 trainable parameters, and a scalar loss. `variational_apply` evaluates the
-circuit; `train` minimizes the loss and always returns the same three fields:
+circuit; `train` minimizes the loss and returns three fields:
 `loss`, `parameters`, and `history`.
 
 This page collects circuit construction, VQE, supervised regression and
 classification, gradient checks, noisy training, MPS approximations, and the
-QML API. The examples use ordinary functions and arrays, without a separate
-machine-learning framework or dataset loader. Statevector and density-matrix
-examples use exact expectations; the MPS section makes its truncation explicit.
+QML API. The examples use Julia functions and arrays to define the circuits,
+data, and losses. Statevector and density-matrix examples use exact
+expectations; the MPS example shows how truncation affects the result.
 
 ## Start with a trainable gate
 
-A matrix-valued function makes a gate trainable. A numeric gate string instead
-fixes its angle:
+A matrix-valued function defines a trainable gate. A gate string containing a
+numeric angle defines a fixed gate:
 
 ```@example qml_gate
 using BlueTangle
@@ -54,13 +54,14 @@ exact_energy = eigmin(Hermitian(Matrix(H)))
 (initial_energy=energy(initial), trained_energy=result.loss, exact_energy=exact_energy)
 ```
 
-This small ansatz reaches the exact reference here. That is not guaranteed for
-a different Hamiltonian, ansatz, or initial vector. A normalized variational
-state must have energy at or above the exact ground-state energy; that exact
-diagonalization is feasible only at small system sizes.
+For this Hamiltonian and initial parameter vector, the optimized energy agrees
+with exact diagonalization to the stated tolerance. The variational principle
+requires the energy of a normalized state to be at or above the ground-state
+energy. Reaching that lower bound depends on the ansatz and optimization;
+exact diagonalization provides a reference at small system sizes.
 
 `train` defaults to L-BFGS. For example, use `optimizer=:adam`, `iterations=200`,
-and `learning_rate=0.05` to request Adam. The returned field names stay the same.
+and `learning_rate=0.05` to request Adam.
 `result.history` stores logged loss values; `result.loss` is the loss evaluated
 at the returned parameters. Set `history=false` when the trace is unnecessary.
 
@@ -110,8 +111,8 @@ nothing # hide
 ![Custom local parameterized gates in an ansatz](assets/figs/vqe_c2.png)
 
 Custom gate functions must support the numerical types used by automatic
-differentiation. The gradient checks below give a small independent test of
-that numerical path.
+differentiation. The gradient example below compares automatic differentiation
+with finite differences and an analytic derivative.
 
 ### Generate repeated layers
 
@@ -135,9 +136,9 @@ using a full adjacent chain for each entangling layer.
 
 ## Fit a function from labeled examples
 
-For a minimal regression task, encode the scalar feature `x` as `RY(x)|0⟩`, then
-apply a trainable `RY(theta)` and predict its Z expectation. The two rotations
-add, so this model has the exact form
+For a one-parameter regression task, encode the scalar feature `x` as
+`RY(x)|0⟩`, then apply a trainable `RY(theta)` and predict its Z expectation.
+The two rotations add, so this model has the exact form
 
 ```math
 \widehat y(x;\theta)=\cos(x+\theta).
@@ -172,20 +173,19 @@ test_mse = sum(abs2, predictions-ytest) / length(ytest)
  heldout_mse=test_mse, fitted_phase=only(fit.parameters))
 ```
 
-The held-out error checks predictions at unseen inputs, while the analytic
-cosine checks the circuit calculation independently. Phases differing by `2pi`
-produce the same predictions. This is an exactly
-representable, noiseless teaching problem, not evidence of quantum advantage or
-accuracy on a realistic dataset. A classical one-parameter cosine fit solves the
-same problem. More parameters alone do not establish better generalization.
+The held-out error measures prediction accuracy at unseen inputs; the analytic
+cosine independently checks the circuit calculation. Phases differing by `2pi`
+produce the same predictions. This noiseless dataset is chosen to match the
+model exactly, and a classical one-parameter cosine fit solves the same problem.
+Performance on more general data requires separate evaluation.
 
 ![Training loss and predictions at held-out feature values](assets/figs/qml_training.png)
 
 The left panel shows recorded training losses. The right panel compares the
-learned curve, training labels, and held-out predictions. The figure can be
-regenerated with `docs/generate_figures.jl` in an environment containing PyPlot;
-training itself has no plotting dependency. Losses below machine epsilon share
-the plot's display floor.
+learned curve, training labels, and held-out predictions. Regenerate the figure
+with `docs/generate_figures.jl` in an environment containing PyPlot. Training
+requires no plotting package. Losses below machine epsilon are displayed at
+the same lower limit on the plot.
 
 ## Classify two features with a two-qubit circuit
 
@@ -241,7 +241,7 @@ minimum_confidence = minimum(max.(test_probabilities, 1 .- test_probabilities))
  heldout_cross_entropy=test_cross_entropy, minimum_confidence=minimum_confidence)
 ```
 
-An independent attainable solution checks the encoding and readout conventions.
+An analytic solution checks the encoding and readout conventions.
 At angles `[pi/2, pi/2, 0]`, the pre-CNOT Z expectations are
 `-sin(pi*x1/2)` and `-sin(pi*x2/2)`. Conjugating the measured `Z₂` through CNOT
 turns it into `Z₁Z₂`, giving
@@ -262,12 +262,11 @@ the trained probabilities.
 
 ![Learned class-1 probabilities and the analytic XOR boundary](assets/figs/qml_classifier.png)
 
-For the displayed run, both accuracies are 100%, but held-out cross-entropy is
-about 0.3735 and the least confident correct prediction has probability only
-0.5031. Perfect threshold accuracy is not high confidence: finite-shot readout
-near the axes can flip the predicted label. This is a small supervised-learning
-example, not a quantum-advantage result; the classical rule `x1*x2 < 0` solves
-the same classification task exactly.
+For the displayed run, both accuracies are 100%. The held-out cross-entropy is
+about 0.3735, and the probability assigned to the correct class is as low as
+0.5031. Predictions this close to the 0.5 threshold are sensitive to finite-shot
+readout: sampling near the axes can change the predicted label. The classical
+rule `x1*x2 < 0` solves the same classification task exactly.
 
 ## Choose and check a gradient
 
@@ -279,9 +278,9 @@ the same classification task exactly.
 
 Finite differences need roughly two shifted evaluations per parameter, and
 their step size must resolve the loss without amplifying numerical error.
-Neither finite differences nor automatic differentiation turn sampled noise into
-a deterministic gradient. Use density evolution for an exact noisy ensemble,
-or define and validate an explicit stochastic gradient estimator.
+When the loss is sampled from noisy trajectories, its gradient also requires
+a statistical treatment. Use density-matrix evolution for a deterministic
+ensemble loss, or define and validate a stochastic gradient estimator.
 
 This small check uses a **nonlinear** loss, `loss(theta)=⟨Z⟩²=cos(theta)²`.
 Its derivative is `-sin(2theta)`. Compare automatic differentiation with centered
@@ -303,10 +302,11 @@ analytic = [-sin(2only(parameters))]
 
 For an expectation `z(theta)`, a gate's parameter-shift rule differentiates
 `z`; a nonlinear loss such as `z²` still needs the chain rule `2z*dz/dtheta`.
-Shifting the entire nonlinear loss with the expectation-value rule is generally
-wrong. If supplying a parameter-shift gradient through `train`'s `gradient`
-callback, differentiate the complete loss and check that the gate's shift rule
-applies. Parameter-dependent MPS truncation can invalidate that rule.
+Applying the expectation-value shift rule directly to the nonlinear loss
+generally gives an incorrect derivative. If supplying a parameter-shift
+gradient through `train`'s `gradient` callback, differentiate the complete loss
+and check that the gate's shift rule applies. Parameter-dependent MPS truncation
+can invalidate that rule.
 
 ## Train with deterministic noise
 
@@ -327,16 +327,16 @@ noisy_fit = train(noisy_energy, [0.3]; iterations=30)
 noisy_fit.loss
 ```
 
-A statevector with stochastic noise or selective measurements samples a
-trajectory, so it does not define the same deterministic differentiable loss.
-Finite-shot training needs an explicit estimator and sampling-error treatment.
+A statevector simulation with stochastic noise or selective measurements
+samples one trajectory per evaluation. Training on these samples requires a
+gradient estimator and an assessment of sampling error.
 
 ## Train an MPS and check truncation bias
 
 MPS decompositions are not supported by ForwardDiff. Use finite differences for
-a deterministic MPS loss and check the approximation itself. This deliberately
-severe example caps the bond dimension at 1, discarding entanglement created by
-a fixed rotation and CNOT before training a final rotation.
+a deterministic MPS loss and check convergence with the truncation settings.
+This example caps the bond dimension at 1, discarding the entanglement created
+by a fixed rotation and CNOT before training a final rotation.
 
 ```@example qml_mps
 using BlueTangle
@@ -356,9 +356,9 @@ dense_reference = expect(variational_apply(fit.parameters, ops), "Z")[1]
 ```
 
 The truncated loss reaches `-1`, while the original circuit evaluated at the
-same trained parameters gives about `-0.6967`. The optimizer solved the supplied
-approximate problem; it did not validate the untruncated circuit. Here `maxdim=2`
-retains the full two-qubit Schmidt rank and matches the dense reference. In a
+same trained parameters gives about `-0.6967`. Truncation has changed the loss
+being optimized. Here `maxdim=2` retains the full two-qubit Schmidt rank and
+matches the dense reference. In a
 larger calculation, increase the bond cap, tighten the cutoff, and check the
 finite-difference estimate until the observables of interest converge.
 

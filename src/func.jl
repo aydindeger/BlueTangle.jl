@@ -2,14 +2,11 @@
 ##========== expectation and correlations from measurement ==========
 
 """
-`correlation(m::Measurement, qubits::Vector) -> Any`
+    correlation(m::Measurement, qubits::Vector)
 
-Calculate correlation from a measurement on specified qubits.
-
-- `m`: A `Measurement` object.
-- `qubits`: Vector of qubits for measuring correlations, e.g. eg: qubits=[1,3] measure <Z1Z3>
-
-Returns the calculated correlation.
+Return the expectation of the product of measured eigenvalues on `qubits`.
+Each recorded bit contributes `(-1)^bit`; for Z-basis data, `[1, 3]` therefore
+gives ⟨Z₁Z₃⟩. The calculation uses the probabilities or signed weights in `m`.
 """
 correlation(m::Measurement,qubits::Vector)=_sample_to_expectation((fock_basis.(m.bitstr,m.number_of_qubits),m.sample),qubits)
 
@@ -25,7 +22,7 @@ end
 """
     expect(m::Measurement, qubit::Int)
 
-Return the expectation value on one qubit from the sampled outcomes. Use
+Return the expectation value on one qubit from the outcome weights. Use
 `m.expect` for the vector of expectations on all qubits, in the measurement's
 recorded basis.
 """
@@ -68,26 +65,12 @@ expect(state::AbstractVectorS,matrix::AbstractMatrixS)=real(state'*matrix*state)
 expect(rho::AbstractMatrixS,matrix::AbstractMatrixS)=real(la.tr(rho*matrix))
 
 """
-Alias:
-```
-correlation(state::AbstractVectorS, list_of_operators::String, qubits_applied::Vector) -> Float64
-correlation(rho::AbstractMatrixS, list_of_operators::String, qubits_applied::Vector) -> Float64
-```
+    correlation(state, list_of_operators::String, qubits_applied::Vector)
 
-Calculate the correlation for a given set of operators applied to specific qubits in either a quantum state vector or a density matrix. This function has two primary forms:
-
-- `correlation(state::AbstractVectorS, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a quantum state vector (`state`) with a specified list of operators and qubits.
-
-- `correlation(rho::AbstractMatrixS, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a density matrix (`rho`) with a specified list of operators and qubits.
-
-# Arguments
-- `state::AbstractVectorS`: The quantum state vector.
-- `rho::AbstractMatrixS`: The density matrix.
-- `list_of_operators::String`: A string representing a list of operators, e.g., "Z,Z".
-- `qubits_applied::Vector`: A vector of qubit indices on which the operators are applied.
-
-# Returns
-- `Float64`: The computed correlation value.
+Return the expectation of a product of single-qubit observables in a statevector
+or density matrix. Pair each comma-separated operator with the corresponding
+entry of `qubits_applied`; for example, `"X,Z"` on `[1, 3]` gives ⟨X₁Z₃⟩.
+The result is real-valued.
 
 # Examples
 ```julia
@@ -151,15 +134,12 @@ end
 mag_moments(rho::AbstractMatrixS,op_str::String;max_moment=12)=[mag_moments(rho,op_str,ord) for ord=1:max_moment]
 
 """
-`mag_moments(rho::AbstractMatrixS, op_str::String, moment_order::Int) -> Float64`
+    mag_moments(rho::AbstractMatrixS, op_str::String, moment_order::Int)
 
-Calculates the magnetization moments from a given density matrix.
-
-- `rho`: The density matrix (sa.SparseMatrixCSC) of the quantum system.
-- `op_str`: String representation of the operator used for calculating the magnetization.
-- `moment_order`: The order of the magnetization moment to compute.
-
-Returns the computed magnetization moment of the specified order.
+Return `tr(rho * M^moment_order)`, where `M` is the sum of the single-qubit
+operator `op_str` over all qubits. This is the total magnetization, without
+division by the number of qubits. The moment order must be nonnegative;
+order zero returns `tr(rho)`.
 """
 function mag_moments(rho::AbstractMatrixS,op_str::String,moment_order::Int)
     moment_order >= 0 || throw(ArgumentError("moment order must be nonnegative"))
@@ -193,7 +173,12 @@ function mag_cumulants(rho::AbstractMatrixS,op_str::String;max_moment=12)
 end
 
 """
-calculates average magnetization moments from sample
+    mag_moments(m::Measurement, moment_order::Int)
+    mag_moments(m::Measurement; max_moment=12)
+
+Compute moments of the total measured magnetization `N - 2*number_of_ones`
+using the outcome weights in `m`. The keyword form returns orders 1 through
+`max_moment`, in the basis recorded by the measurement.
 """
 mag_moments(m::Measurement,moment_order::Int)=mag_moments(m.number_of_qubits,m.bitstr,m.sample,moment_order)
 mag_moments(m::Measurement;max_moment=12)=[mag_moments(m::Measurement,ord) for ord=1:max_moment]
@@ -267,13 +252,12 @@ end
 """
     entanglement_entropy(psi::AbstractVectorS; spectrum_bool=nothing)
 
-Calculates the entanglement entropy of a quantum state.
+Compute the entropy across the cut separating the last `floor(N/2)` qubits
+from the rest of a normalized pure state, using natural logarithms.
 
-- `psi`: The quantum state vector (sa.SparseVector) for which to calculate the entropy.
-
-Returns `(entropy, spectrum)` by default. Set
-`spectrum_bool=false` to return only the entropy, or `true` for the tuple.
-The spectrum contains `-log(p)` for nonzero Schmidt probabilities `p`.
+Return `(entropy, spectrum)` by default. Set `spectrum_bool=false` to return
+only the entropy, or `true` for the tuple. The spectrum contains `-log(p)`
+for the nonzero Schmidt probabilities `p`.
 """
 function entanglement_entropy(psi::AbstractVectorS; spectrum_bool::Union{Nothing,Bool}=nothing)
     N = get_N(psi)

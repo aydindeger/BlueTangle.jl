@@ -1,6 +1,6 @@
 # OpenQASM import and export
 
-`from_qasm` turns an OpenQASM 2 program into an ordinary vector of BlueTangle
+`from_qasm` converts an OpenQASM 2 program into a vector of BlueTangle
 operations. You can inspect or edit that vector, apply it to a state, and choose
 a simulation backend. `to_qasm` writes the supported operations back to text or a
 file.
@@ -25,8 +25,8 @@ state = apply(zero_state(get_N(ops)), ops)
 ```
 
 OpenQASM indices start at 0, whereas BlueTangle indices start at 1. The importer
-translates them. BlueTangle's statevector basis still places physical qubit 1 in
-the most significant bit.
+translates between these conventions. BlueTangle's statevector basis places
+physical qubit 1 in the most significant bit.
 
 ## Read a file and round-trip a circuit
 
@@ -47,10 +47,10 @@ always be interpreted as source.
 
 ## Registers and broadcasts
 
-Multiple quantum registers are flattened in declaration order. A declared idle
-tail is preserved, so a four-qubit register remains four qubits even if only
-`q[0]` is acted on. A trailing identity may be added to carry that size in the
-operation-vector API.
+Multiple quantum registers are combined in declaration order. Declared qubits
+with no gate operations are preserved: a four-qubit register remains four
+qubits even if gates act only on `q[0]`. A trailing identity may be added to
+represent that register size in the operation list.
 
 Whole-register operations expand in register-index order. Equal-sized registers
 can be paired, and a scalar operand can be broadcast against a register:
@@ -71,10 +71,9 @@ state = apply(zero_state(get_N(ops)), ops)
 (data_register=[1,2], anc_register=[3,4])
 ```
 
-Here `data[0:1]` becomes BlueTangle qubits 1–2 and `anc[0:1]` becomes qubits 3–4.
-The notation in that sentence describes the register range; it is not a supported
-OpenQASM slice expression. Use a full register name or one indexed element in
-source. Register sizes and indexed bounds are checked.
+Here the `data` register maps to BlueTangle qubits 1–2 and `anc` maps to qubits
+3–4. Operands can be full register names or individual indexed elements;
+register slices are unsupported. Register sizes and indices are checked.
 
 ## Measurement records and reset
 
@@ -102,11 +101,11 @@ records = run(source, 3)
 records
 ```
 
-The destination classical bits are validated, but the returned object is an
-operation list, not a classical-register simulator. Records do not reconstruct
-arbitrary classical-register assignments. Classical `if` statements are rejected;
-express feed-forward directly with BlueTangle's conditional `Op` or `ifOp` when
-constructing a circuit in Julia.
+The destination classical bits are validated during import. Their assignments
+are not retained in the operation list; `run` reports measurement outcomes in
+operation order. Classical `if` statements are unsupported.
+To construct feed-forward circuits in Julia, use BlueTangle's conditional `Op`
+or `ifOp`.
 
 Use `sample(ops, shots)` for raw final outcomes or `measure(ops, shots)` for their
 statistics. Both accept `backend=:statevector`, `:density_matrix`, or `:tensor`.
@@ -153,7 +152,7 @@ barriers, reset, and measurement, with these gates:
 
 Custom gate definitions, classical conditions, arbitrary include files, and
 OpenQASM 3 constructs require a separate conversion before import. Unsupported
-statements fail explicitly.
+statements raise parsing errors.
 
 Export preserves the represented gate matrices within floating-point tolerance.
 For X/Y measurements, it writes the basis rotation, Z measurement, and inverse

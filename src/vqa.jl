@@ -1,26 +1,15 @@
 """
-`hamiltonian(N::Int, string_of_ops::Vector, boundary::String="open")`
+    hamiltonian(N::Int, string_of_ops::Vector, boundary::String="open")
 
-Constructs a Hamiltonian matrix for a quantum system with `N` qubits. The Hamiltonian is 
-built based on the operators and their corresponding couplings specified in `string_of_ops`.
+Construct a sparse Hamiltonian for an `N`-qubit chain. `string_of_ops` alternates
+coupling constants and comma-separated operator strings. Each string is summed
+over consecutive sites; for example, `[.1, "Z,Z", .5, "X"]` gives
+`0.1*sum(Z_i*Z_{i+1}) + 0.5*sum(X_i)`.
 
-The `string_of_ops` should be an alternating array of coupling constants and operator 
-strings. For example, `[.1, "Z,Z", .5, "X"]` sums nearest-neighbor `ZZ` terms
-with coupling `0.1` and single-site `X` terms with coupling `0.5`.
-
-The `boundary` parameter specifies the boundary conditions of the system. It can be either 
-"open" or "periodic". In the case of "open" boundary conditions, interactions are only included 
-for sites within the system size. For "periodic" boundary conditions, the system is treated as 
-if it were wrapped around itself, allowing interactions that cross the end and start of the 
-chain.
-
-# Arguments
-- `N::Int`: The number of qubits in the system.
-- `string_of_ops::Vector`: An alternating vector of coupling constants and operator strings.
-- `boundary::String`: The boundary condition of the system, either "open" or "periodic" (default is "open").
-
-# Returns
-- `SparseMatrix`: The Hamiltonian matrix representing the specified quantum system.
+With `boundary="open"`, include only strings that fit within the chain.
+With `"periodic"`, start a term at every site and wrap its indices around the
+chain. This convention can count the same operator more than once on short
+periodic chains.
 
 # Example
 ```julia
@@ -29,10 +18,6 @@ J, h = 1.0, 0.7
 string_of_ops = [-J, "Z,Z", -h, "X"]
 H = hamiltonian(N, string_of_ops, "open")
 ```
-
-This function iterates over the operator strings, applies each operator to the appropriate qubits 
-based on the boundary conditions, and scales them by their corresponding coupling constants 
-to construct the Hamiltonian.
 """
 function hamiltonian(N::Int,string_of_ops::Vector,boundary::String="open")
 
@@ -73,15 +58,14 @@ end
 """
     hamiltonian(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, string_of_ops::Vector, boundary::String="open")
 
-Constructs a 2D Hamiltonian matrix for a quantum system with `rows * cols` qubits, potentially with double counting.
+Construct a sparse Hamiltonian on a rectangular lattice of `(rows, columns)`
+qubits, numbered row by row. The terms use the same alternating couplings and
+operator strings as the chain method. Multi-site strings run along both rows
+and columns; single-site terms are counted once.
 
-# Arguments
-- `rows_cols`: A tuple or vector specifying the dimensions of the 2D lattice (rows, columns).
-- `string_of_ops::Vector`: An alternating vector of coupling constants and operator strings.
-- `boundary::String`: The boundary condition of the system, either "open" or "periodic" (default is "open").
-
-# Returns
-- `SparseMatrixCSC`: The Hamiltonian matrix representing the specified 2D quantum system.
+Choose `"open"` or `"periodic"` boundaries. Periodic terms start at every site
+in each direction, so different starting sites can produce the same operator
+on short periodic dimensions.
 """
 function hamiltonian(rows_cols::Union{Tuple{Int64, Int64},Vector{Int64}}, string_of_ops::Vector, boundary::String="open")
     length(rows_cols) == 2 && all(>(0), rows_cols) || throw(ArgumentError("Lattice dimensions must be two positive integers."))

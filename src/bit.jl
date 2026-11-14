@@ -34,6 +34,9 @@ fock_basis(number::Integer,N::Int)=int2bin(number,N)
 
 """
     fock_basis_create(N::Int)
+
+Return all `N`-bit computational-basis configurations in integer order,
+from all zeros to all ones. Qubit 1 is the most significant bit.
 """
 fock_basis_create(N::Int)=int2bin.(0:2^N-1,N)
 

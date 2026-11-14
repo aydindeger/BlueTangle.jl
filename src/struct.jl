@@ -91,18 +91,16 @@ function __QuantumChannel_new_apply3(rho::AbstractMatrixS, kraus_ops::Vector, fi
 end
 
 """
-`QuantumChannel(q::Int, model::String, p::Float64)`
+    QuantumChannel(q::Int, model::String, p::Float64)
+    QuantumChannel(model::String, kraus_ops::Vector{<:AbstractMatrix}, p::Float64)
 
-Represents a quantum noise channel.
+Construct a channel acting on one or two qubits. A named model interprets `p`
+as its noise-strength parameter; rotation models use radians. The Kraus
+constructor infers the qubit count from the matrices and
+checks trace preservation; its `p` argument is stored as metadata.
 
-- `q`: Number of qubits affected by the noise channel.
-- `model`: The noise model type as a string.
-- `p`: Probability parameter for the noise model.
-- `kraus`: A vector of matrices representing Kraus operators for the channel.
-
-Constructs a QuantumChannel object for specified qubits, noise model, and probability.
-Kraus operators are copied on construction. The stored `kraus` list is shared by
-all application and probability methods; direct edits are not revalidated.
+Kraus operators are copied on construction. The stored `kraus` list is shared
+by the application and probability methods; direct edits are not revalidated.
 Construct a new channel to validate changed operators.
 """
 struct QuantumChannel
@@ -166,7 +164,13 @@ end
 const AbstractQuantumChannel = Union{QuantumChannel, Bool}
 
 """
-    Create a NoiseModel
+    NoiseModel(one_qubit_channel, two_qubit_channel)
+    NoiseModel(model::String, p::Float64)
+
+Assign channels to noisy one- and two-qubit gates. Use `false` in either
+channel slot to disable that part of the model. The named constructor uses
+`Noise1(model, p)` and `Noise2(model, p)` with the same parameter.
+Pass the result as `apply(state, ops; noise=model)` or through `Options`.
 """
 struct NoiseModel
     q1::AbstractQuantumChannel
@@ -317,11 +321,7 @@ function custom_noise(q::Int, name_of_model::String, kraus::Vector{<:AbstractMat
 end
 
 """
-`is_valid_quantum_channel(kraus::Vector{Matrix}) -> Bool`
-
-Determines the validity of a set of Kraus operators.
-
-- `kraus`: A vector of matrices, each representing a Kraus operator.
+    is_valid_quantum_channel(kraus::Vector) -> Bool
 
 Checks for a nonempty list of finite square matrices of the same size and the
 trace-preserving condition `sum(K' * K for K in kraus) ≈ I`. Complete positivity
@@ -349,26 +349,20 @@ function kraus_to_choi(kraus_operators::Vector)
 end
 
 """
-`Noise1(model::String, p::Float64)`
+    Noise1(model::String, p::Float64)
 
-Constructors for QuantumChannel objects for 1 qubit.
-
-- `model`: The noise model type as a string.
-- `p`: Probability parameter for the noise model.
-
-Returns a QuantumChannel object.
+Construct a one-qubit `QuantumChannel`. The meaning of `p` depends on the model:
+for `"depolarizing"` it is the total probability of a nonidentity Pauli error;
+for `"rot_x"`, `"rot_y"`, `"rot_z"`, and `"rot_p"` it is an angle in radians.
 """
 Noise1(model::String,p::Float64)=QuantumChannel(1,model,p)
 
 """
-`Noise2(model::String, p::Float64)`
+    Noise2(model::String, p::Float64)
 
-Constructors for QuantumChannel objects for 2 qubits.
-
-- `model`: The noise model type as a string.
-- `p`: Probability parameter for the noise model.
-
-Returns a QuantumChannel object.
+Construct a two-qubit `QuantumChannel` by taking tensor products of the
+one-qubit model's Kraus operators. The same channel acts independently on
+each operand, so `p` retains its per-qubit meaning from `Noise1`.
 """
 Noise2(model::String,p::Float64)=QuantumChannel(2,model,p)
 
@@ -837,11 +831,10 @@ Configure circuit execution and final measurement. `noise` accepts a `NoiseModel
 `measurement_mitigate` inverts that channel's classical readout response, retaining
 signed estimates at finite shot counts. It requires an invertible response whose
 output populations do not depend on input coherences; other channels are rejected.
-These weights sum to one but need not be
-probabilities; observable estimates can exceed their physical range due to
-sampling error. `density_matrix` requests storage of the final
-density matrix in measurement results; select the simulation backend separately
-with `measure(ops, shots; options, backend=:density_matrix)`.
+These weights sum to one but may be negative; observable estimates can exceed
+their physical range due to sampling error. `density_matrix` requests storage
+of the final density matrix in measurement results; select the simulation
+backend separately with `measure(ops, shots; options, backend=:density_matrix)`.
 
 `twirl=true` enables Pauli twirling of supported two-qubit gates. Routing swap
 noise is configured separately through `Layout(...; noisy_swap=true)`.
@@ -875,21 +868,21 @@ end
 hilbert(ops::Vector{<:QuantumOps}) = sa.sparse(ops)
 
 """
-`Measurement(bitstr::Union{Vector, UnitRange}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::sa.SparseMatrixCSC)`
+    Measurement
 
-Represents the result of quantum measurements.
+Measurement statistics returned by `measure` or constructed from existing
+integer draws with `Measurement(draws, N)`.
 
-- `bitstr`: Basis of measurement represented as integers or a range.
-- `sample`: Outcome probabilities, or signed weights after readout-response inversion.
-- `expect`: Expectation values of the measurement.
-- `mag_moments`: Magnetic moments obtained from the measurement.
-- `measurement_basis`: Measurement basis used.
-- `number_of_experiment`: Number of experiments performed.
-- `circuit_name`: Name of the circuit used.
-- `number_of_qubits`: Number of qubits involved.
-- `density_matrix`: Density matrix obtained from the measurement.
-
-Constructs a Measurement object to store the results of quantum measurements.
+- `bitstr`: Integer labels of computational-basis outcomes.
+- `sample`: Probabilities, sampled frequencies, or signed weights after readout mitigation.
+- `expect`: One eigenvalue expectation per qubit.
+- `mag_moments`: Moments of the total measured magnetization, for orders 1 through 12.
+- `measurement_basis`: Readout basis; `"0"` denotes direct state or sample summaries.
+- `number_of_experiment`: Shot count, or `-1` for exact probabilities.
+- `circuit_name`: Label supplied by the caller.
+- `number_of_qubits`: Register size.
+- `density_matrix`: Stored density matrix when available; otherwise a sparse zero placeholder,
+  with size 0×0 for registers above 16 qubits.
 """
 struct Measurement
     bitstr::Union{Vector, UnitRange}

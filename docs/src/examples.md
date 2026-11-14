@@ -1,10 +1,10 @@
 # Examples
 
-Circuit and measurement diagrams use `plotq(...)` as dependency-free text by
-default. To reproduce the graphical figures, install and load `PyPlot`, select
-`backend=:pyplot`, or run `docs/generate_figures.jl` from the repository root.
-The latter also produces the scientific plots. Random samples and circuit
-realizations vary between runs.
+`plotq(...)` displays circuit and measurement diagrams as text by default.
+For graphical figures, install and load `PyPlot`, then select
+`backend=:pyplot`. The script `docs/generate_figures.jl` reproduces the figures
+and scientific plots on this page when run from the repository root. Random
+samples and circuit realizations vary between runs.
 
 ## 1) GHZ Circuit
 
@@ -22,8 +22,9 @@ get_stats(ops)
 
 ## 2) Measurement and Correlations
 
-A finite-shot measurement estimates computational-basis probabilities. An exact
-state or density matrix can evaluate other observables directly. These examples
+A finite-shot measurement estimates computational-basis probabilities.
+Observables can also be evaluated directly from a simulated statevector or
+density matrix. These examples
 continue from the GHZ circuit above.
 
 ```@example ghz
@@ -37,14 +38,14 @@ exact_measurement = measure(rho) # exact basis probabilities, no shots
 ```
 
 `measurement.bitstr` contains integer basis labels and `measurement.sample`
-their estimated probabilities. Qubit 1 is the most significant bit. A single Z
-measurement distribution cannot determine arbitrary X/Y correlations; change the
-measurement basis or use the simulated state when it is available.
+their estimated probabilities. Qubit 1 is the most significant bit. X and Y
+correlations require measurements in the corresponding bases, or direct
+evaluation from the simulated state when it is available.
 
 ## 3) Plot circuits and measurement results
 
-`plotq` prints a boxed text diagram by default, without a plotting package.
-Qubit 1 is at the top; controls, targets, and measurements share the wires.
+In a circuit diagram, qubit 1 is at the top. Controls, targets, and measurements
+appear on their corresponding wires.
 
 ```@example plotting_text
 using BlueTangle
@@ -56,7 +57,7 @@ plotq(feedback_ops)
 nothing # hide
 ```
 
-`plotqt` is also available as a direct text renderer. For graphics, install
+`plotqt` renders text diagrams directly. For graphics, install
 PyPlot once (`using Pkg; Pkg.add("PyPlot")`), load it, and select it explicitly:
 
 ```julia
@@ -130,7 +131,7 @@ Built-in matrices are available as `gate.X`, `gate.CNOT`, or `gate.T`.
 Parameterized matrices use `gates("RX(0.3)")`, `_RX(0.3)`, or the public functions
 `U1`, `U2`, and `U3`. A custom local matrix uses `Op("my gate", matrix, qubit)`.
 
-For a custom channel provide Kraus operators satisfying
+For a custom channel, provide Kraus operators satisfying
 `sum(K' * K for K in kraus) ≈ I`:
 
 ```@example custom_channel
@@ -148,15 +149,14 @@ noisy_rho = apply(rho, Op(channel, 1))
 The constructor validates dimensions and the trace-preserving condition. Use
 `custom_noise(2, name, kraus)` for two-qubit Kraus matrices.
 
-## [6) Conditional Mid-Measurements](@id conditional-measurements)
+## [6) Mid-circuit measurement and feedback](@id conditional-measurements)
 
 A mid-circuit measurement changes the state before later gates run. Use
 `Op("MZ", q)`, `Op("MX", q)`, or `Op("MY", q)` to measure qubit `q` in a Pauli
 basis. The recorded bit labels the eigenvalue: **0 means +1, and 1 means −1**.
 Thus X outcomes correspond to `|+⟩` and `|−⟩`, and Y outcomes to
-`(|0⟩ + im|1⟩)/sqrt(2)` and `(|0⟩ - im|1⟩)/sqrt(2)`. After collapse the state is
-expressed in the original computational basis; an X measurement does not leave
-an extra Hadamard rotation on the state.
+`(|0⟩ + im|1⟩)/sqrt(2)` and `(|0⟩ - im|1⟩)/sqrt(2)`. The postmeasurement state
+is expressed in the original computational basis.
 
 For a measured Pauli operator `P`, the projectors and outcome probabilities are
 
@@ -183,8 +183,8 @@ after, bits = run(plus_y, Op("MY", 1))
 ```
 
 `Op("MR", q)` chooses X, Y, or Z uniformly on each trajectory. Its record
-contains only the outcome bit, **not the chosen basis**. If the basis must be
-saved, choose it explicitly in your own operation list. `apply(rho, ops)`
+contains the outcome bit but omits the chosen basis. To retain the basis,
+choose and record it explicitly when constructing the operation list. `apply(rho, ops)`
 averages over all three bases and their outcomes.
 
 ### Apply gates conditioned on the outcome
@@ -242,9 +242,9 @@ weight. It applies feedback separately in each branch before summing them.
 
 ### Measurements inside a branch
 
-The record returned by `run` contains the outer outcome first,
-followed by outcomes from the branch that actually ran. The other branch adds
-no bits, so record lengths can depend on the outcome. Inner measurements also
+The record returned by `run` contains the outer outcome followed by outcomes
+from the selected branch. Its length therefore depends on which branch runs.
+Measurements within that branch also
 condition the returned density matrix:
 
 ```@example branch_records
@@ -260,8 +260,9 @@ expected = product_state([1, bits[2]])
 bits
 ```
 
-The first measurement is certainly 1. The Hadamard makes the next outcome
-random, while the final Z measurement repeats it. The record is `[1, 0, 0]` or
+The first outcome is 1 with probability one. The Hadamard gives equal
+probabilities for the next outcome, and the final Z measurement repeats it.
+The record is `[1, 0, 0]` or
 `[1, 1, 1]`. For a vector or MPS input the same rule applies. Branch gates receive
 the supplied gate noise, and MPS branch operations receive the supplied
 `cutoff` and `maxdim` settings.
@@ -323,7 +324,7 @@ works with density matrices and MPS, with the backend distinctions described
 below.
 
 Measurements and standalone reset are ideal in the circuit's gate-noise model.
-The explicit `I`/`X` feedback gates, however, receive gate noise by default.
+The explicit `I`/`X` feedback gates receive gate noise by default.
 To implement an ideal reset with a record while other gates remain noisy, use
 
 ```julia
@@ -351,18 +352,19 @@ nothing # hide
 
 ![One random Clifford circuit with measurements](assets/figs/random_circuit.png)
 
-`random_ops(N, depth)` instead builds `depth` disjoint unitary layers, choosing
+`random_ops(N, depth)` builds `depth` disjoint unitary layers, choosing
 from its mixed gate family and then independently measuring each site with
-probability `measure_prob` after each layer. It is not a Haar-random circuit
-ensemble, and its generation depth need not equal the rescheduled circuit depth.
-For a small ensemble experiment see [example 19](examples.md#19%29-Measurement-induced-entanglement-transition-using-MPS).
+probability `measure_prob` after each layer. The gate distribution is discrete,
+not Haar-random. The specified depth counts generated layers; rescheduling
+independent operations can change the circuit depth.
+For a small ensemble experiment, see [example 19](@ref monitored-circuits).
 
 ## 9) Classical shadow experiment
 
 [`shadow`](@ref) samples local X, Y, or Z measurement bases and averages their
 inverse-measurement estimators. Use `qubits` to reconstruct a small subsystem
 directly: selecting `k` qubits constructs only a `2^k × 2^k` matrix. Omitting
-`qubits` retains the original full-system behavior, suitable for small systems.
+`qubits` reconstructs the full-system matrix, suitable for small systems.
 
 ```@example shadows
 using BlueTangle, LinearAlgebra
@@ -379,14 +381,14 @@ rho_2 = shadow(ops, 1000; qubits=2)
 ```
 
 For a measured Pauli `P` and bit `b`, a single-qubit estimator is
-`(I + 3*(-1)^b*P)/2`. Each factor has trace one, so tracing out a qubit simply
+`(I + 3*(-1)^b*P)/2`. Each factor has trace one, so tracing out a qubit
 removes its factor from that shot's tensor product. Averaging these products
 estimates the reduced state, including its correlations. Multiplying separately
 averaged one-qubit estimates would lose those correlations. This is the local
 Pauli construction of [Huang, Kueng and Preskill](https://arxiv.org/abs/2002.08953).
 
-The default backend evolves a `2^N` statevector. To avoid that cost, select the
-MPS backend, which evolves and samples the tensors directly:
+The default backend evolves a `2^N` statevector. The MPS backend evolves and
+samples the tensors directly:
 
 ```julia
 rho_13 = shadow(ops, 1000; qubits=[1, 3], backend=:mps,
@@ -400,16 +402,15 @@ MPS cost depends on its bond dimensions, which can grow with entanglement.
 from finite-shot sampling error.
 
 Each shot uses a fresh preparation, including configured circuit noise and
-mid-circuit measurements. Final measurement bases are always random Pauli bases, independent
-of `Options.measurement_basis`. Readout is assumed ideal: `readout_noise` and
-`measurement_mitigate` are rejected explicitly because this estimator does not
-implement a noisy-readout inversion.
+mid-circuit measurements. Final measurement bases are random Pauli bases,
+independent of `Options.measurement_basis`. The estimator assumes ideal
+readout and rejects the `readout_noise` and `measurement_mitigate` options.
 
 A finite-sample shadow estimator can have negative eigenvalues and observable
-estimates outside physical bounds. It can estimate linear observables, but it is
-not necessarily a physical density matrix. Its eigenvalues cannot be treated as
-probabilities or inserted into an entropy formula without a separately justified
-reconstruction procedure.
+estimates outside physical bounds. Linear observables can be estimated directly
+from it, but its eigenvalues do not generally define probabilities. Using them
+in an entropy formula requires a justified reconstruction of a physical density
+matrix and an assessment of the resulting estimation bias.
 
 ### Two-qubit MPS estimate versus the exact state
 
@@ -421,8 +422,8 @@ The qubits remain correlated even though this reduced state is mixed.
 
 Compare each shadow estimate with this reference using the **Frobenius error**,
 `norm(rho_hat - rho_exact)`: the square root of the sum of the squared absolute
-errors in all 16 matrix entries, including their imaginary parts. Smaller is
-better; zero means the matrices agree. This is a matrix error, not an infidelity.
+errors in all 16 matrix entries, including their imaginary parts. It vanishes
+when the matrices agree and measures a matrix distance, distinct from infidelity.
 
 ```@example shadow_convergence
 using BlueTangle, LinearAlgebra, Random, Statistics
@@ -450,11 +451,10 @@ expected_rms = sqrt.((25 - real(tr(rho_exact * rho_exact))) ./ shot_counts)
 
 `cutoff=0.0` and `maxdim=2` avoid deliberate truncation here: this GHZ circuit
 and its local measurement rotations need bond dimension at most 2. Thus this
-example isolates shot noise, up to floating-point error. The exact statevector
-is only an independent reference for this small circuit; the MPS calls do not
-use it. Each plotted budget has three independent estimates, each using that
-many shots. The blue curve is their root mean squared error, not the error of
-an estimate pooled over all three runs.
+example isolates shot noise, up to floating-point error. The statevector
+calculation supplies an independent reference. Each plotted budget has three
+independent MPS estimates, each using that many shots. The blue curve gives
+the root mean squared error across those three estimates.
 
 ![Two-qubit MPS shadow error versus shots, compared with the exact expected RMS](assets/figs/shadow_mps_convergence.png)
 
@@ -475,8 +475,9 @@ product therefore has squared norm 25. Independent, unbiased snapshots obey
 because this reduced state's purity is `tr(rho_exact^2) = 1/2`.
 The expected RMS falls from about 0.495 at 100 shots to 0.0904 at 3,000 shots.
 Individual errors and the RMS of only three runs fluctuate; they need not
-decrease at every step. The curve describes sampling error for this ideal
-example, not a bound for a particular run or an error model for truncated MPS.
+decrease at every step. The curve gives the ensemble RMS sampling error for
+this ideal example. Individual runs fluctuate around that scale, and MPS
+truncation would introduce an additional source of error.
 
 To plot the arrays above in Julia, load the optional `PyPlot` package:
 
@@ -491,13 +492,13 @@ ax.legend()
 fig.tight_layout()
 ```
 
-The styled figure above is reproduced by the Example 9 section of
+The figure above is reproduced by the Example 9 section of
 `docs/generate_figures.jl`.
 
 ## 10) Entanglement Entropy and Spectrum
 
 For a pure global state, the reduced-state entropy measures entanglement across
-a cut. A Bell pair gives a check with known answer: its reduced eigenvalues are
+a cut. A Bell pair has reduced eigenvalues
 `[1/2, 1/2]`, so the entropy is `log(2)` **nats**.
 
 ```@example entropy
@@ -571,7 +572,7 @@ tensor factor, so `rho13` uses the basis `00, 01, 10, 11` of qubits **1 then 3**
 Passing `[3, 1]` does not swap those factors. Both dense and sparse inputs return
 a dense `Matrix{ComplexF64}`; keeping `k` qubits requires `4^k` output entries.
 
-Empty selections and the full selection have precise meanings:
+Empty and full selections give the following results:
 
 ```@example partial_trace
 @assert partial_trace(state, Int[]) ≈ fill(sum(abs2, state), 1, 1)
@@ -625,7 +626,7 @@ H=-J\sum_{i=1}^{N-1}X_iX_{i+1}-h\sum_{i=1}^{N}Z_i.
 ```
 
 `hamiltonian_exp` approximates `exp(-im*time*H)` with `order=1`, `2`, or `4`.
-The default remains first order; second order uses symmetric Strang steps, and
+The default is first order; second order uses symmetric Strang steps, and
 fourth order composes three Strang steps using
 [Yoshida's coefficients](https://doi.org/10.1016/0375-9601(90)90092-3).
 Compare against exact evolution at the same time, using exact outcome
@@ -669,8 +670,8 @@ map(((1, trotter_ops), (2, second_order_ops), (4, fourth_order_ops))) do (order,
 end
 ```
 
-Fourth order uses a negative middle substep and more gates per step, so the
-cheapest choice depends on the Hamiltonian and desired accuracy. Compare gate
+Fourth order uses a negative middle substep and more gates per step. The order
+that minimizes gate count depends on the Hamiltonian and desired accuracy. Compare gate
 counts at the required accuracy when selecting the order.
 Consecutive commuting terms are grouped,
 repeated blocks at stage and step boundaries are merged, and zero couplings
@@ -727,8 +728,7 @@ approximates backwards evolution but keeps the shortened step at the end.
 
 ### Inspecting the first-order circuit
 
-The first 16 scheduled layers are shown below; this is only a preview of the
-full evolution circuit.
+The circuit figure below shows the first 16 scheduled layers of the evolution.
 
 ```julia
 using PyPlot
@@ -742,15 +742,16 @@ plotq([trotter_measurement, exact_measurement]; backend=:pyplot)
 
 ![Local Z expectations for exact and Trotterized evolution](assets/figs/trotter_expect.png)
 
-Halving `dt` improves this example. In general, check convergence at your chosen
-Hamiltonian and evolution time. Increasing circuit depth reduces discretization
-error while increasing simulated gate-noise exposure when a noise model is used.
+Smaller Trotter steps reduce asymptotic discretization error and increase
+circuit depth. Check convergence of the observables with step size for the
+chosen Hamiltonian and evolution time. When a gate-noise model is used, the
+additional gates also increase noise exposure.
 
 ## 12) Error Mitigation: Pauli Twirling
 
-Pauli frames can randomize the structure of coherent gate errors. They preserve
-the ideal controlled gate, but only an average over frames produces the twirled
-channel. They do not guarantee a better answer for every circuit or observable.
+Pauli frames randomize the structure of coherent gate errors while preserving
+the ideal controlled gate. Averaging over frames produces the twirled channel.
+Its effect on observable errors depends on the circuit and noise model.
 
 ```@example twirling
 using BlueTangle
@@ -813,9 +814,8 @@ separate treatment. The linear intercept is an estimate under that model, and
 its regression error is not a complete uncertainty estimate. It can lie outside
 the physical interval or be less accurate than the unmitigated value.
 
-[`op_amplifier!`](@ref) repeats **every** operation. Repeating a general rotation
-changes the ideal circuit; use [`cnot_amplifier!`](@ref) for this example. There is
-no automatic noise-scaling option or special measurement mode.
+[`op_amplifier!`](@ref) repeats every operation. Repeating a general rotation
+changes the ideal circuit; use [`cnot_amplifier!`](@ref) for this example.
 
 ## 14) Error Mitigation: Measurement Errors
 
@@ -848,12 +848,13 @@ plotq(readout_measurements; backend=:pyplot)
 
 Inverse correction amplifies sampling error and can produce signed estimates
 and expectation values outside their physical bounds at finite shot counts.
-It does not undo gate errors or unknown/correlated readout errors. A singular
-response, such as a 50% bit flip, cannot be inverted.
+Gate errors remain, and correlated readout errors require a corresponding
+joint response model. A singular response, such as a 50% bit flip, cannot be
+inverted.
 
 ## 15) Optional layout routing and nonlocal SWAPs
 
-`Layout` takes a **site-occupancy grid**, not an adjacency matrix. Positive cells
+`Layout` takes a site-occupancy grid. Positive cells
 are physical qubits; horizontally and vertically adjacent occupied cells are
 neighbors. Qubits are numbered in Julia's column-major order. This grid has five
 qubits, connected as `2—1—3—4—5`:
@@ -891,21 +892,22 @@ nothing # hide
 
 ![Routed single-qubit gate with an extra control](assets/figs/layout3.png)
 
-Routing these operations is not a complete hardware transpiler. Arbitrary
-whole-register callbacks and general multi-controlled operations are not
-decomposed into a device's native gate set. `Layout(...; noisy_swap=true)` can
+Routing inserts SWAPs to satisfy the layout connectivity. Arbitrary
+whole-register callbacks and general multi-controlled operations require
+separate decomposition into a device's native gate set. `Layout(...; noisy_swap=true)` can
 include inserted swaps in the circuit's gate-noise model.
 
 ## 16) Hadamard Test
 
-An ancilla prepared and measured with Hadamards gives
+Prepare an ancilla in `|+⟩`, apply U conditioned on the ancilla being `|1⟩`,
+and apply a second Hadamard to the ancilla. Its Z expectation is
 
 ```math
 \langle Z_{\mathrm{anc}}\rangle=\operatorname{Re}\langle\psi|U|\psi\rangle.
 ```
 
-Here `U=Z` and the system is `|1⟩`, so the answer is `-1`. Qubit 1 is the ancilla;
-qubit 2 is the system. There are exactly two ancilla Hadamards.
+Here `U=Z` and the system is `|1⟩`, so the expectation is `-1`. Qubit 1 is the
+ancilla and qubit 2 is the system.
 
 ```@example hadamard
 using BlueTangle
@@ -944,19 +946,23 @@ reveals the squared magnitude of the overlap, not its complex phase.
 
 ## 18) Variational Quantum Eigensolver
 
-VQE, trainable and custom gates, ansatz generators, and their API reference now
-live in the dedicated [QML section](qml.md).
+VQE, trainable and custom gates, ansatz generators, and their API reference are
+described in the [QML section](qml.md).
 
-## 19) Measurement-induced entanglement transition using MPS
+```@raw html
+<a id="19)-Measurement-induced-entanglement-transition-using-MPS"></a>
+```
 
-This example illustrates the finite-circuit competition behind the topic in
-its title. It does **not** locate or establish a measurement-induced transition.
-Unitary gates can build entanglement, while local measurements remove it on
-average along individual pure-state trajectories.
+## [19) Entanglement in monitored circuits using MPS](@id monitored-circuits)
 
-First check the MPS implementation against a dense vector for a **unitary**
-circuit. Independently executing a circuit with measurements generally selects
-different outcomes, so its two final pure states should not be compared directly.
+This example studies entanglement in finite monitored circuits. Unitary gates
+can build entanglement, while local measurements reduce it on average across
+pure-state trajectories. The simulation measures this competition at two
+small system sizes and a fixed circuit depth.
+
+First compare MPS evolution with a dense statevector for a unitary circuit.
+For circuits with measurements, comparing final pure states requires matching
+measurement outcomes; independent runs generally select different trajectories.
 
 ```@example monitored_mps
 using BlueTangle, LinearAlgebra, Statistics
@@ -1004,8 +1010,9 @@ end
 ```
 
 For these small even `N`, `maxdim=2^(N÷2)` permits the full Schmidt rank at every
-cut, and `cutoff=0` avoids deliberate truncation. This is a small exact-capacity
-MPS demonstration, not evidence of efficiency at large `N`.
+cut, and `cutoff=0` avoids deliberate truncation. These settings retain the
+full state at the sizes used here. The required bond dimensions can grow
+exponentially with system size.
 
 ```julia
 using PyPlot
@@ -1028,12 +1035,11 @@ and outcome realizations. The plotted quantity is the **mean of trajectory
 entropies**, not the entropy of an averaged density matrix. The latter includes
 classical uncertainty over outcomes and answers a different question.
 
-These two small sizes and eight layers only show a finite-depth trend. Studying
-a transition would require larger sizes, checks of depth/steady-state convergence,
-many more trajectories, and convergence with MPS truncation settings before any
-finite-size scaling analysis.
+The results describe a finite-depth trend for four and six qubits. A
+finite-size scaling study of a transition would require larger systems, depth
+convergence, more trajectories, and checks of MPS truncation error.
 
-## [20) Operations through one entry point](@id Operations-through-one-entry-point)
+## [20) Operation constructors](@id Operations-through-one-entry-point)
 
 Use `Op` to construct each kind of operation:
 
@@ -1046,16 +1052,15 @@ Use `Op` to construct each kind of operation:
 | `Op("full", matrix)` | Matrix acting on the whole register |
 | `Op("transform", f)` | Function taking and returning the whole state |
 
-The objects remain distinct internally (`Op`, `ifOp`, `OpQC`, and `OpF`) because
-unitary gates, selective measurements, noise channels, and complete-register
-transformations have different semantics. Their existing constructors remain
-available. A parameterized **local** gate includes its qubit index, such as
-`Op("rotation", theta -> _RX(theta), 1)`; this is different from a function of the
-whole state.
+These calls return objects of type `Op`, `ifOp`, `OpQC`, or `OpF` according to
+the operation. Each type also has a direct constructor. A parameterized local
+gate includes its qubit index, such as
+`Op("rotation", theta -> _RX(theta), 1)`. Here the function returns a local
+gate matrix; a whole-state function takes and returns the full state.
 
-Circuit simplification cancels matching ideal gate identities. Applying a noise
-model to the shorter circuit then changes its noise exposure; simplification is
-not an equivalence of noisy channels.
+Circuit simplification cancels matching ideal gate identities. This preserves
+the ideal unitary. Applying gate noise to the shorter circuit changes its
+noise exposure and can change its noisy channel.
 
 ```@example operation_entry
 using BlueTangle
@@ -1123,8 +1128,8 @@ run(ops, 3)
 Records follow execution order, including any measurements inside the selected
 branch. `run(initial, ops)` follows the supplied list and lets you choose the
 initial state. The batch form `run(ops, shots)` starts each shot in `|0…0⟩` and
-uses the operation list's execution order; independent operations are not rescheduled
-into earlier layers. Records are flat bit vectors without qubit or basis labels,
+preserves the operation list's execution order, including the order of
+independent operations. Records are flat bit vectors without qubit or basis labels,
 so keep the operation sequence when interpreting them.
 
 For an MPS, pass truncation settings to the outer call; they also reach feedback:
@@ -1171,7 +1176,8 @@ permutations, supported diagonal phases, and Hadamards. Unsupported gates and
 noise raise errors. Leading and trailing Hadamard layers use efficient native
 paths; interior Hadamards require branching, and level-4 phases can also have
 exponential cost. Native Pauli queries avoid statevector materialization in the
-single-branch case. See `?phasepoly` for phase-angle grids and cost guards.
+single-branch case. See `?phasepoly` for supported phase angles and computational
+limits.
 
 ## [23) Operation lists](@id Operation-lists)
 
@@ -1185,9 +1191,9 @@ Sampling functions also accept a `layout` keyword. Use `N=...` with `measure`,
 `run`, or `shadow` to include idle qubits beyond those mentioned by the operations.
 
 Use `measure(ops, shots; options=Options(noise=noise))` for independent noisy
-preparations. `measure(apply(state, ops; noise=noise), shots)` instead samples
-the one resulting state: for a vector or MPS, this represents one noise
-trajectory and generally gives a different experiment. Density-matrix
+preparations. `measure(apply(state, ops; noise=noise), shots)` samples the
+resulting state. For a vector or MPS, those shots are conditioned on one
+sampled noise trajectory. Density-matrix
 execution sums noise branches before sampling. Twirling, basis choices, readout
 noise, and readout mitigation use `Options`.
 

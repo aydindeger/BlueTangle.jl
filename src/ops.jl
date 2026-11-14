@@ -1,6 +1,9 @@
 """
     get_N(state::AbstractVectorS) -> Int
     get_N(rho::AbstractMatrixS) -> Int
+
+Return the number of qubits from the statevector length or density-matrix
+dimension, which must be a power of two. For an MPS, return the number of sites.
 """
 get_N(state::AbstractVectorS)=Int(log(2,length(state)))
 get_N(rho::AbstractMatrixS)=Int(log(2,size(rho,1)))
@@ -34,7 +37,11 @@ function _operated_qubits(op::ifOp)
 end
 
 """
-qubit number from a set of operations
+    get_N(ops::Vector{<:QuantumOps})
+
+Return the largest qubit index used by the operations, including conditional
+branches and explicit operation blocks. Empty lists return zero. An opaque
+whole-state callback does not specify a register size.
 """
 function get_N(ops::Vector{<:QuantumOps})
     max_index = 0
@@ -47,12 +54,9 @@ end
 """
     get_probs_from_sample(sample::Vector, N::Int) -> (Vector, Vector)
 
-Convert a sample of outcomes into probabilities.
-
-- `sample`: A vector of sampled outcomes.
-- `N`: Number of qubits.
-
-Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
+Count integer outcomes sampled from an `N`-qubit register. Return
+`(outcomes, frequencies)`, with the observed outcomes sorted in ascending order
+and each frequency equal to its count divided by the number of samples.
 """
 function get_probs_from_sample(sample::Vector, N::Int)
     T = N < 8sizeof(Int) ? Int : BigInt
@@ -89,8 +93,8 @@ Omitting `qubits` preserves the full-system estimate.
 
 Each shot contributes the tensor product, over the selected qubits only, of
 `(I + 3*(-1)^b*P)/2`, where `P` is the measured Pauli and `b` is its outcome.
-Tracing out other qubits simply removes their trace-one factors; no full
-density matrix is constructed when requesting a subsystem.
+Tracing out other qubits removes their trace-one factors. A subsystem estimate
+therefore requires only the factors associated with the retained qubits.
 
 The default `backend=:statevector` uses a `2^N` statevector. Use `backend=:tensor`
 (or `:mps`) to evolve and sample an MPS directly, without constructing a full
@@ -100,9 +104,9 @@ dimensions. Both backends repeat preparation for every shot, including any
 circuit noise or mid-circuit measurements.
 
 With ideal readout, the estimator is unbiased for the simulated state, Hermitian
-and trace one, but need not be positive at finite shot counts. Its eigenvalues are not probabilities
-and cannot be used directly to estimate entropy. Readout noise and readout
-mitigation are unsupported and raise an `ArgumentError`. The final
+and trace one, but need not be positive at finite shot counts. Its eigenvalues
+are not probabilities and cannot be used directly to estimate entropy. Readout
+noise and readout mitigation are unsupported and raise an `ArgumentError`. The final
 `measurement_basis` is replaced by independent random Pauli bases.
 Operations run in their listed order; routing is performed only when `layout`
 is supplied. `N` can include idle qubits, and omitted `qubits` selects all qubits.
@@ -164,7 +168,12 @@ end
 
 
 """
-get statistics about the operations
+    get_stats(ops::Vector{<:QuantumOps})
+
+Return a named tuple with register size `N`, operation count `len`, scheduled
+`depth`, and counts of CNOTs, SWAPs, two-qubit operations, and measurements.
+Counts refer to the top-level list; `OpF` blocks are excluded from gate counts.
+The input operation list is unchanged.
 """
 function get_stats(ops::Vector{<:QuantumOps})
     max_index = get_N(ops)
@@ -675,15 +684,12 @@ end
 
 
 """
-`cnot_amplifier!(ops::Vector{<:QuantumOps}, CNOT_pair=0)`
+    cnot_amplifier!(ops::Vector{<:QuantumOps}, CNOT_pair=0)
 
-Amplify the presence of CNOT (or CX) operations in a vector of quantum operations.
-
-This function adds extra pair of CNOT operation in the `ops` vector a specific number of times in place. This is useful for amplifying the effect of noise via CNOT operations in a sequence of quantum operations.
-
-# Arguments
-- `ops::Vector{<:QuantumOps}`: A vector of quantum operations, where `T` is a subtype of `QuantumOps`.
-- `CNOT_pair::Int` (optional): The number of additional pairs of CNOT operations to insert for each original CNOT operation in `ops`. The default value is 0, which means no additional operations are inserted.
+Insert `CNOT_pair` extra pairs before every operation named `"CNOT"` or `"CX"`,
+modifying `ops` in place. For standard CNOT gates each pair is an ideal identity,
+so the circuit's ideal action is preserved while its gate-noise exposure grows.
+The inserted operations retain the original gate's `noisy` setting.
 
 # Examples
 ```julia
@@ -707,9 +713,12 @@ function cnot_amplifier!(ops::Vector{<:QuantumOps},CNOT_pair=0)
 end
 
 """
-`op_amplifier!(ops::Vector{<:QuantumOps},op_pair=0)`
+    op_amplifier!(ops::Vector{<:QuantumOps}, op_pair=0)
 
-same as `cnot_amplifier!` but for all operations
+Insert `2*op_pair` copies before every operation, modifying `ops` in place.
+For gates that square to the identity, each repeated pair preserves the ideal
+action. General rotations, channels, and measurements can change the
+computation when repeated this way.
 """
 function op_amplifier!(ops::Vector{<:QuantumOps},op_pair=0)
 
@@ -725,15 +734,12 @@ end
 
 
 """
-`expand_multi_op(list_of_operators::String, qubits_applied::Vector, N::Int) -> Matrix`
+    expand_multi_op(list_of_operators::String, qubits_applied::Vector{Int}, N::Int)
 
-Expand multiple quantum operators over a specified set of qubits.
-
-- `list_of_operators`: A string representing a list of operators.
-- `qubits_applied`: A vector of qubits on which operators are applied.
-- `N`: Total number of qubits.
-
-Returns a matrix representing the expanded operators.
+Embed a product of single-qubit operators in an `N`-qubit register, with
+identity on all other qubits. Pair each comma-separated operator with an entry
+of `qubits_applied`; for example, `"X,Z"` on `[1, 3]` gives `X ⊗ I ⊗ Z` when
+`N=3`. Qubit 1 is the most significant tensor factor.
 """
 function expand_multi_op(list_of_operators::String,qubits_applied::Vector{Int},N::Int)
 

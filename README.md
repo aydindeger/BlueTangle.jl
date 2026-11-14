@@ -15,16 +15,17 @@ with statevectors, density matrices, and matrix product states. It also includes
 stabilizer-code encoding and recovery, Hamiltonian evolution, variational
 circuits, and an optional PhasePoly backend for structured noiseless circuits.
 
-Start with the examples below, then see the
-[QEC tutorial](https://deger.xyz/BlueTangle.jl/qec/) and
-[OpenQASM guide](https://deger.xyz/BlueTangle.jl/qasm/).
-The package is experimental; the supported semantics and limits are documented
-alongside each workflow.
+Examples below cover [quantum error correction](#quantum-error-correction),
+[quantum machine learning](#quantum-machine-learning), and
+[OpenQASM](#import-and-export-openqasm). The
+[documentation](https://deger.xyz/BlueTangle.jl) explains the supported methods
+and their assumptions. The package is experimental.
 
 BlueTangle is developed by [Aydin Deger](https://deger.xyz).
 
 ## Installation
-Installing BlueTangle is straightforward. You can install it through the Julia REPL using the following command:
+
+Install BlueTangle from the Julia REPL:
 
 ```julia
 using Pkg
@@ -33,7 +34,7 @@ Pkg.add(url="https://github.com/aydindeger/BlueTangle.jl")
 
 Alternatively, type `] add https://github.com/aydindeger/BlueTangle.jl` directly in the Julia REPL.
 
-To load the package in your Julia environment, use:
+Load the package with:
 
 ```julia
 using BlueTangle
@@ -69,13 +70,15 @@ The generated site is written to `docs/build/`.
 
 ## Basic usage
 
-For more examples and advanced usage, please refer to the [**BlueTangle.jl Documentation**](https://deger.xyz/BlueTangle.jl)
+### GHZ state
 
-### Creating and Analyzing a GHZ Circuit
-
-This example demonstrates the creation of a Greenberger–Horne–Zeilinger (GHZ) state circuit, including the steps for measurement and calculating correlations.
+An H gate followed by two CNOTs prepares the three-qubit GHZ state
+`(|000⟩ + |111⟩)/sqrt(2)`. Computational-basis measurements give correlated
+outcomes on all three qubits.
 
 ```julia
+using BlueTangle
+
 # Quantum operations to prepare the GHZ state
 hadamard = Op("H", 1)
 cnot1 = Op("CNOT", 1, 2)
@@ -227,76 +230,87 @@ correlation(state, "X,Z", [1, 2])
 to_state(state)                        # explicitly materialize a sparse vector
 ```
 
-The adapter preserves BlueTangle's qubit ordering and global phase. Unsupported
-gates and noise are rejected explicitly. PhasePoly's interior-Hadamard and
-level-4 phase branching can still be exponential; it is not a general replacement
-for the other backends. See `?phasepoly` for the supported gate set and limits.
+The adapter preserves BlueTangle's qubit ordering and global phase. Its cost
+can grow exponentially with interior Hadamards and level-4 phase terms.
+See `?phasepoly` for the supported gate set; unsupported gates and noise raise
+errors.
 
-## Error correction and evolution
+## Quantum error correction
 
-Start with the [QEC learning path](examples/qec/README.md): short examples cover
-logical Bell pairs, fault propagation, code distances, noisy syndrome cycles,
-and distillation before the complete factory-to-algorithm example.
+BlueTangle provides stabilizer-code encoding, logical gates, syndrome
+extraction, and recovery. Built-in constructors include `shor_code()`,
+`steane_code()`, and `reed_muller_code()`. The Steane `[[7,1,3]]` code stores one
+logical qubit in seven physical qubits and corrects any single-qubit Pauli error.
 
-A five-qubit code can preserve an arbitrary logical state through a single
-physical Pauli error:
+### Correcting a physical error
+
+This example encodes a complex logical state, applies Y to physical qubit 3,
+and recovers the original logical state:
 
 ```julia
 using BlueTangle, LinearAlgebra
-code = StabilizerCode([
-    "X,Z,Z,X,I", "I,X,Z,Z,X", "X,I,X,Z,Z", "Z,X,I,X,Z"
-]; d=3)
+
+code = steane_code()
 logical = normalize(ComplexF64[1, 0.2 + 0.7im])
 encoded = code.encode(logical)
-damaged = apply(encoded, Op("Y", 2))
-recovered = code.decode(code.correct(damaged))
+damaged = apply(encoded, Op("Y", 3))
+corrected = qec_round(code, damaged)
+recovered = code.decode(corrected.state)
+
 @assert abs2(dot(logical, recovered)) ≈ 1
+println("Measured syndrome: ", corrected.syndrome)
 ```
 
-`code.syndrome` exposes the syndrome record and proposed correction. Vector and
-MPS recovery samples a syndrome; `code.correct(rho)` on a density matrix sums
-syndrome sectors deterministically. The decoder searches single-Pauli errors;
-it is not a general decoder for arbitrary multi-qubit errors. See the
-[QEC tutorial](https://deger.xyz/BlueTangle.jl/qec/) for logical gates, mixed states,
-and native MPS examples.
+Here encoding, syndrome measurement, and recovery are ideal. `qec_round`
+returns the corrected data and its syndrome, so further logical gates and
+correction rounds can follow. `code_distance(code)` searches for a
+minimum-weight logical Pauli; bounded searches report a lower bound when no
+logical operator has been found.
 
-For encoded algorithm experiments, `steane_code(2)` supplies two Steane blocks
-with transversal logical Clifford gates. Compile a logical circuit with
-`code.ops(...)`, interleave gates with data-only `qec_round` calls, and use
-`steane_decoder(code)` to recover one Pauli error per block. The worked examples
-are runnable from the repository root:
+### Noisy syndrome extraction
 
-```sh
-julia --project=. examples/qec/01_logical_bell.jl
-julia --project=. examples/qec/02_fault_propagation.jl
+For physical circuit noise, `steane_prepare` and `shor_qec_round` use verified
+cat ancillas and repeated syndrome measurements. The following trajectory
+prepares logical zero, applies logical H, corrects the data, and measures
+logical X:
+
+```julia
+using BlueTangle
+
+code = steane_code()
+p = 1e-4
+noise = NoiseModel("depolarizing", p)
+prepared = steane_prepare(:zero; noise, prep_error=p, measurement_error=p)
+state = code.apply(prepared.state, "H", 1; noise)
+corrected = shor_qec_round(code, state; noise, prep_error=p, measurement_error=p)
+readout = steane_measure(code, corrected.state; basis=:X, noise, measurement_error=p)
+
+println("Syndrome history: ", corrected.history)
+println("Logical X outcome: ", readout.outcome)  # 0 denotes the +1 eigenvalue
 ```
 
-The first creates an encoded Bell state and corrects a propagated fault. The
-second audits every gate-local Pauli fault in a short transversal circuit and
-demonstrates a harmful fault in the bare-ancilla syndrome circuit. These examples
-assume ideal preparation and recovery to isolate the effects of gate faults.
+The ideal logical outcome is 0. Each noisy run samples a new trajectory;
+multiple faults can change the logical outcome, and exhausting a syndrome or
+ancilla retry bound raises `QECProtocolFailure`. This example assigns probability
+`p` to gate depolarization per operand, physical zero-preparation errors, and
+measurement-bit flips. Idle noise is excluded.
 
-The physical noisy workflow uses `steane_prepare`, `shor_qec_round`,
-`steane_t`, and `steane_measure`. It includes verified cat ancillas, repeated
-syndromes, physical recovery, and decoded logical readout. The phase-estimation
-example makes a fresh resource for every trial with `steane_distill15`: noisy
-physical raw preparation, a Steane-encoded 15-to-1 distillation circuit, and
-acceptance checks precede logical T consumption and readout. It reports raw
-resources and factory attempts, including rejected and aborted work. Its
-physical peak is 47 qubits, with at most 42 in the entangled MPS simulation.
-Run the full cycle and the code/distance comparison with:
+Logical T gates use `steane_t` with an encoded magic state. The
+`steane_distill15` factory prepares noisy raw resources and performs encoded
+15-to-1 distillation. The full phase-estimation example makes a fresh factory
+output for every trial and reports accepted, rejected, and aborted work:
 
 ```sh
+julia --project=. examples/qec/05_noisy_syndrome_cycle.jl
 julia --project=. examples/qec/03_noisy_phase_estimation.jl
-julia --project=. examples/qec/04_codes_and_distance.jl
 ```
 
-`shor_code()`, `steane_code()`, and `reed_muller_code()` supply the three small
-CSS codes. `code_distance` searches for a minimum-weight logical Pauli or
-reports a proven lower bound when the search stops early. See the
-[noisy-gadget guide](docs/src/fault_tolerance.md) and
-[codes and factory guide](docs/src/magic_factory.md) for worked derivations,
-the physical fault model, tests, resource accounting, and MPS accuracy controls.
+The [QEC learning path](examples/qec/README.md) also covers logical Bell pairs,
+fault propagation, code distances, and the distillation protocol. See the
+[QEC documentation](https://deger.xyz/BlueTangle.jl/qec/) for the derivations,
+noise assumptions, resource counts, and MPS accuracy controls.
+
+## Hamiltonian evolution
 
 `hamiltonian_exp` approximates `exp(-im*time*H)`, matching `hamiltonian` and the
 exact `evolve(state, H, time)` helper. It uses a shorter final Trotter step to reach
@@ -368,7 +382,7 @@ states the assumptions behind that workflow.
 
 ## Citation 
 
-For citation in research work, please use the following reference:
+Cite the package as:
 
 ```
 Aydin Deger, "BlueTangle.jl: A Noisy and Dynamic Quantum Circuit Simulator", https://github.com/aydindeger/BlueTangle.jl/ (2024).

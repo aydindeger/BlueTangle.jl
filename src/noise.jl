@@ -213,13 +213,13 @@ function _twirl_set(name::String,qubit::Int,target_qubit::Int)
 end
 
 """
-`apply_twirl(op::QuantumOps) -> Vector{QuantumOps}`
+    apply_twirl(op::QuantumOps) -> Vector{QuantumOps}
 
-Applies twirling with specified noise to a single quantum operation.
-
-- `op`: A QuantumOps object representing the quantum operation.
-
-Returns a vector of QuantumOps representing the twirled operation with noise.
+Surround a standard CNOT/CX or ECR gate with randomly chosen one-qubit Pauli
+gates that preserve its ideal action up to global phase. Other operations
+return unchanged in a one-element vector. Noise is applied when the returned
+operations are executed with a noise model; the added Pauli gates have
+`noisy=true`.
 """
 function apply_twirl(op::QuantumOps)
 

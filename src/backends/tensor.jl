@@ -9,27 +9,38 @@ N_MPS(N::Int)=it.siteinds("Qubit", N)
 ##========== state preparation ==========
 
 """
-create all zero state
+    zero_state(sites::Vector)
+
+Return the MPS product state |0…0⟩ on the supplied qubit sites.
 """
 zero_state(M::Vector)=it.productMPS(M,"0")
 
 """
-create all one state
+    one_state(sites::Vector)
+
+Return the MPS product state |1…1⟩ on the supplied qubit sites.
 """
 one_state(M::Vector)=it.productMPS(M,"1")
 
 """
-create given product state
+    product_state(sites::Vector, bits::Vector)
+
+Return the MPS computational-basis state specified by one 0/1 bit per site,
+in the order of `sites`.
 """
 product_state(M::Vector,list_of_qubits::Vector)=it.productMPS(M,map(string,Int.(list_of_qubits)))
 
 """
-create neel state 010101
+    neel_state01(sites::Vector)
+
+Return the MPS product state |0101…⟩ on the supplied qubit sites.
 """
 neel_state01(M::Vector)=product_state(M,[isodd(i) ? 0 : 1 for i=1:length(M)])
 
 """
-create neel state 101010
+    neel_state10(sites::Vector)
+
+Return the MPS product state |1010…⟩ on the supplied qubit sites.
 """
 neel_state10(M::Vector)=product_state(M,[isodd(i) ? 1 : 0 for i=1:length(M)])
 
@@ -71,9 +82,13 @@ expect(psi::it.MPS, mpo::it.MPO)=it.inner(psi', mpo, psi)
 # ψ0 = MPS(s, n -> n == 1 ? "↓" : "↑")
 
 """
-to_state(MPS::it.MPS,M::Vector)
+    to_state(psi::it.MPS)
+    to_state(psi::it.MPS, sites::Vector)
 
-    Convert MPS to state vector
+Contract an MPS into a sparse statevector, with qubit 1 the most significant
+tensor factor. The optional site list specifies the tensor-factor order.
+The contraction materializes `2^N` amplitudes before constructing the sparse
+vector, so memory use grows exponentially with the number of qubits.
 """
 to_state(MPS::it.MPS,M::Vector)=sa.sparse(reshape(its.array(its.contract(MPS),reverse(M)),2^length(M)))
 to_state(MPS::it.MPS)=sa.sparse(reshape(its.array(its.contract(MPS),reverse(its.siteinds(MPS))),2^length(MPS)))
@@ -91,7 +106,10 @@ end
 """
     to_MPS(vec::AbstractVector, sites::AbstractVector; kwargs...)
 
-    Convert state vector to MPS
+Convert a statevector to an MPS on the supplied qubit sites, preserving the
+convention that qubit 1 is the most significant bit. The vector must have
+length `2^length(sites)`. Pass `cutoff` or `maxdim` through `kwargs` to control
+the singular-value truncation during conversion.
 """
 function to_MPS(vec::AbstractVectorS, sites::AbstractVector; kwargs...)
     length(vec) == 2^length(sites) || throw(DimensionMismatch("state size must match the qubit sites"))

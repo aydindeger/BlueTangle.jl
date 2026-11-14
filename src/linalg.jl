@@ -284,25 +284,13 @@ _quadratic_model(x,a,b,c)=a .* x .^2 .+ b .*x .+ c
 """
     linear_fit(xdata::Vector, ydata::Vector)
 
-Compute the coefficients a and b for the linear fit of the given data.
+Fit `y = a + b*x` by ordinary least squares and return `(a, b, se_a, se_b)`:
+the intercept, slope, and their standard errors. The input vectors must have
+equal lengths and contain at least two points with distinct x values.
 
-# Arguments
-- `xdata`: Array of x values.
-- `ydata`: Array of corresponding y values.
-
-# Returns
-- `a`: Intercept of the linear fit.
-- `b`: Slope of the linear fit.
-- `se_a`: Standard error of the intercept.
-- `se_b`: Standard error of the slope.
-
-# Description
-This function fits a simple linear model (y = a + b*x) to the provided data points.
-It checks if the lengths of xdata and ydata are the same and then calculates the coefficients
-for the linear fit. Additionally, it computes the standard errors for both the slope and the intercept.
-
-The function uses the least squares method for the linear regression. The standard errors are calculated
-based on the residual sum of squares and the total sum of squares for the x values.
+Standard errors use the residual variance with `n-2` degrees of freedom,
+assuming independent errors with equal variance. With exactly two points the
+line is determined, but both standard errors are `NaN`.
 """
 function linear_fit(xdata::Vector, ydata::Vector)
     n = length(xdata)
@@ -327,19 +315,10 @@ end
 
 
 """
-    quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64}) -> Vector{Float64}
+    quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64})
 
-Fit a quadratic function to the given data.
-
-# Arguments
-- `xdata::Vector{Float64}`: A vector of x-coordinates.
-- `ydata::Vector{Float64}`: A vector of y-coordinates corresponding to `xdata`.
-
-# Returns
-- `Vector{Float64}`: The coefficients `[a, b, c]` of the fitted quadratic function `y = ax^2 + bx + c`.
-
-# Description
-This function performs a least squares quadratic fit to the input data.
+Fit `y = a*x^2 + b*x + c` by least squares. The input vectors must have equal
+lengths. Return the coefficients in a 3×1 matrix, ordered as `a`, `b`, `c`.
 """
 function quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64})
     if length(xdata) != length(ydata)
@@ -362,20 +341,16 @@ end
 
 
 """
- error_mitigate_data(xdata::Vector, ydata::Vector)
+    error_mitigate_data(xdata::Vector, ydata::Vector)
 
-Perform error mitigation on a dataset by fitting a linear model and extracting the estimate and standard error.
+Fit a line and extrapolate to `x=0`. For noise extrapolation, `xdata` contains
+noise strengths and `ydata` the corresponding observable estimates; the result
+depends on the validity of the linear model over that range.
 
-This function takes two vectors `xdata` and `ydata` which represent the independent and dependent variables of a dataset, respectively.
-
-# Arguments
-- `xdata::Vector`: The independent variable data points.
-- `ydata::Vector`: The dependent variable data points, corresponding to each xdata point.
-
-# Returns
-- `est`: The estimated intercept from the linear fit.
-- `se`: The standard error of the estimated intercept.
-- `fit_plot`: A tuple containing the x-values from 0 to the last element of `xdata` and the corresponding fitted y-values from the model.
+Return `(est, se, fit_plot)`, where `est` is the intercept rounded to five
+significant digits and `se` is its standard error from `linear_fit`.
+`fit_plot` contains x values from zero to `xdata[end]` and the fitted y values,
+with spacing `(xdata[2]-xdata[1])/4`.
 """
 function error_mitigate_data(xdata::Vector,ydata::Vector)
     a, b, se_a, se_b = linear_fit(xdata, ydata)

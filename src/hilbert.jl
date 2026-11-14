@@ -1,19 +1,13 @@
 """
-`hilbert(N::Int, mat::AbstractMatrix, qubit::Int, target_qubit::Int)`
+    hilbert(N::Int, mat::AbstractMatrix, qubit::Int, target_qubit::Int; control=-2)
 
-Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits
+Embed a 4×4 matrix on two distinct qubits of an `N`-qubit register, returning
+a sparse matrix. The matrix's first tensor factor acts on `qubit` and its
+second on `target_qubit`, including when their indices are reversed or nonlocal.
+Qubit 1 is the most significant tensor factor of the full register.
 
-The gate `mat` is applied to the `qubit` and`target_qubit`. If `qubit` is greater than `target_qubit`, a controlled 
-swap is performed before applying `mat`.
-
-# Arguments
-- `N::Int`: The number of qubits in the system.
-- `mat::AbstractMatrix`: The quantum gate to be applied.
-- `qubit::Int`: The qubit to which the gate is applied.
-- `target_qubit::Int`: The target qubit to which the gate is applied.
-
-# Returns
-`SparseMatrix`: The resulting sparse matrix representation of the gate operation.
+Set `control` to a third, distinct qubit to apply `mat` only when that qubit
+is in state |1⟩. The default `control=-2` adds no control.
 """
 function hilbert(N::Int, mat::AbstractMatrix, qubit::Int, target_qubit::Int; control::Int=-2)
     all(q -> 1 <= q <= N, (qubit, target_qubit)) ||
@@ -102,17 +96,12 @@ function hilbert3(N::Int,mat::AbstractMatrix,first_qubit::Int)
 end
 
 """
-`hilbert(N::Int, mat::AbstractMatrix, qubit::Int)`
+    hilbert(N::Int, mat::AbstractMatrix, qubit::Int; control=-2)
 
-Constructs a sparse matrix representing the action of a quantum gate in a Hilbert space associated with a quantum system of `N` qubits.
-
-# Arguments
-- `N::Int`: The number of qubits in the system.
-- `mat::AbstractMatrix`: The quantum gate to be applied.
-- `qubit::Int`: The qubit to which the gate is applied.
-
-# Returns
-`SparseMatrix`: The resulting sparse matrix representation of the gate operation.
+Embed a 2×2 matrix on `qubit` in an `N`-qubit register, returning a sparse
+matrix. Qubit 1 is the most significant tensor factor. Set `control` to a
+distinct qubit to apply `mat` only when the control is |1⟩; the default adds
+no control.
 """
 function hilbert(N::Int,mat::AbstractMatrix,qubit::Int;control::Int=-2)
 
@@ -260,7 +249,12 @@ function relabel_swap(ops::Vector{T}, qubit_mapping::Vector{Int}=Int[]) where T<
 end
 
 """
-    apply noise on qubit or target_qubit of a given state and noise model
+    apply_noise(state, op::QuantumOps, noise::NoiseModel)
+
+Apply the model's one- or two-qubit channel to the operands of `op`, provided
+the operation has `noisy=true`. This function applies only the noise channel;
+`apply(state, op; noise)` applies the gate followed by its noise.
+Statevectors and MPS sample a Kraus branch; density matrices sum all branches.
 """
 function apply_noise(state::Union{AbstractVectorS,AbstractMatrixS}, op::QuantumOps, noise::NoiseModel)
     hasproperty(op, :noisy) && op.noisy || return state
