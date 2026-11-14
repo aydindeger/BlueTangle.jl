@@ -66,37 +66,49 @@ function _average_connectivity(qubit_grid::sa.SparseMatrixCSC{Int, Int})
     return average_connectivity
 end
 
-function _make_swaps(op::QuantumOps,neighbors::Dict;noisy_swap::Bool=false, fswap::Bool=false)
-
-    swap_name=fswap ? "FSWAP" : "SWAP"
-
-    if op.q==1 || op.qubit ∈ neighbors[op.target_qubit] #check locality
-        return [op]
-    else
-        println("Nonlocal operation detected. $(swap_name) will be inserted.")
-        path = _find_shortest_path(neighbors, op.qubit, op.target_qubit)
-
-        swap_operations = []
-        for i in 1:length(path)-2
-            push!(swap_operations, (swap_name,path[i],path[i+1]))#noisy_swap=false: free swap
-        end
-        
-        # new_ind=max(op.qubit,op.target_qubit)
-
-        # new_op = op.qubit<op.target_qubit ? Op(op.name,op.target_qubit-1,op.target_qubit;noisy=op.noisy) : Op(op.name,op.target_qubit+1,op.target_qubit;noisy=op.noisy)
-        new_op = op.qubit<op.target_qubit ? Op(op.name,path[end-1],op.target_qubit;noisy=op.noisy) : Op(op.name,op.target_qubit+1,op.target_qubit;noisy=op.noisy)
-        return [[Op(s...;noisy=noisy_swap) for s=swap_operations];new_op;[Op(s...;noisy=noisy_swap) for s=reverse(swap_operations)]]
+function _make_swaps(op::QuantumOps, neighbors::Dict; noisy_swap::Bool=false, fswap::Bool=false)
+    op isa OpF && return [op]
+    if op isa ifOp
+        branches = [Op[routed for branch_op in branch for routed in _make_swaps(branch_op, neighbors; noisy_swap=noisy_swap, fswap=fswap)] for branch in op.if01]
+        return [ifOp(op.name, op.qubit, branches[1], branches[2])]
     end
-
+    if op isa Op && op.q == 1 && op.control > 0
+        op.qubit in neighbors[op.control] && return [op]
+        path = _find_shortest_path(neighbors, op.control, op.qubit)
+        isempty(path) && throw(ArgumentError("the control and target are disconnected in this layout"))
+        swap_name = fswap ? "FSWAP" : "SWAP"
+        swaps = [Op(swap_name, path[i], path[i+1]; noisy=noisy_swap) for i in 1:length(path)-2]
+        routed = Op(op.name, op.mat, op.qubit; noisy=op.noisy, control=path[end-1])
+        return [swaps; routed; reverse(swaps)]
+    end
+    (op.q == 1 || op.q == 3 || op.qubit in neighbors[op.target_qubit]) && return [op]
+    path = _find_shortest_path(neighbors, op.qubit, op.target_qubit)
+    isempty(path) && throw(ArgumentError("the operated qubits are disconnected in this layout"))
+    swap_name = fswap ? "FSWAP" : "SWAP"
+    swaps = [Op(swap_name, path[i], path[i+1]; noisy=noisy_swap) for i in 1:length(path)-2]
+    control = op.control
+    for swap in swaps
+        control = control == swap.qubit ? swap.target_qubit : control == swap.target_qubit ? swap.qubit : control
+    end
+    # Preserve the actual matrix/function/channel, including custom gates and
+    # operand order; routing is a permutation followed by its inverse.
+    routed = if op isa OpQC
+        OpQC(op.name, op.kraus, path[end-1], op.target_qubit; type=op.type)
+    else
+        Op(op.name, op.mat, path[end-1], op.target_qubit; noisy=op.noisy, control=control)
+    end
+    return [swaps; routed; reverse(swaps)]
 end
 
 
 function _find_shortest_path(neighbors_dict, start_qubit, end_qubit)
-    visited = Set{Int}()
+    visited = Set([start_qubit])
     queue = [(start_qubit, [start_qubit])]  # (current_qubit, path_so_far)
     
-    while !isempty(queue)
-        current_qubit, path = popfirst!(queue)
+    next = 1
+    while next <= length(queue)
+        current_qubit, path = queue[next]
+        next += 1
         if current_qubit == end_qubit
             return path
         end

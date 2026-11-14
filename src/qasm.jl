@@ -2,24 +2,7 @@
 # OpenQASM I/O
 ###############
 
-# ------------ helpers ------------
-const _ID = "[A-Za-z_][A-Za-z0-9_]*"
-const _QREF = "(" * _ID * ")\\[(\\d+)\\]"                     # qreg[idx]
-const _ARGS1 = "\\(\\s*([^(),]+)\\s*\\)"
-const _ARGS2 = "\\(\\s*([^(),]+)\\s*,\\s*([^(),]+)\\s*\\)"
-const _ARGS3 = "\\(\\s*([^(),]+)\\s*,\\s*([^(),]+)\\s*,\\s*([^(),]+)\\s*\\)"
-
-_clean_upper(name::AbstractString) = uppercase(String(split(name, '(')[1]))
-_split_name_args(s::AbstractString) = begin
-    if occursin('(', s)
-        head, rest = split(s, '('; limit=2)
-        return (uppercase(String(head)), String(rstrip(replace(rest, ')' => ""))))
-    else
-        return (uppercase(String(s)), nothing)
-    end
-end
 _qi0(i::Int) = i - 1  # 1→0
-_qi1(s) = parse(Int, s) + 1  # 0→1
 
 """
     to_qasm(ops::Vector{<:QuantumOps};
@@ -36,28 +19,12 @@ function to_qasm(ops::Vector{<:QuantumOps};
                  creg::AbstractString="c")::String
     isempty(ops) && throw(ArgumentError("ops vector is empty"))
 
-    # --- helpers ---
-    _clean_upper(name::AbstractString) = uppercase(String(split(name, '(')[1]))
-    _split_name_args(s::AbstractString) = begin
-        if occursin('(', s)
-            head, rest = split(s, '('; limit=2)
-            return (uppercase(String(head)), String(rstrip(replace(rest, ')' => ""))))
-        else
-            return (uppercase(String(s)), nothing)
-        end
-    end
-    _qi0(i::Int) = i - 1
-
-    # infer N
-    function _maxidx(op::QuantumOps)
-        m = op.qubit
-        if op.target_qubit > 0; m = max(m, op.target_qubit); end
-        if op.control      > 0; m = max(m, op.control);      end
-        m
-    end
-
-    N = isnothing(nqubits) ? maximum(_maxidx.(ops)) : nqubits
+    N = isnothing(nqubits) ? get_N(ops) : nqubits
     N < 1 && throw(ArgumentError("nqubits must be ≥ 1"))
+    N >= get_N(ops) || throw(ArgumentError("nqubits is smaller than an operation's qubit index."))
+    all(name -> occursin(r"^[A-Za-z_][A-Za-z0-9_]*$", name), (qreg, creg)) ||
+        throw(ArgumentError("Invalid QASM register name."))
+    qreg != creg || throw(ArgumentError("Quantum and classical register names must differ."))
 
     # collect opaque decls we need to emit
     opaques = Set{String}()
@@ -66,7 +33,7 @@ function to_qasm(ops::Vector{<:QuantumOps};
     function _op_to_qasm(op::QuantumOps)::Vector{String}
         # Special-case: reset is represented internally as OpQC("res", ...) (γ=1)
         if op isa OpQC
-            nameU = _clean_upper(op.name)
+            nameU = uppercase(op.name)
             if nameU == "RES" || nameU == "RESET"
                 qi = _qi0(op.qubit)
                 return ["reset $qreg[$qi];"]
@@ -83,16 +50,19 @@ function to_qasm(ops::Vector{<:QuantumOps};
         ti = t >= 1 ? _qi0(t) : t
         ci = c >= 1 ? _qi0(c) : c
 
-        nameU = _clean_upper(op.name)
-        base, args = _split_name_args(op.name)
+        nameU = uppercase(strip(op.name))
+        base = _clean_name(op.name)
+        args = _name_with_arg_bool(base) ? join(_get_name_and_arguments(op.name)[3], ",") : nothing
+        op.mat isa Function && throw(ArgumentError("Bind variational parameters before QASM export."))
+        op.mat ≈ gates(op.name) || throw(ArgumentError("Custom matrix for $(op.name) cannot be exported by name."))
 
         # measurements
         if nameU == "MZ" || nameU == "M(Z)"
             return ["measure $qreg[$qi] -> $creg[$qi];"]
         elseif nameU == "MX" || nameU == "M(X)"
-            return ["h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];"]
+            return ["h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];", "h $qreg[$qi];"]
         elseif nameU == "MY" || nameU == "M(Y)"
-            return ["sdg $qreg[$qi];", "h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];"]
+            return ["sdg $qreg[$qi];", "h $qreg[$qi];", "measure $qreg[$qi] -> $creg[$qi];", "h $qreg[$qi];", "s $qreg[$qi];"]
         end
 
         # reset
@@ -107,6 +77,12 @@ function to_qasm(ops::Vector{<:QuantumOps};
                 if base == "X";  return ["cx $qreg[$ci],$qreg[$qi];"] end
                 if base == "Y";  return ["cy $qreg[$ci],$qreg[$qi];"] end
                 if base == "Z";  return ["cz $qreg[$ci],$qreg[$qi];"] end
+                if base == "H";  return ["ch $qreg[$ci],$qreg[$qi];"] end
+                if base == "I";  return ["id $qreg[$qi];"] end
+                if base in ("S", "SD", "T", "TD")
+                    angle = base == "S" ? pi/2 : base == "SD" ? -pi/2 : base == "T" ? pi/4 : -pi/4
+                    return ["cu1($angle) $qreg[$ci],$qreg[$qi];"]
+                end
 
                 # Controlled rotations: export as crx/cry/crz (NOT cu1/cu3)
                 if base == "RX"
@@ -138,7 +114,7 @@ function to_qasm(ops::Vector{<:QuantumOps};
                 if base == "RX" || base == "RY" || base == "RZ"
                     return [lowercase(base) * "(" * (args === nothing ? "" : args) * ") $qreg[$qi];"]
                 end
-                if     nameU == "I";      return String[] end
+                if     nameU == "I";      return ["id $qreg[$qi];"] end
                 if     nameU == "X";      return ["x $qreg[$qi];"] end
                 if     nameU == "Y";      return ["y $qreg[$qi];"] end
                 if     nameU == "Z";      return ["z $qreg[$qi];"] end
@@ -153,20 +129,20 @@ function to_qasm(ops::Vector{<:QuantumOps};
             end
         end
 
-        # 2q / 3q (param and non-param) — unchanged from your last version
+        # Only these two-qubit operators have an exported extra control.
+        c >= 1 && !(base in ("CX", "CNOT", "CY", "CZ", "SWAP")) &&
+            throw(ArgumentError("Controlled $(op.name) is not supported by QASM export."))
         if base == "CX" || base == "CNOT"
             if c >= 1; return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] else return ["cx $qreg[$qi],$qreg[$ti];"] end
         elseif base == "CY"
             if c >= 1
-                push!(opaques, "gate ccy a,b,c { s c; ccx a,b,c; sdg c; }")
-                return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+                return ["sdg $qreg[$ti];", "ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];", "s $qreg[$ti];"]
             else
                 return ["cy $qreg[$qi],$qreg[$ti];"]
             end
         elseif base == "CZ"
             if c >= 1
-                push!(opaques, "gate ccz a,b,c { h c; ccx a,b,c; h c; }")
-                return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
+                return ["h $qreg[$ti];", "ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];", "h $qreg[$ti];"]
             else
                 return ["cz $qreg[$qi],$qreg[$ti];"]
             end
@@ -199,17 +175,6 @@ function to_qasm(ops::Vector{<:QuantumOps};
         elseif base == "SWAPA"
             push!(opaques, "opaque swapa(alpha) a,b;"); return ["swapa($(args)) $qreg[$qi],$qreg[$ti];"]
         end
-
-        if base == "CCX";   return ["ccx $qreg[$qi],$qreg[$ci],$qreg[$ti];"] end
-        if base == "CCY"
-            push!(opaques, "gate ccy a,b,c { s c; ccx a,b,c; sdg c; }")
-            return ["ccy $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
-        end
-        if base == "CCZ"
-            push!(opaques, "gate ccz a,b,c { h c; ccx a,b,c; h c; }")
-            return ["ccz $qreg[$qi],$qreg[$ci],$qreg[$ti];"]
-        end
-        if base == "CSWAP"; return ["cswap $qreg[$ci],$qreg[$qi],$qreg[$ti];"] end
 
         throw(ArgumentError("Unsupported operation for export: $(op.name)"))
     end
@@ -252,171 +217,153 @@ to_qasm(circuit::Circuit, filename::AbstractString; kwargs...)::String =
     to_qasm(vcat(circuit.layers...), filename; kwargs...)
 
 
-########################
-# Robust OpenQASM → Ops
-########################
+"""
+    from_qasm(qasm_or_path::AbstractString; is_file=nothing) -> Vector{QuantumOps}
 
-# minimal helpers
-const _ID = "[A-Za-z_][A-Za-z0-9_]*"
-
-# 0-based qasm index → 1-based package index, from any token like "q[0]" or "anc[12]"
-_q1(tok::AbstractString)::Int = begin
-    t = strip(tok)
-    # tolerate trailing commas/semicolons/whitespace and any register name
-    m = match(r"\[(\d+)\]\s*[;,]?\s*$", t)
-    if m === nothing
-        throw(ArgumentError("Expected qubit like q[<int>]; got: $tok"))
+Read the supported OpenQASM 2 gate subset from text or a file. Quantum registers
+are flattened in declaration order, preserving idle qubits. Numeric parameters
+use the same restricted arithmetic parser as `gates`. Indexed operands and
+whole-register broadcasts are supported. Set `is_file=true` or `false` to select
+file or string input explicitly. Parse errors identify the source and line.
+Custom gate definitions and classical `if` statements must be expanded before
+import. Measurement records follow operation order, not classical-register layout.
+"""
+function from_qasm(qasm_or_path::AbstractString; is_file::Union{Nothing,Bool}=nothing)::Vector{QuantumOps}
+    text = _qasm_to_source(qasm_or_path; is_file=is_file)
+    source_name = is_file === true || (is_file !== false && isfile(qasm_or_path)) ? abspath(qasm_or_path) : "<string>"
+    source = replace(text, r"//[^\n]*" => "")
+    isempty(strip(source)) || endswith(rstrip(source), ';') ||
+        throw(ArgumentError("$source_name:$(count(==('\n'),source)+1): Missing ';' after the final statement."))
+    statements = Tuple{Int,String}[]
+    line = 1
+    for chunk in split(source, ';')
+        first_line = line + count(==('\n'), match(r"^\s*",chunk).match)
+        line += count(==('\n'),chunk)
+        isempty(strip(chunk)) || push!(statements,(first_line,String(strip(chunk))))
     end
-    parse(Int, m.captures[1]) + 1
-end
+    registers = Dict{String,UnitRange{Int}}()
+    classical_registers = Dict{String,Int}()
+    nqubits = 0
+    implicit_register = nothing
+    ops = QuantumOps[]
 
-_qi1(s::AbstractString) = parse(Int, s) + 1   # 0→1
-
-_q2(argstr::AbstractString) = begin
-    parts = split(argstr, ',')
-    length(parts) == 2 || throw(ArgumentError("Expected two qubits, got: $argstr"))
-    (_q1(parts[1]), _q1(parts[2]))
-end
-
-
-"""
-qasm_content = read("/Users/deger/CODES/BLUETANGLE/Extras/circuit.qasm", String)
-ops=from_qasm(qasm_content);
-"""
-function from_qasm(qasm::AbstractString)::Vector{QuantumOps}
-    ops = Vector{QuantumOps}()
-
-    qasm_text = isfile(qasm) ? read(qasm, String) : String(qasm)
-
-    # strip // comments and normalize
-    src = replace(qasm_text, r"//.*" => "")
-    src = join(split(src, '\n') .|> strip, '\n')
-    stmts = [strip(s)*";" for s in split(src, ';') if !isempty(strip(s))]
-
-    for stmt in stmts
-        s = lowercase(stmt)
-
-        # ignore boilerplate
-        if startswith(s, "openqasm") || startswith(s, "include") ||
-           startswith(s, "qreg")     || startswith(s, "creg")    ||
-           startswith(s, "opaque")   || startswith(s, "gate")    ||
-           startswith(s, "barrier")
-            continue
-        end
-
-        # measure
-        if (m = match(r"^measure\s+([^\s]+)\s*->\s*([^\s]+)\s*;", s)) !== nothing
-            qi = _q1(m.captures[1]); push!(ops, Op("MZ", qi)); continue
-        end
-
-        # reset
-        if (m = match(r"^reset\s+([^\s;]+)\s*;", s)) !== nothing
-            qi = _q1(m.captures[1])
-            push!(ops, Op("RES", qi))
-            continue
-        end
-
-        # unary no-param
-        if (m = match(r"^(x|y|z|h|s|sdg|t|tdg|sx|sxdg)\s+([^\s;]+)\s*;", s)) !== nothing
-            kw = m.captures[1]; qi = _q1(m.captures[2])
-            oname = kw == "sdg" ? "SD" : kw == "tdg" ? "TD" : kw == "sx" ? "XSQRT" : kw == "sxdg" ? "SXDG" : uppercase(kw)
-            push!(ops, Op(oname, qi)); continue
-        end
-
-        # unary param: rx/ry/rz, u1/u2/u3
-        if (m = match(r"^(rx|ry|rz)\s*\(\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
-            gate = m.captures[1]; θ = strip(m.captures[2]); qi = _q1(m.captures[3])
-            push!(ops, Op("$(gate)($θ)", qi)); continue
-        end
-        if (m = match(r"^u1\s*\(\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
-            λ = strip(m.captures[1]); qi = _q1(m.captures[2]); push!(ops, Op("U1($λ)", qi)); continue
-        end
-        if (m = match(r"^u2\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
-            ϕ = strip(m.captures[1]); λ = strip(m.captures[2]); qi = _q1(m.captures[3])
-            push!(ops, Op("U2($ϕ,$λ)", qi)); continue
-        end
-        if (m = match(r"^u3\s*\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ϕ = strip(m.captures[2]); λ = strip(m.captures[3]); qi = _q1(m.captures[4])
-            push!(ops, Op("U3($θ,$ϕ,$λ)", qi)); continue
-        end
-
-        # controlled 1q rotations: cu1/cu3 and crx/cry/crz
-        if (m = match(r"^(?:cu1|cp)\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            λ = strip(m.captures[1]); ctrl = _q1(m.captures[2]); tgt = _q1(m.captures[3])
-            push!(ops, Op("U1($λ)", tgt; control=ctrl)); continue
-        end
-        if (m = match(r"^cu3\s*\(\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ϕ = strip(m.captures[2]); λ = strip(m.captures[3])
-            ctrl = _q1(m.captures[4]); tgt = _q1(m.captures[5])
-            if ϕ == "0" && λ == "0"
-                push!(ops, Op("ry($θ)", tgt; control=ctrl))
-            else
-                push!(ops, Op("U3($θ,$ϕ,$λ)", tgt; control=ctrl))
+    function qubit(token)
+        m = match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*(\d+)\s*\]$", strip(token))
+        m === nothing && throw(ArgumentError("Expected an indexed qubit, got: $token"))
+        name, index = m.captures[1], parse(Int, m.captures[2])
+        if isempty(registers)
+            if implicit_register === nothing
+                implicit_register = name
+            elseif implicit_register != name
+                throw(ArgumentError("Declare quantum registers before using multiple register names."))
             end
-            continue
+            return index + 1
         end
-        if (m = match(r"^crx\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ctrl = _q1(m.captures[2]); tgt = _q1(m.captures[3])
-            push!(ops, Op("rx($θ)", tgt; control=ctrl)); continue
-        end
-        if (m = match(r"^cry\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ctrl = _q1(m.captures[2]); tgt = _q1(m.captures[3])
-            push!(ops, Op("ry($θ)", tgt; control=ctrl)); continue
-        end
-        if (m = match(r"^crz\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ctrl = _q1(m.captures[2]); tgt = _q1(m.captures[3])
-            push!(ops, Op("rz($θ)", tgt; control=ctrl)); continue
-        end
-
-        # binary non-param (+ map C* to controlled-1q)
-        if (m = match(r"^(cx|cnot|cy|cz|swap|iswap|fswap|syc|ecr)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            head = m.captures[1]; a = _q1(m.captures[2]); b = _q1(m.captures[3])
-            if head == "cx" || head == "cnot"
-                push!(ops, Op("X", b; control=a))
-            elseif head == "cy"
-                push!(ops, Op("Y", b; control=a))
-            elseif head == "cz"
-                push!(ops, Op("Z", b; control=a))
-            else
-                push!(ops, Op(uppercase(head), a, b))
-            end
-            continue
-        end
-
-        # ternary non-param
-        if (m = match(r"^(ccx|ccy|ccz|cswap)\s+([^\s,;]+)\s*,\s*([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            head = m.captures[1]
-            a = _q1(m.captures[2]); b = _q1(m.captures[3]); c = _q1(m.captures[4])
-            if head == "ccx";   push!(ops, Op("CCX", a, b, c))
-            elseif head == "ccy"; push!(ops, Op("CCY", a, b, c))
-            elseif head == "ccz"; push!(ops, Op("CCZ", a, b, c))
-            else                  push!(ops, Op("CSWAP", b, a, c))
-            end
-            continue
-        end
-
-        # binary param: rxx/ryy/rzz/rxy, fsim, givens, swapa
-        if (m = match(r"^(rxx|ryy|rzz|rxy)\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            kind = uppercase(m.captures[1]); θ = strip(m.captures[2])
-            a = _q1(m.captures[3]); b = _q1(m.captures[4])
-            push!(ops, Op("$(kind)($θ)", a, b)); continue
-        end
-        if (m = match(r"^givens\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); a = _q1(m.captures[2]); b = _q1(m.captures[3])
-            push!(ops, Op("GIVENS($θ)", a, b)); continue
-        end
-        if (m = match(r"^fsim\s*\(\s*(.+?)\s*,\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            θ = strip(m.captures[1]); ϕ = strip(m.captures[2]); a = _q1(m.captures[3]); b = _q1(m.captures[4])
-            push!(ops, Op("FSIM($θ,$ϕ)", a, b)); continue
-        end
-        if (m = match(r"^swapa\s*\(\s*(.+?)\s*\)\s+([^\s,;]+)\s*,\s*([^\s;]+)\s*;", s)) !== nothing
-            α = strip(m.captures[1]); a = _q1(m.captures[2]); b = _q1(m.captures[3])
-            push!(ops, Op("SWAPA($α)", a, b)); continue
-        end
-
-        # if we got here, it’s something we don’t recognize
-        throw(ArgumentError("Unsupported or unrecognized statement: $stmt"))
+        haskey(registers, name) || throw(ArgumentError("Unknown quantum register: $name"))
+        index < length(registers[name]) || throw(ArgumentError("Qubit $token is outside its register."))
+        return first(registers[name]) + index
     end
 
+    function operand(token; classical=false)
+        name = strip(token)
+        if classical
+            if haskey(classical_registers,name)
+                return collect(1:classical_registers[name])
+            end
+            m = match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*(\d+)\s*\]$",name)
+            m === nothing && throw(ArgumentError("Expected a classical register or indexed bit, got: $token"))
+            register, index = m.captures[1], parse(Int,m.captures[2])
+            if !isempty(classical_registers)
+                haskey(classical_registers,register) || throw(ArgumentError("Unknown classical register: $register"))
+                index < classical_registers[register] || throw(ArgumentError("Classical bit $token is outside its register."))
+            elseif !isempty(registers)
+                throw(ArgumentError("Declare the classical destination register before measurement."))
+            end
+            return [index+1]
+        end
+        return haskey(registers,name) ? collect(registers[name]) : [qubit(name)]
+    end
+
+    for (line,statement) in statements
+        try
+            occursin(r"^(?:gate|if)\b"i,statement) &&
+                throw(ArgumentError("Expand custom gates and classical conditions before importing QASM."))
+            if occursin(r"^OPENQASM\s+2(?:\.0)?$"i, statement) ||
+               occursin(r"^include\s+\"qelib1\.inc\"$"i, statement) ||
+               occursin(r"^(?:opaque|barrier)\s+"i, statement)
+                continue
+            end
+            if (m = match(r"^(qreg|creg)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*(\d+)\s*\]$", statement)) !== nothing
+                kind, name, count = m.captures[1], m.captures[2], parse(Int, m.captures[3])
+                isempty(ops) || throw(ArgumentError("Declare quantum registers before operations."))
+                count > 0 || throw(ArgumentError("Register size must be positive."))
+                (haskey(registers,name) || haskey(classical_registers,name)) && throw(ArgumentError("Duplicate register: $name"))
+                if kind == "qreg"
+                    registers[name] = nqubits + 1:nqubits + count
+                    nqubits += count
+                else
+                    classical_registers[name] = count
+                end
+                continue
+            end
+            if (m = match(r"^measure\s+(.+?)\s*->\s*(.+)$"i, statement)) !== nothing
+                sources = operand(m.captures[1])
+                destinations = operand(m.captures[2]; classical=true)
+                length(sources) == length(destinations) || throw(DimensionMismatch("Measurement registers must have the same size."))
+                append!(ops,[Op("MZ",q) for q in sources])
+                continue
+            end
+            if (m = match(r"^reset\s+(.+)$"i, statement)) !== nothing
+                append!(ops,[Op("RES",q) for q in operand(m.captures[1])])
+                continue
+            end
+
+            m = match(r"^([A-Za-z][A-Za-z0-9]*)\s*(?:\((.*)\))?\s+(.+)$", statement)
+            m === nothing && throw(ArgumentError("Unsupported QASM statement: $statement"))
+            name = lowercase(m.captures[1])
+            arguments = m.captures[2]
+            operands = operand.(split(m.captures[3], ','))
+            width = maximum(length,operands)
+            all(qs -> length(qs) in (1,width),operands) || throw(DimensionMismatch("Broadcast register sizes must agree."))
+            parameterized = arguments !== nothing
+            for index in 1:width
+                qubits = [qs[length(qs) == 1 ? 1 : index] for qs in operands]
+                if !parameterized && name in ("id", "i", "x", "y", "z", "h", "s", "sdg", "t", "tdg", "sx", "sxdg")
+                    length(qubits) == 1 || throw(ArgumentError("$name requires one qubit."))
+                    aliases = Dict("id"=>"I", "sdg"=>"SD", "tdg"=>"TD", "sxdg"=>"SXDG")
+                    push!(ops, Op(get(aliases, name, uppercase(name)), only(qubits)))
+                elseif parameterized && name in ("rx", "ry", "rz", "u", "u1", "u2", "u3", "p")
+                    length(qubits) == 1 || throw(ArgumentError("$name requires one qubit."))
+                    gate_name = name == "u" ? "U3" : name
+                    push!(ops, Op("$gate_name($arguments)", only(qubits)))
+                elseif name in ("cx", "cnot", "cy", "cz", "ch", "crx", "cry", "crz", "cu1", "cu2", "cu3", "cp")
+                    length(qubits) == 2 || throw(ArgumentError("$name requires two qubits."))
+                    has_parameters = name in ("crx", "cry", "crz", "cu1", "cu2", "cu3", "cp")
+                    parameterized == has_parameters || throw(ArgumentError("Wrong parameter form for $name."))
+                    base = name == "cnot" ? "X" : name == "cp" ? "P" : uppercase(name[2:end])
+                    gate_name = parameterized ? "$base($arguments)" : base
+                    push!(ops, Op(gate_name, qubits[2]; control=qubits[1]))
+                elseif !parameterized && name in ("ccx", "ccy", "ccz", "cswap")
+                    length(qubits) == 3 || throw(ArgumentError("$name requires three qubits."))
+                    a, b, c = qubits
+                    push!(ops, name == "cswap" ? Op("CSWAP", b, a, c) : Op(uppercase(name), a, b, c))
+                elseif (!parameterized && name in ("swap", "iswap", "fswap", "syc", "ecr")) ||
+                       (parameterized && name in ("rxx", "ryy", "rzz", "rxy", "givens", "fsim", "swapa"))
+                    length(qubits) == 2 || throw(ArgumentError("$name requires two qubits."))
+                    gate_name = parameterized ? "$name($arguments)" : uppercase(name)
+                    push!(ops, Op(gate_name, qubits...))
+                else
+                    throw(ArgumentError("Unsupported QASM statement: $statement"))
+                end
+            end
+        catch error
+            error isa InterruptException && rethrow()
+            throw(ArgumentError("$source_name:$line: $(sprint(showerror,error))\n  $statement;"))
+        end
+    end
+
+    # The vector API carries its register size through the highest used index.
+    # Retain a declared idle tail so later compile/run calls allocate every qubit.
+    nqubits > get_N(ops) && push!(ops, Op("I", nqubits))
     return ops
 end

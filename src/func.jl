@@ -53,33 +53,33 @@ expect(state::AbstractVectorS, op_str::String) -> Vector{Float64}
 
 Alias for state vector:
 ```
-expect(rho::sa.SparseMatrixCSC, op::QuantumOps) -> Float64
-expect(rho::sa.SparseMatrixCSC, op_str::String, qubit::Int) -> Float64
-expect(rho::sa.SparseMatrixCSC, matrix::sa.SparseMatrixCSC) -> Float64
-expect(rho::sa.SparseMatrixCSC, op_str::String) -> Vector{Float64}
+expect(rho::AbstractMatrixS, op::QuantumOps) -> Float64
+expect(rho::AbstractMatrixS, op_str::String, qubit::Int) -> Float64
+expect(rho::AbstractMatrixS, matrix::sa.SparseMatrixCSC) -> Float64
+expect(rho::AbstractMatrixS, op_str::String) -> Vector{Float64}
 ```
 
 Calculate the expectation value for quantum states or density matrices given an operator. This function has several forms depending on the input parameters:
 
 - `expect(state::AbstractVectorS, op::QuantumOps)`: Computes the expectation value for a quantum state vector with a given operator.
 
-- `expect(rho::sa.SparseMatrixCSC, op::QuantumOps)`: Computes the expectation value for a density matrix with a given operator.
+- `expect(rho::AbstractMatrixS, op::QuantumOps)`: Computes the expectation value for a density matrix with a given operator.
 
 - `expect(state::AbstractVectorS, op_str::String, qubit::Int)`: Computes the expectation value for a specific qubit in a quantum state vector with an operator specified as a string.
 
-- `expect(rho::sa.SparseMatrixCSC, op_str::String, qubit::Int)`: Computes the expectation value for a specific qubit in a density matrix with an operator specified as a string.
+- `expect(rho::AbstractMatrixS, op_str::String, qubit::Int)`: Computes the expectation value for a specific qubit in a density matrix with an operator specified as a string.
 
 - `expect(state::AbstractVectorS, op_str::String)`: Computes the expectation values for all qubits in a quantum state vector given an operator as a string.
 
-- `expect(rho::sa.SparseMatrixCSC, op_str::String)`: Computes the expectation values for all qubits in a density matrix given an operator as a string.
+- `expect(rho::AbstractMatrixS, op_str::String)`: Computes the expectation values for all qubits in a density matrix given an operator as a string.
 
 - `expect(state::AbstractVectorS, matrix::sa.SparseMatrixCSC)`: Computes the expectation value using a sparse matrix representation of an operator for a state vector.
 
-- `expect(rho::sa.SparseMatrixCSC, matrix::sa.SparseMatrixCSC)`: Computes the expectation value using a sparse matrix representation of an operator for a density matrix.
+- `expect(rho::AbstractMatrixS, matrix::sa.SparseMatrixCSC)`: Computes the expectation value using a sparse matrix representation of an operator for a density matrix.
 
 # Arguments
 - `state::AbstractVectorS`: The quantum state vector.
-- `rho::sa.SparseMatrixCSC`: The density matrix.
+- `rho::AbstractMatrixS`: The density matrix.
 - `op::QuantumOps`: The quantum operator.
 - `op_str::String`: The string representation of the operator.
 - `qubit::Int`: The specific qubit index.
@@ -92,7 +92,7 @@ expect(state::AbstractVectorS,op::QuantumOps)=real(state'*op.expand(get_N(state)
 expect(rho::AbstractMatrixS,op::QuantumOps)=real(la.tr(rho*op.expand(get_N(rho))))
 
 # expect(state::AbstractVectorS,op_str::String,qubit::Int)=real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state)
-# expect(rho::sa.SparseMatrixCSC,op_str::String,qubit::Int)=real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho))))
+# expect(rho::AbstractMatrixS,op_str::String,qubit::Int)=real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho))))
 
 expect(state::AbstractVectorS,op_str::String)=[real(state'*expand_multi_op(op_str,[qubit],get_N(state))*state) for qubit=1:get_N(state)]
 expect(rho::AbstractMatrixS,op_str::String)=[real(la.tr(rho*expand_multi_op(op_str,[qubit],get_N(rho)))) for qubit=1:get_N(rho)]
@@ -104,20 +104,20 @@ expect(rho::AbstractMatrixS,matrix::AbstractMatrixS)=real(la.tr(rho*matrix))
 Alias:
 ```
 correlation(state::AbstractVectorS, list_of_operators::String, qubits_applied::Vector) -> Float64
-correlation(rho::sa.SparseMatrixCSC, list_of_operators::String, qubits_applied::Vector) -> Float64
+correlation(rho::AbstractMatrixS, list_of_operators::String, qubits_applied::Vector) -> Float64
 ```
 
 Calculate the correlation for a given set of operators applied to specific qubits in either a quantum state vector or a density matrix. This function has two primary forms:
 
 - `correlation(state::AbstractVectorS, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a quantum state vector (`state`) with a specified list of operators and qubits.
 
-- `correlation(rho::sa.SparseMatrixCSC, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a density matrix (`rho`) with a specified list of operators and qubits.
+- `correlation(rho::AbstractMatrixS, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a density matrix (`rho`) with a specified list of operators and qubits.
 
 The `corr_from_rho` function is an alias to `get_corr` for density matrices.
 
 # Arguments
 - `state::AbstractVectorS`: The quantum state vector.
-- `rho::sa.SparseMatrixCSC`: The density matrix.
+- `rho::AbstractMatrixS`: The density matrix.
 - `list_of_operators::String`: A string representing a list of operators, e.g., "Z,Z".
 - `qubits_applied::Vector`: A vector of qubit indices on which the operators are applied.
 
@@ -148,7 +148,6 @@ end
 
 ##========== expectation from state & rho and operator ==========
 
-#todo: is this expectation or correlation?
 """
 `_sample_to_expectation(bprob::Tuple, qubits::Vector) -> Float64`
 
@@ -170,7 +169,11 @@ prob=bprob[2]
 
 probsum=0
 for (f,p)=zip(focks,prob)
-    if iseven(sum(f[qubits]))
+    parity = false
+    for q in qubits
+        parity = xor(parity, isodd(f[q]))
+    end
+    if !parity
         probsum+=p
     else
         probsum-=p
@@ -183,10 +186,10 @@ end
 
 ##========== expectation from measurement ==========
 
-mag_moments(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)=[mag_moments(rho,op_str,ord) for ord=1:max_moment]
+mag_moments(rho::AbstractMatrixS,op_str::String;max_moment=12)=[mag_moments(rho,op_str,ord) for ord=1:max_moment]
 
 """
-`mag_moments(rho::sa.SparseMatrixCSC, op_str::String, moment_order::Int) -> Float64`
+`mag_moments(rho::AbstractMatrixS, op_str::String, moment_order::Int) -> Float64`
 
 Calculates the magnetization moments from a given density matrix.
 
@@ -196,15 +199,17 @@ Calculates the magnetization moments from a given density matrix.
 
 Returns the computed magnetization moment of the specified order.
 """
-function mag_moments(rho::sa.SparseMatrixCSC,op_str::String,moment_order::Int)
-    throw("fix")
-    N=get_N(rho)
-    mag_op=sum(hilbert_op(Op(op_str,i),N) for i=1:N)
-    return real(la.tr(mag_op^moment_order*rho))
+function mag_moments(rho::AbstractMatrixS,op_str::String,moment_order::Int)
+    moment_order >= 0 || throw(ArgumentError("moment order must be nonnegative"))
+    N = get_N(rho)
+    moment_order == 0 && return real(la.tr(rho))
+    N == 0 && return zero(real(la.tr(rho)))
+    mag_op = sum(Op(op_str, i).expand(N) for i in 1:N)
+    return real(la.tr(mag_op^moment_order * rho))
 end
 
 """
-`mag_cumulants(rho::sa.SparseMatrixCSC, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
+`mag_cumulants(rho::AbstractMatrixS, op_str::String, cumulant_order::Int; max_moment::Int=12) -> Float64`
 
 Calculates the magnetization cumulants from a given density matrix.
 
@@ -215,12 +220,12 @@ Calculates the magnetization cumulants from a given density matrix.
 
 Returns the computed magnetization cumulant of the specified order.
 """
-function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String,cumulant_order::Int;max_moment=12)
+function mag_cumulants(rho::AbstractMatrixS,op_str::String,cumulant_order::Int;max_moment=12)
     moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments,cumulant_order)
 end
 
-function mag_cumulants(rho::sa.SparseMatrixCSC,op_str::String;max_moment=12)
+function mag_cumulants(rho::AbstractMatrixS,op_str::String;max_moment=12)
     moments=[mag_moments(rho,op_str,i) for i=1:max_moment]
     return cumulants_from_moments(moments)
 end
@@ -232,8 +237,18 @@ mag_moments(m::Measurement,moment_order::Int)=mag_moments(m.number_of_qubits,m.b
 mag_moments(m::Measurement;max_moment=12)=[mag_moments(m::Measurement,ord) for ord=1:max_moment]
 
 function mag_moments(number_of_qubits::Int,bitstr::Union{UnitRange,Vector},sample::Union{sa.SparseVector,Vector},moment_order::Int)
-    mag=sum.(BlueTangle.mag_basis.(bitstr,number_of_qubits))
-    return sum(mag.^(moment_order) .* sample)
+    moment = 0.0
+    for i in eachindex(bitstr, sample)
+        # Read the same N low bits as mag_basis, without allocating bit vectors.
+        ones = 0
+        for shift in 0:number_of_qubits-1
+            ones += (bitstr[i] >> shift) & 1
+        end
+        magnetization = number_of_qubits - 2ones
+        # High moments can exceed Int even for modest qubit counts (40^12).
+        moment += float(magnetization)^moment_order * sample[i]
+    end
+    return moment
 end
 
 ##
@@ -276,7 +291,7 @@ function calculate_high_moments(psi::it.MPS,sites::Vector,direction::String="Z",
 
     W=deepcopy(W0)
     for i=1:max_moment_order
-        push!(moments_MPO,inner(psi',W,psi))
+        push!(moments_MPO, real(it.inner(psi', W, psi)))
         W=it.apply(W,W0)
     end
     return moments_MPO
@@ -294,37 +309,38 @@ Calculates the entanglement entropy of a quantum state.
 
 - `psi`: The quantum state vector (sa.SparseVector) for which to calculate the entropy.
 
-Returns the calculated entanglement entropy.
+Returns `(entropy, spectrum)` by default for compatibility. Set
+`spectrum_bool=false` to return only the entropy, or `true` for the tuple.
+The spectrum contains `-log(p)` for nonzero Schmidt probabilities `p`.
 """
-function entanglement_entropy(psi::AbstractVectorS;spectrum_bool=false)
-
-    N=get_N(psi)
-    partA=N ÷ 2
-    
-    mat=reshape(psi,(2^(partA),2^(N-partA)));
-    
-    spec=la.svdvals(Matrix(mat)).^2
-    
-    spec=spec[spec .> 0]
-    
-    return spectrum_bool==false ? sum(-spec.*log.(spec)) : sum(-spec.*log.(spec)),-log.(spec)
-    
+function entanglement_entropy(psi::AbstractVectorS; spectrum_bool::Union{Nothing,Bool}=nothing)
+    N = get_N(psi)
+    partA = N ÷ 2
+    amplitudes = reshape(psi, (2^partA, 2^(N-partA)))
+    probabilities = la.svdvals(Matrix(amplitudes)).^2
+    probabilities = probabilities[probabilities .> 0]
+    entropy = -sum(probabilities .* log.(probabilities))
+    # Retain the historical tuple default; callers can explicitly request a scalar.
+    return spectrum_bool === false ? entropy : (entropy, -log.(probabilities))
 end
 
-
-
 """
-    entanglement_entropy(rho::sa.SparseMatrixCSC) -> Float64
+    entanglement_entropy(rho::AbstractMatrix; spectrum_bool=nothing)
 
-Calculates the entanglement entropy of a density matrix.
-
-- `rho`: The density matrix (sa.SparseMatrixCSC) for which to calculate the entropy.
-
-Returns the calculated entanglement entropy.
+Return `(entropy, spectrum)` for the reduced density matrix of the last
+`floor(N/2)` qubits, using natural logarithms. Set `spectrum_bool=false` for
+just the entropy, or `true` for the tuple. The no-keyword tuple return is
+retained for compatibility. For a mixed global state, reduced entropy includes
+both quantum correlations and statistical mixing; it is not an entanglement
+measure on its own.
 """
-function entanglement_entropy(rho::sa.SparseMatrixCSC)
-    mat=bipartition_trace(rho)#trace half
-    spec=la.svdvals(mat)
-    spec=spec[spec .> 0]
-    return sum(-spec.*log.(spec)),-log.(spec) 
+function entanglement_entropy(rho::AbstractMatrixS; spectrum_bool::Union{Nothing,Bool}=nothing)
+    N = get_N(rho)
+    reduced = partial_trace(rho, fill(2, N), collect(1:N-N÷2))
+    probabilities = la.eigvals(la.Hermitian(Matrix(reduced)))
+    minimum(probabilities) >= -1e-12 ||
+        throw(ArgumentError("density matrix must be positive semidefinite"))
+    probabilities = sort(filter(>(0), probabilities); rev=true)
+    entropy = -sum(probabilities .* log.(probabilities))
+    return spectrum_bool === false ? entropy : (entropy, -log.(probabilities))
 end

@@ -3,6 +3,8 @@ using Test
 using LinearAlgebra
 using Random
 
+Random.seed!(1234)
+
 @testset "BlueTangle.jl" begin
 
     @test BlueTangle.int2bin(2,4)==[0,0,1,0]
@@ -106,7 +108,7 @@ using Random
         for o=ops
             rho=apply(rho,o)
         end
-        mag_r=sum(expect(state,sym))
+        mag_r=sum(expect(rho,sym))
 
         b1=isapprox(mag_e,mag_r,atol=1e-10);
         b2=isapprox(state*state',rho,atol=1e-10);
@@ -285,3 +287,18 @@ using Random
     end
 
 end
+
+include("gates_noise.jl")
+include("sampling.jl")
+include("linalg.jl")
+include("circuit_layers.jl")
+
+include("parsing.jl")
+include("vqa.jl")
+include("density_backend.jl")
+include("qec.jl")
+include("backends.jl")
+include("trotter.jl")
+
+include("numerical.jl")
+include("optimization.jl")

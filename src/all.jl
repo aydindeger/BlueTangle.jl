@@ -3,7 +3,7 @@ import LinearAlgebra as la
 import ITensors as its
 import ITensorMPS as it
 import StatsBase as sb
-import Pkg
+import Serialization
 
 using ForwardDiff, Optimisers, OptimKit
 import PRIMA as pr
@@ -39,6 +39,7 @@ macro docVSC(fn)
 end
 
 *(o::QuantumOps, state::AbstractVectorS) = apply(state, o)
+*(o::QuantumOps, rho::AbstractMatrixS) = apply(rho, o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi, o)
 *(tensor::its.ITensor, psi::it.MPS) = it.apply(tensor, psi) #exact
 
@@ -51,7 +52,7 @@ end
 """
     ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron
 """
-⊗(x::AbstractMatrixS, y::AbstractMatrixS) = foldl(kron, [x, y])
+⊗(x::AbstractMatrixS, y::AbstractMatrixS) = kron(x, y)
 
 fields(m) = fieldnames(typeof(m))
 attributes(m) = fields(m)

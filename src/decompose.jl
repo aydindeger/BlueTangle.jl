@@ -80,16 +80,18 @@ function pauli_decomposition(A::AbstractMatrixS)
 end
 
 """
-#fix this can be made more efificent
-pauli_reconstruction(coefficients::AbstractVectorS, pauli_tensors::Vector)
-# Function to reconstruct the matrix from Pauli decomposition
+    pauli_reconstruction(coefficients, paulis::Vector)
 
-pauli_reconstruction(coefficients::AbstractVectorS,qubit::Int)
-    # nonlocal reconstruction #add id on qubit+1
+Reconstruct an operator from matching coefficients and Pauli matrices or names.
+Use the full coefficient vector with `pauli_decomposition_tensor(n)`, or the
+nonzero coefficients and names returned by `pauli_decomposition`.
 """
-function pauli_reconstruction(non_zero_coefficients::AbstractVectorS, paulis::Vector)
-    # sum(coefficients[i] * pauli_tensors[i] for i in 1:length(coefficients))
-    sum(non_zero_coefficients.*get_operator.(paulis))
+function pauli_reconstruction(coefficients::AbstractVectorS, paulis::Vector)
+    length(coefficients) == length(paulis) ||
+        throw(DimensionMismatch("each coefficient needs a Pauli operator"))
+    isempty(paulis) && throw(ArgumentError("provide a Pauli basis to determine the matrix dimension"))
+    operators = map(P -> P isa AbstractMatrix ? P : get_operator(P), paulis)
+    return sum(coefficients[i] * operators[i] for i in eachindex(coefficients))
 end
 
 #nonlocal reconstruction
@@ -158,7 +160,7 @@ end
 kronecker_decomposition(C::AbstractMatrixS)
 
 C = kron(gates("RZ(.1pi)"), gates("RY(.3)"))
-A, B = nearest_kronecker_product(C)
+A, B = kronecker_decomposition(C)
 isapprox(la.norm(kron(A, B) - C),0,atol=1e-10)
 """
 function kronecker_decomposition(C::AbstractMatrixS)

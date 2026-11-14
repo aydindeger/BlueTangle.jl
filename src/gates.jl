@@ -128,7 +128,7 @@ Generates a random quantum gate operation (either single or two-qubit).
 
 Returns an `Op` object representing the randomly generated quantum gate.
 """
-random_gate(N)=rand([random_gate_1(N),random_gate_2(N)])
+random_gate(N)=(N == 1 || rand(Bool)) ? random_gate_1(N) : random_gate_2(N)
 
 """
 `random_ops_2(N::Int, len::Int; measure_prob::Float64=0.0, measure_basis::Vector{String}=["MX", "MY", "MZ"]) -> Vector{QuantumOps}`
@@ -306,16 +306,17 @@ ops = random_clifford(5, 10; measure_prob=0.2, measure_basis=["MX","MZ"])
 This example generates a sequence of 10 random Clifford gates and measurements (with a 20% chance of a measurement after each gate) for a 5-qubit system.
 """
 function random_clifford(N::Int,len::Int;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
+    N > 0 || throw(ArgumentError("N must be positive."))
     ops=Vector{QuantumOps}()#[]#Vector{QuantumOps}(undef,len)
+    choices = N == 1 ? ("X", "Y", "Z", "H", "S") : ("X", "Y", "Z", "H", "S", "CNOT", "SWAP", "CZ")
     for _=1:len
-        clifford_rand = rand(["X", "Y", "Z", "H", "S","CNOT", "SWAP", "CZ"])
-        c2 = ["CNOT", "SWAP", "CZ"]
-        r=rand(1:N-1)
+        clifford_rand = rand(choices)
 
-        if clifford_rand ∈ c2
+        if clifford_rand in ("CNOT", "SWAP", "CZ")
+            r=rand(1:N-1)
             push!(ops,Op(clifford_rand,r,r+1))
         else
-            push!(ops,Op(clifford_rand,r))
+            push!(ops,Op(clifford_rand,rand(1:N)))
         end
 
         if rand()<measure_prob
@@ -341,26 +342,64 @@ function _is_it_measurement(name::String)
     return bool
 end
 
-function _get_name_and_arguments(op_name0::String)
-    
-    op_name=_clean_name(op_name0)
+const _numeric_functions = Dict{Symbol,Function}(
+    :+ => +, :- => -, :* => *, :/ => /, :^ => ^, :// => //,
+    :sin => sin, :cos => cos, :tan => tan,
+    :asin => asin, :acos => acos, :atan => atan,
+    :sinh => sinh, :cosh => cosh, :tanh => tanh,
+    :sqrt => sqrt, :cbrt => cbrt, :exp => exp, :ln => log,
+    :log => log, :log2 => log2, :log10 => log10, :abs => abs,
+    :sinpi => sinpi, :cospi => cospi,
+)
 
-    if BlueTangle._name_with_arg_bool(op_name) 
-        op_str = split(op_name0, "(")
-        tuple_str = replace(op_str[2], '(' => "", ')' => "")
-        elements = string.(split(tuple_str, ","))
-        return op_name,"("*op_str[2],eval.(Meta.parse.(elements))
+# Parse Julia's familiar arithmetic syntax (including 2pi), but never execute
+# input as Julia code. Only real literals, constants, and these functions apply.
+function _numeric_value(expression)
+    value = if expression isa Real && !(expression isa Bool)
+        expression
+    elseif expression in (:pi, :π)
+        pi
+    elseif expression in (:e, :ℯ)
+        ℯ
+    elseif expression isa Expr && expression.head == :call &&
+           expression.args[1] isa Symbol && haskey(_numeric_functions, expression.args[1])
+        f = _numeric_functions[expression.args[1]]
+        arguments = map(_numeric_value, expression.args[2:end])
+        applicable(f, arguments...) || throw(ArgumentError("Invalid numeric function arguments."))
+        # Julia lowers literal negative powers specially; reproduce their real
+        # numeric meaning without evaluating or compiling the expression.
+        f === (^) && length(arguments) == 2 && arguments[1] isa Integer && arguments[2] < 0 ?
+            float(arguments[1]) ^ arguments[2] : f(arguments...)
     else
-        return op_name
+        throw(ArgumentError("Gate parameters accept only real arithmetic and supported numeric functions."))
     end
-
+    value isa Real && isfinite(value) || throw(ArgumentError("Gate parameters must be finite real numbers."))
+    return value
 end
 
+function _get_name_and_arguments(op_name0::String)
+    name = strip(op_name0)
+    op_name = _clean_name(name)
+    _name_with_arg_bool(op_name) || return op_name
+    expression = try
+        Meta.parse(name)
+    catch
+        throw(ArgumentError("Invalid gate parameter expression: $name"))
+    end
+    expression isa Expr && expression.head == :call && expression.args[1] isa Symbol &&
+        uppercase(string(expression.args[1])) == op_name ||
+        throw(ArgumentError("Expected a gate name followed by numeric parameters: $name"))
+    arguments = map(_numeric_value, expression.args[2:end])
+    applicable(_parameterized_gates[op_name], arguments...) ||
+        throw(ArgumentError("Wrong number of parameters for $op_name."))
+    argument_text = String(name[findfirst('(', name):end])
+    return op_name, argument_text, arguments
+end
 
-_clean_name(op_name::String)=uppercase(string(split(op_name, "(")[1]))
+_clean_name(op_name::AbstractString)=uppercase(strip(first(split(op_name, '('))))
 
 _name_with_arg_bool(name::String)=_clean_name(name) ∈ gates_with_phase
-_name_with_two_qubit_gates_bool(name::String)=_clean_name(name) ∈ two_qubit_gates
+_name_with_two_qubit_gates_bool(name::String)=_clean_name(name) ∈ two_qubit_gates || _clean_name(name) == "SWAPA"
 
 gates_with_phase=["P","RX","RY","RZ","U1","U2","U3","CP","GIVENS","FSIM","SWAPA","RXX","RYY","RZZ","RXY"]
 
@@ -372,69 +411,13 @@ all gate functions
 """
 function gates(op_name::String,param_bool=false)
 
-    _P(λ) = [1 0; 0 exp(im*λ)]
-
-    _RX(θ)=[ #exp(-i θ/2 X)
-        cos(θ/2) -im*sin(θ/2);
-        -im*sin(θ/2) cos(θ/2)]
-
-    _RY(θ)=[ #exp(-i θ/2 Y)
-        cos(θ/2) -sin(θ/2);
-        sin(θ/2) cos(θ/2)]
-
-    _RZ(θ)=[ #exp(-i θ/2 Z)
-        exp(-im*θ/2) 0;
-        0 exp(im*θ/2)]
-
-    _U1(λ) = [1 0; 0 exp(im*λ)]
-
-    _U2(φ, λ)=(1/sqrt(2)) * [1 -exp(im * λ); exp(im * φ) exp(im * (φ + λ))]
-
-    _U3(θ, φ, λ)=[
-        cos(θ/2) -exp(im * λ) * sin(θ/2);
-        exp(im * φ) * sin(θ/2) exp(im * (φ + λ)) * cos(θ/2)];    
-
-    _CP(lambda)=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(1im*lambda)]
-
-    _GIVENS(theta) = [1 0 0 0; 0 cos(theta) -sin(theta) 0;0 sin(theta) cos(theta) 0;0 0 0 1]
-
-    _FSIM(theta,phi) = [1 0 0 0; 0 cos(theta) -im*sin(theta) 0;0 -im*sin(theta) cos(theta) 0;0 0 0 exp(im*phi)]
-
-    _SWAPA(a)= 0.5 * [2. 0 0 0; 0 1+exp(im*pi*a) 1-exp(im*pi*a) 0; 0 1-exp(im*pi*a) 1+exp(im*pi*a) 0; 0 0 0 2] #SWAP^a
-
-    _RXX(ϕ)=[cos(ϕ) 0 0 -im*sin(ϕ);0 cos(ϕ) -im*sin(ϕ) 0;0 -im*sin(ϕ) cos(ϕ) 0; -im*sin(ϕ) 0 0 cos(ϕ)]
-
-    _RYY(ϕ)=[cos(ϕ) 0 0 im*sin(ϕ);0 cos(ϕ) -im*sin(ϕ) 0;0 -im*sin(ϕ) cos(ϕ) 0; im*sin(ϕ) 0 0 cos(ϕ)]
-
-    _RZZ(ϕ)=[exp(-1im*ϕ/2) 0 0 0;0 exp(1im*ϕ/2) 0 0;0 0 exp(1im*ϕ/2) 0; 0 0 0 exp(-1im*ϕ/2)]
-
-    _RXY(ϕ)=[1 0 0 0;0 cos(ϕ) -im*sin(ϕ) 0;0 -im*sin(ϕ) cos(ϕ) 0; 0 0 0 1]
-
-    local_functions = Dict(
-        "P" => _P,
-        "RX" => _RX,
-        "RY" => _RY,
-        "RZ" => _RZ,
-        "U1" => _U1,
-        "U2" => _U2,
-        "U3" => _U3,
-        "CP" => _CP,
-        "GIVENS" => _GIVENS,
-        "SWAPA" => _SWAPA,
-        "FSIM" => _FSIM,
-        "RXX" => _RXX,
-        "RYY" => _RYY,
-        "RZZ" => _RZZ,
-        "RXY" => _RXY
-    )
-
     clean_name = _clean_name(op_name)
-    uppercase_name = uppercase(op_name)
+    uppercase_name = uppercase(strip(op_name))
 
-    if haskey(local_functions, clean_name)
+    if haskey(_parameterized_gates, clean_name)
 
-        arg_vec=_get_name_and_arguments(op_name)[3]
-        res=local_functions[clean_name](arg_vec...)
+        _,arg_str,arg_vec=_get_name_and_arguments(op_name)
+        res=_parameterized_gates[clean_name](arg_vec...)
 
         return param_bool==false ?  res : (res,arg_str,arg_vec) 
 
@@ -449,8 +432,7 @@ function gates(op_name::String,param_bool=false)
         if haskey(BlueTangle.gate, Symbol(uppercase_name))
             return BlueTangle.gate[Symbol(uppercase_name)]
         else
-            println("Gate $(op_name) not found")
-            return -1
+            throw(ArgumentError("Gate $op_name not found."))
         end
     end
 
@@ -497,6 +479,11 @@ _U3(θ, φ, λ)=[
     cos(θ/2) -exp(im * λ) * sin(θ/2);
     exp(im * φ) * sin(θ/2) exp(im * (φ + λ)) * cos(θ/2)];    
 
+# Public spellings retained alongside the original underscored gate functions.
+const U1 = _U1
+const U2 = _U2
+const U3 = _U3
+
 _CP(lambda)=[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(1im*lambda)]
 
 _GIVENS(theta) = [1 0 0 0; 0 cos(theta) -sin(theta) 0;0 sin(theta) cos(theta) 0;0 0 0 1]
@@ -512,3 +499,11 @@ _RYY(ϕ)=[cos(ϕ) 0 0 im*sin(ϕ);0 cos(ϕ) -im*sin(ϕ) 0;0 -im*sin(ϕ) cos(ϕ) 0
 _RZZ(ϕ)=[exp(-1im*ϕ/2) 0 0 0;0 exp(1im*ϕ/2) 0 0;0 0 exp(1im*ϕ/2) 0; 0 0 0 exp(-1im*ϕ/2)]
 
 _RXY(ϕ)=[1 0 0 0;0 cos(ϕ) -im*sin(ϕ) 0;0 -im*sin(ϕ) cos(ϕ) 0; 0 0 0 1]
+
+# Reuse the exported gate definitions and lookup table for every construction.
+const _parameterized_gates = Dict(
+    "P" => _P, "RX" => _RX, "RY" => _RY, "RZ" => _RZ,
+    "U1" => _U1, "U2" => _U2, "U3" => _U3, "CP" => _CP,
+    "GIVENS" => _GIVENS, "SWAPA" => _SWAPA, "FSIM" => _FSIM,
+    "RXX" => _RXX, "RYY" => _RYY, "RZZ" => _RZZ, "RXY" => _RXY,
+)

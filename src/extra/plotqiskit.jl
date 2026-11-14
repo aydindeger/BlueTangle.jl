@@ -1,5 +1,4 @@
 using PyCall
-ENV["PYCALL_JL_RUNTIME_PYTHON"] = joinpath(@__DIR__, ".venv", "bin", "python")
 
 
 # ============================================
@@ -64,7 +63,7 @@ function plotqiskit(
     _parse_angle_expr(expr::AbstractString) = begin
         ex = replace(strip(expr), "π" => "pi", "PI" => "pi")
         try
-            val = eval(Meta.parse(ex))
+            val = BlueTangle._numeric_value(Meta.parse(ex))
             val isa Number || error("not numeric")
             Float64(val)
         catch

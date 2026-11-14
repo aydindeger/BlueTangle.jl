@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - dev
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -23,6 +24,7 @@ jobs:
         version:
           - '1.10'
           - '1.11'
+          - '1.12'
           - 'nightly'
         os:
           - ubuntu-latest
@@ -36,24 +38,6 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-
-      # # Set up Python and install matplotlib
-      # - name: Set up Python
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.x'
-
-      # - name: Install matplotlib
-      #   run: |
-      #     python3 -m pip install --upgrade pip
-      #     pip3 install matplotlib
-
-      # - uses: julia-actions/cache@v1
-
-      # # You may need to configure PyCall to use this Python version here
-      # - name: Configure PyCall
-      #   run: |
-      #     julia -e 'using Pkg; Pkg.add("PyCall"); Pkg.build("PyCall")'
 
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1

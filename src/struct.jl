@@ -24,8 +24,18 @@ function __calc_prob(state::AbstractVectorS,kraus_vec::Vector,qubit::Int,target_
         pA=partial_trace(state,[qubit,target_qubit])#nonlocal
     end
     
+    qubit > target_qubit && (pA = pA[[1, 3, 2, 4], [1, 3, 2, 4]])
     return [real(la.tr(kraus * pA * kraus')) for kraus in kraus_vec]#probs
 
+end
+
+function __calc_prob(rho::AbstractMatrixS, kraus_vec::Vector, qubits::Int...)
+    N = get_N(rho)
+    reduced = partial_trace(rho, fill(2, N), setdiff(1:N, qubits))
+    if length(qubits) == 2 && qubits[1] > qubits[2]
+        reduced = reduced[[1, 3, 2, 4], [1, 3, 2, 4]]
+    end
+    return [real(la.tr(kraus * reduced * kraus')) for kraus in kraus_vec]
 end
 
 function __QuantumChannel_new_apply(state::AbstractVectorS,kraus_ops::Vector,qubit::Int)
@@ -55,7 +65,7 @@ function __QuantumChannel_new_apply3(state::AbstractVectorS,kraus_ops::Vector,fi
 end
 
 
-function __QuantumChannel_new_apply(rho::sa.SparseMatrixCSC,kraus_ops::Vector,qubit::Int)
+function __QuantumChannel_new_apply(rho::AbstractMatrixS,kraus_ops::Vector,qubit::Int)
     new_rho=zero(rho)
     N=get_N(rho)
     for k=kraus_ops
@@ -65,7 +75,7 @@ function __QuantumChannel_new_apply(rho::sa.SparseMatrixCSC,kraus_ops::Vector,qu
     return new_rho
 end
 
-function __QuantumChannel_new_apply(rho::sa.SparseMatrixCSC,kraus_ops::Vector,qubit::Int,target_qubit::Int)
+function __QuantumChannel_new_apply(rho::AbstractMatrixS,kraus_ops::Vector,qubit::Int,target_qubit::Int)
     new_rho=zero(rho)
     N=get_N(rho)
     for k=kraus_ops
@@ -73,6 +83,11 @@ function __QuantumChannel_new_apply(rho::sa.SparseMatrixCSC,kraus_ops::Vector,qu
         new_rho += ek * rho * ek'
     end
     return new_rho
+end
+
+function __QuantumChannel_new_apply3(rho::AbstractMatrixS, kraus_ops::Vector, first_qubit::Int)
+    N = get_N(rho)
+    return sum(hilbert3(N, K, first_qubit) * rho * hilbert3(N, K, first_qubit)' for K in kraus_ops)
 end
 
 """
@@ -106,17 +121,17 @@ struct QuantumChannel
 
         if q==1
 
-            new_prob(state::AbstractVectorS,first_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit)
+            new_prob(state::Union{AbstractVectorS,AbstractMatrixS},first_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit)
             new_apply(state::AbstractVectorS,first_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit)
-            new_apply(rho::sa.SparseMatrixCSC,first_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit)
+            new_apply(rho::AbstractMatrixS,first_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit)
 
             return new(q,model,p,kraus_ops,new_prob,new_apply)
 
         elseif q==2
 
-            new_prob2(state::AbstractVectorS,first_qubit::Int,second_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit,second_qubit)
+            new_prob2(state::Union{AbstractVectorS,AbstractMatrixS},first_qubit::Int,second_qubit::Int)=__calc_prob(state,kraus_ops,first_qubit,second_qubit)
             new_apply2(state::AbstractVectorS,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(state,kraus_ops,first_qubit,second_qubit)
-            new_apply2(rho::sa.SparseMatrixCSC,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit,second_qubit)
+            new_apply2(rho::AbstractMatrixS,first_qubit::Int,second_qubit::Int)=__QuantumChannel_new_apply(rho,kraus_ops,first_qubit,second_qubit)
 
             return new(q,model,p,kraus_ops,new_prob2,new_apply2)
 
@@ -207,9 +222,9 @@ struct OpQC <: QuantumOps
                 throw("for 1-qubit quantum channel, target_qubit should be -1")
             end
 
-            new_prob_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit)
+            new_prob_op(state::Union{AbstractVectorS,AbstractMatrixS})=__calc_prob(state,kraus_ops,qubit)
             new_apply_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit)
-            new_apply_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
+            new_apply_op(rho::AbstractMatrixS)=__QuantumChannel_new_apply(rho,kraus_ops,qubit)
 
             return new(q,name,qubit,target_qubit,-2,kraus_ops,false,type,new_prob_op,new_apply_op)
 
@@ -219,9 +234,9 @@ struct OpQC <: QuantumOps
                 throw("for 2-qubit quantum channel, you must select the target_qubit")
             end
 
-            new_prob2_op(state::AbstractVectorS)=__calc_prob(state,kraus_ops,qubit,target_qubit)
+            new_prob2_op(state::Union{AbstractVectorS,AbstractMatrixS})=__calc_prob(state,kraus_ops,qubit,target_qubit)
             new_apply2_op(state::AbstractVectorS)=__QuantumChannel_new_apply(state,kraus_ops,qubit,target_qubit)
-            new_apply2_op(rho::sa.SparseMatrixCSC)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
+            new_apply2_op(rho::AbstractMatrixS)=__QuantumChannel_new_apply(rho,kraus_ops,qubit,target_qubit)
 
             return new(q,name,qubit,target_qubit,-2,kraus_ops,false,type,new_prob2_op,new_apply2_op)
 
@@ -231,6 +246,8 @@ struct OpQC <: QuantumOps
 
             new_prob3_op(state::AbstractVectorS)=__calc_prob3(state,kraus_ops,qubit)
             new_apply3_op(state::AbstractVectorS)=__QuantumChannel_new_apply3(state,kraus_ops,qubit)
+            new_apply3_op(rho::AbstractMatrixS)=__QuantumChannel_new_apply3(rho,kraus_ops,qubit)
+            new_prob3_op(rho::AbstractMatrixS)=__calc_prob(rho,kraus_ops,qubit,qubit+1,qubit+2)
 
             return new(q,name,qubit,-1,-2,kraus_ops,false,type,new_prob3_op,new_apply3_op)
 
@@ -275,7 +292,12 @@ In this example, `custom_noise_model` is a single-qubit noise model named "MyNoi
 # Notes
 Ensure that the provided Kraus operators comply with the rules for quantum channels. Invalid operators will result in an error being thrown by the function.
 """
-custom_noise(q::Int,name_of_model::String,kraus::Vector{AbstractMatrix})=QuantumChannel(q,name_of_model,is_valid_quantum_channel(kraus) ? kraus : throw("define valid kraus operators"))
+function custom_noise(q::Int, name_of_model::String, kraus::Vector{<:AbstractMatrix})
+    q in (1, 2) || throw(ArgumentError("custom noise supports one or two qubits"))
+    all(K -> size(K) == (2^q, 2^q), kraus) ||
+        throw(ArgumentError("Kraus dimensions do not match the requested qubit count"))
+    return QuantumChannel(name_of_model, kraus, 0.0)
+end
 
 """
 `is_valid_quantum_channel(kraus::Vector{Matrix}) -> Bool`
@@ -416,7 +438,16 @@ struct Op <: QuantumOps
 end
 
 # One qubit constructor with built-in gate
-function Op(name::String,qubit::Int;kwargs...)
+function Op(name::String,qubit::Int;if0=nothing,if1=nothing,kwargs...)
+
+    if !isnothing(if0) || !isnothing(if1)
+        _is_it_measurement(name) || throw(ArgumentError("if0/if1 branches require a measurement operation"))
+        isempty(kwargs) || throw(ArgumentError("conditional measurements do not accept gate keywords"))
+        branch(value) = value === nothing ? Op[Op("I",qubit)] :
+                        value isa String ? Op[Op(value,qubit)] :
+                        value isa Op ? Op[value] : Op[value...]
+        return ifOp(name, qubit, branch(if0), branch(if1))
+    end
 
     if uppercase(name)=="RES" || uppercase(name)=="RESET"
         # return ifOp("MZ",qubit,"I","X")
@@ -464,13 +495,27 @@ function _get_op_num_qubits(qubit::Int, target_qubit::Int, control::Int)
         # two qubit operator
         if qubit == target_qubit
             throw(ArgumentError("`qubit` and `target_qubit` must differ"))
-        elseif qubit == control && target_qubit == control
-            throw(ArgumentError("either `qubit` or `target_qubit` must differ from `control` qubit"))
+        elseif qubit == control || target_qubit == control
+            throw(ArgumentError("`control` must differ from both operated qubits"))
         else
             q = 2
         end
     end
     return q
+end
+
+# ITensor's first site index is the least significant matrix index, whereas
+# BlueTangle's gate matrices list control, then the operated qubits.
+function _operation_tensor(sites::Vector, mat::AbstractMatrix, qubit::Int, target_qubit::Int, control::Int)
+    if control == -2
+        return target_qubit == -1 ? _mat_to_tensor(sites, mat, qubit) :
+                                   _mat_to_tensor(sites, mat, qubit, target_qubit)
+    end
+    controlled = kron(gate.P0, Matrix{eltype(mat)}(la.I, size(mat)...)) + kron(gate.P1, mat)
+    if target_qubit == -1
+        return it.op(controlled, sites[qubit], sites[control])
+    end
+    return it.op(controlled, sites[target_qubit], sites[qubit], sites[control])
 end
 
 function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, target_qubit::Int, control::Int, ismeasure::Bool)
@@ -490,26 +535,7 @@ function _get_new_expand(name::AbstractString, mat::AbstractMatrix, qubit::Int, 
 
 
     function new_expand(sites::Vector)
-        if control != -2
-            if uppercase(name) in ["X", "Y", "Z", "T", "TD", "S", "SD", "I", "H"]
-                rv = _mat_to_tensor(sites, gate[Symbol("C$(uppercase(name))")], control, qubit)
-            elseif name == "CX"
-                rv = _mat_to_tensor(sites, gate.CCX, qubit, target_qubit; control=control)
-            elseif name == "CZ"
-                rv = _mat_to_tensor(sites, gate.CCZ, qubit, target_qubit; control=control)
-            else
-                throw("control tensor is not supported")
-            end
-            return rv
-        end
-    
-        if target_qubit == -1
-            rv = _mat_to_tensor(sites, mat, qubit)
-        elseif target_qubit > 0
-            size(mat, 1) == 4 ? (rv = _mat_to_tensor(sites, mat, qubit, target_qubit)) : throw("target_qubit is not defined")
-        end
-    
-        return rv
+        return _operation_tensor(sites, mat, qubit, target_qubit, control)
     end
 
     return new_expand
@@ -526,22 +552,8 @@ function _get_new_expand(f::Function, qubit::Int, target_qubit::Int, control::In
         return rv
     end
 
-    function new_expand(sites::Vector,pars...)
-        # if (target_qubit > 0 && abs(qubit-target_qubit)>1) || control!=-2
-        #     throw("nonlocal tensor is not supported")
-        # end
-
-        if control!=-2
-            throw("nonlocal tensor is not supported")
-        end
-
-        if target_qubit == -1
-            rv = _mat_to_tensor(sites,f(pars...),qubit)
-        else
-            rv = _mat_to_tensor(sites,f(pars...),qubit,target_qubit)
-        end
-
-        return rv
+    function new_expand(sites::Vector, pars...)
+        return _operation_tensor(sites, f(pars...), qubit, target_qubit, control)
     end
 
     return new_expand
@@ -611,35 +623,23 @@ function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::V
     return psi,ind
 end
 
-function __ifOp_apply(rho::sa.SparseMatrixCSC,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
-
-    throw("error: fix this!")
-    N=get_N(rho)
-
-    if uppercase(name)=="MR" || uppercase(name)=="M(R)"
-        println("Note that the density matrix will be calculated based on a single random basis.
-        You might need to average over many density matrices.")
+function __ifOp_apply(rho::AbstractMatrixS, name::String, qubit::Int,
+                      if0::Vector{Op}, if1::Vector{Op}, noise=false; selective=false)
+    if selective
+        measured, bit = _measure_density(rho, name, qubit; selective=true)
+        return apply(bit == 0 ? if0 : if1, measured; noise=noise), bit
     end
 
-    mat=__measurement_hilbert(N,name,qubit)
-    rho = mat * rho * mat'; #rotate
-
-    born_ops=[gate.P0, gate.P1]
-
-    eb=BlueTangle.hilbert(N,born_ops[1],qubit)
-    rho1 = eb * rho * eb'
-    for ifop=if0
-        rho1=BlueTangle.apply(rho1,ifop;noise=noise)
+    # Each branch retains its Born probability. Averaging random measurement
+    # bases here makes the density-matrix evolution an exact ensemble channel.
+    bases = uppercase(name) in ("MR", "M(R)") ? ("MX", "MY", "MZ") : (name,)
+    result = zero(rho)
+    for basis in bases
+        for (branch, ops) in zip(_density_measurement_branches(rho, basis, qubit), (if0, if1))
+            result += apply(ops, branch; noise=noise) / length(bases)
+        end
     end
-
-    eb=BlueTangle.hilbert(N,born_ops[2],qubit)
-    rho = eb * rho * eb'
-    for ifop=if1
-        rho=BlueTangle.apply(rho,ifop;noise=noise)
-    end
-
-    return rho+rho1
-
+    return result, nothing
 end
 
 """
@@ -678,12 +678,9 @@ struct ifOp <: QuantumOps
         new_expand(N::Int)=__measurement_hilbert(N,name,qubit)
         new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
         new_born_apply(psi::it.MPS,noise=false)=__ifOp_apply(psi,name,qubit,if0,if1,noise)
-        new_born_apply(rho::sa.SparseMatrixCSC,noise=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise)
+        new_born_apply(rho::AbstractMatrixS,noise=false;selective=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise;selective=selective)
 
-        function new_expand(sites::Vector)
-            throw("error: fix")
-            # _mat_to_tensor(sites,_measurement_mat(name),qubit)
-        end
+        new_expand(sites::Vector) = _mat_to_tensor(sites, _measurement_mat(_resolve_measurement_name(name)), qubit)
 
         return new(1, name, gates(name), qubit, (if0,if1), _is_it_measurement(name) ?  "🔬" : throw("select MX or MY or MZ or MR basis."),new_expand,new_born_apply)
     end
@@ -708,7 +705,7 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,f::Function)
 
-        new_apply(state::Union{AbstractVectorS,it.MPS};kwargs...)=f(state;kwargs...)
+        new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS};kwargs...)=f(state;kwargs...)
 
         return new(1,name,new_apply,f)
     end
@@ -716,32 +713,31 @@ struct OpF <: QuantumOps
     function OpF(name::String,mat::AbstractMatrixS)
 
         new_apply_mat(state::AbstractVectorS)=mat*state
+        new_apply_mat(rho::AbstractMatrixS)=mat*rho*mat'
+        new_apply_mat(psi::it.MPS; kwargs...) = it.apply(it.op(mat, reverse(get_M(psi))...), psi; kwargs...)
 
         return new(1,name,new_apply_mat,mat)
     end
     
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
 
-        function new_apply_mat2(state::Union{AbstractVectorS,it.MPS};kwargs...)
-
-            if isa(state,it.MPS)
-                for o=ops
-                    state=apply(state,o;kwargs...)
-                end
-            else
-                for o=ops
-                    state=o*state
-                end
-            end
-
-            return state
+        function new_apply_mat2(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS};kwargs...)
+            return apply(ops, state; kwargs...)
         end
 
         return new(1,name,new_apply_mat2,ops)
     end
     
-    #fix: add noise
 end
+
+# Keep one public constructor while retaining the execution semantics of gates,
+# Kraus channels, conditional measurements, and whole-register blocks.
+Op(channel::QuantumChannel, qubit::Int, target_qubit::Int=-1) =
+    OpQC(channel.name, channel.kraus, qubit, target_qubit)
+Op(name::String, data::Union{AbstractMatrix,Vector{<:QuantumOps}}) = OpF(name, data)
+# With no qubit argument, f transforms the whole state; with a qubit, f maps
+# gate parameters to a local matrix as before.
+Op(name::String, f::Function) = OpF(name, f)
 
 function _target_find(op::T) where T<:QuantumOps
 
@@ -765,7 +761,9 @@ end
 ##========== Struct ==========
 
 """
-    Create Layout
+    Layout(layout; noisy_swap=false, fswap=false, verbose=false)
+
+Create a physical qubit layout. Set `verbose=true` to print its numbered grid.
 """
 struct Layout
     N::Int
@@ -778,7 +776,7 @@ struct Layout
     check::Function
     swap::Function
 
-    function Layout(layout::Union{Matrix,Vector,sa.SparseMatrixCSC};noisy_swap::Bool=false,fswap::Bool=false)
+    function Layout(layout::Union{Matrix,Vector,sa.SparseMatrixCSC};noisy_swap::Bool=false,fswap::Bool=false,verbose::Bool=false)
 
         # layout=Int.(layout .> 0) #only 0 and 1
 
@@ -800,14 +798,16 @@ struct Layout
         new_check(qubit_num1::Int, qubit_num2::Int)=qubit_num1 ∈ neighbors_dict[qubit_num2]
         new_make_swaps(op::QuantumOps)=_make_swaps(op,neighbors_dict;noisy_swap=noisy_swap,fswap=fswap)
 
-        println("Physical Qubits:")
-        num_rows, num_cols = size(layout)
-        for row in 1:num_rows
-            for col in 1:num_cols
-                s=geometry[row, col]
-                print(s==0 ? "." : s, "\t")
+        if verbose
+            println("Physical Qubits:")
+            num_rows, num_cols = size(layout)
+            for row in 1:num_rows
+                for col in 1:num_cols
+                    s=geometry[row, col]
+                    print(s==0 ? "." : s, "\t")
+                end
+                println()
             end
-            println()
         end
 
         new(N,layout,connectivity,neighbors_dict,geometry,noisy_swap,fswap,new_check,new_make_swaps);
@@ -941,10 +941,16 @@ end
 
 Functions to save and load quantum computational data.
 
-- `save_data`: Serializes and saves a Data object.
+- `save_data`: Serializes a Data object and returns its path. Use `path="file.ser"`
+  to choose the destination; otherwise the circuit name and a random suffix are used.
 - `load_data`: Deserializes and loads a Data object from a file.
 
 Use these functions for data persistence in quantum computations.
 """
-save_data(circuit::Circuit,measurement::Measurement,other=[])=serialize("$(circuit.name)$(rand(1:1000)).ser",Data(circuit,measurement,other))
-load_data(name::String)=deserialize("$(name).ser")
+function save_data(circuit::Circuit, measurement::Measurement, other::Vector=[];
+                   path::AbstractString="$(circuit.options.circuit_name)$(rand(1:1000)).ser")
+    Serialization.serialize(path, Data(circuit, measurement, other))
+    return path
+end
+
+load_data(name::AbstractString) = Serialization.deserialize(isfile(name) ? name : "$(name).ser")

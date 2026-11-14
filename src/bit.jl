@@ -6,7 +6,7 @@ These functions are utilities for bit manipulation and conversion in quantum com
 """
 # int2bin_slow(number::Int,N::Int)=reverse(digits(number,base=2,pad=N))
 
-function int2bin(number::Int, N::Int)
+function int2bin(number::Integer, N::Int)
     binary_vector = Vector{Int}(undef, N)
     for i in 1:N
         binary_vector[N - i + 1] = (number >> (i - 1)) & 1
@@ -21,7 +21,7 @@ end
 Converts a binary representation (array of bits) to an integer.
 """
 function bin2int(v::Vector{Int})
-    result = 0
+    result = length(v) < 8sizeof(Int) ? 0 : big(0)
     for bit in v
         result = (result << 1) + bit
     end
@@ -30,14 +30,14 @@ end
 
 int_basis_create(N::Int)=collect(0:2^N-1)
 
-fock_basis(number::Int,N::Int)=int2bin(number,N)
+fock_basis(number::Integer,N::Int)=int2bin(number,N)
 
 """
     fock_basis_create(N::Int)
 """
 fock_basis_create(N::Int)=int2bin.(0:2^N-1,N)
 
-mag_basis(number::Int,N::Int)=1 .- 2 .* int2bin(number, N)
+mag_basis(number::Integer,N::Int)=1 .- 2 .* int2bin(number, N)
 mag_basis_create(N::Int)=mag_basis.(0:2^N-1,N)
 
 str2vec(str_rep::String)=[parse(Int, b, base=2) for b in str_rep]

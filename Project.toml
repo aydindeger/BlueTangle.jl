@@ -4,7 +4,6 @@ authors = ["Aydin Deger"]
 version = "1.0.0-DEV"
 
 [deps]
-Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
 ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
@@ -12,16 +11,36 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 OptimKit = "77e91f04-9b3b-57a6-a776-40b61faaebe0"
 Optimisers = "3bd65402-5787-11e9-1adc-39752487f4e2"
 PRIMA = "0a7d04aa-8ac2-47b3-b7a7-9dbd6ad661ed"
-Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
+ForwardDiff = "1.2"
+ITensorMPS = "0.3.20"
+ITensors = "0.9.11"
+LinearAlgebra = "1.10"
+OptimKit = "0.4"
+Optimisers = "0.4"
 PRIMA = "0.2.4"
-julia = "1"
+PhasePoly = "0.1"
+PyPlot = "2"
+Serialization = "1.10"
+SparseArrays = "1.10"
+StatsBase = "0.34"
+julia = "1.10"
+
+[weakdeps]
+PhasePoly = "8e8727d4-d293-44ff-bd08-a9f9724988c3"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+
+[extensions]
+BlueTanglePhasePolyExt = "PhasePoly"
+BlueTanglePyPlotExt = "PyPlot"
 
 [extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Random", "Test"]

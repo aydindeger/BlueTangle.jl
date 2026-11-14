@@ -8,28 +8,39 @@ get_N(rho::AbstractMatrixS)=Int(log(2,size(rho,1)))
 get_M(state::it.MPS)=it.siteinds(state)
 get_N(psi::it.MPS)=length(get_M(psi))
 
+# Scheduling must reserve every qubit a conditional operation can touch.
+function _operated_qubits(op::QuantumOps)
+    if isa(op, OpQC) && op.q == 3
+        return op.qubit:op.qubit+2
+    end
+    return filter(>(0), (op.qubit, op.target_qubit, op.control))
+end
+
+function _operated_qubits(op::OpF)
+    if op.data isa Vector{<:QuantumOps}
+        return unique([q for nested in op.data for q in _operated_qubits(nested)])
+    elseif op.data isa AbstractMatrix
+        return 1:get_N(op.data)
+    end
+    return ()
+end
+
+function _operated_qubits(op::ifOp)
+    qubits = [op.qubit]
+    for branch in op.if01, branch_op in branch
+        append!(qubits, _operated_qubits(branch_op))
+    end
+    return unique!(qubits)
+end
+
 """
 qubit number from a set of operations
 """
 function get_N(ops::Vector{<:QuantumOps})
     max_index = 0
-
-    ops=filter(op -> !isa(op, OpF), ops)
-
-    for op in ops
-
-        if isa(op, ifOp)
-            current_max = op.qubit
-        elseif isa(op, OpQC)
-            current_max = max(op.qubit, op.target_qubit)
-        else
-            current_max = max(op.qubit, op.target_qubit, op.control)
-        end
-
-        max_index = max(max_index, current_max)
-
+    for op in ops, qubit in _operated_qubits(op)
+        max_index = max(max_index, qubit)
     end
-
     return max_index
 end
 
@@ -38,7 +49,7 @@ end
 
 Sample outcomes from a quantum state vector based on the probability distribution.
 
-- `state`: A sparse quantum state vector.
+- `state`: A dense or sparse quantum state vector.
 - `shots`: Number of samples to be taken.
 
 Returns a vector of sampled outcomes.
@@ -51,14 +62,18 @@ function sample(state::AbstractVectorS, shots)
     probs = abs2.(state)
     
     bit_basis=0:2^N-1
-    # fock_basis=int2bin.(bit_basis,N)
-    # mag_basis=replace.(basis,1=>-1,0=>1)
-    # str_basis = join.(map.(string, fock_basis))
     
     sampled_outcomes = sb.sample(bit_basis, sb.Weights(probs), shots)
     
     # Return the sampled outcomes
     return sampled_outcomes
+end
+
+function sample(state::sa.SparseVector, shots)
+    get_N(state) # Check the Hilbert-space dimension, as for dense states.
+    indices, amplitudes = sa.findnz(state)
+    # Sample only stored amplitudes, rather than scanning all 2^N basis states.
+    return sb.sample(indices .- 1, sb.Weights(abs2.(amplitudes)), shots)
 end
 
 sample(psi::it.MPS, shots)=bin2int.(sample_bit(psi,shots))
@@ -74,9 +89,10 @@ Convert a sample of outcomes into probabilities.
 Returns a tuple of vectors: the first vector contains outcomes, and the second vector contains corresponding probabilities.
 """
 function get_probs_from_sample(sample::Vector, N::Int)
-    counts = Dict{Int,Int}()
+    T = N < 8sizeof(Int) ? Int : BigInt
+    counts = Dict{T,Int}()
     for outcome in sample
-        oi = Int(outcome)
+        oi = T(outcome)
         counts[oi] = get(counts, oi, 0) + 1
     end
 
@@ -92,10 +108,16 @@ function sort_vectors(vector1::Vector,vector2::Vector)
     return (vector1[sorted_pos],vector2[sorted_pos])
 end
 
-sample_state(state::AbstractVectorS, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
+sample_state(state::Union{AbstractVectorS,AbstractMatrixS}, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
 sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),get_N(psi))
 
 function sample_exact(state::AbstractVectorS)
+    probs = abs2.(state)
+    indices = findall(!iszero, probs)
+    return indices .- 1, probs[indices]
+end
+
+function sample_exact(state::sa.SparseVector)
     a,b=sa.findnz(abs2.(state))
     return a .- 1,b
 end
@@ -103,33 +125,24 @@ end
 """
     sample_exact(psi::it.MPS)
 """
-function sample_exact(psi::it.MPS)
-
-    M=it.siteinds(psi)
-    N=length(M)
-
-    probs=[]
-    bitstr=collect(0:2^N-1)
-    for a=bitstr
-
-        config=BlueTangle.int2bin(a,N) .+ 1
-  
-        V = it.ITensor(1.)
-        for j=1:N
-        V *= (psi[j]*it.state(M[j],config[j]))
-        end
-  
-        push!(probs,abs2(it.scalar(V)))
-    end
-
-    return bitstr,probs
+function sample_exact(psi::it.MPS; max_qubits::Int=16)
+    N = get_N(psi)
+    N <= max_qubits || throw(ArgumentError("exact MPS probabilities require 2^N outcomes; use measure(psi, shots), or explicitly raise max_qubits"))
+    # Contract once rather than repeating a full MPS contraction for every basis state.
+    return collect(0:2^N-1), Vector(abs2.(to_state(psi)))
 end
 
-
-function sample_exact(rho::sa.SparseMatrixCSC)
-    a,b=sa.findnz(real(sa.diag(rho)))
-    return a .- 1,b
+function sample_exact(rho::AbstractMatrixS)
+    probabilities = real.(la.diag(rho))
+    indices = findall(!iszero, probabilities)
+    return indices .- 1, probabilities[indices]
 end
+
+function sample(rho::AbstractMatrixS, shots)
+    outcomes, probabilities = sample_exact(rho)
+    return sb.sample(outcomes, sb.Weights(probabilities), shots)
+end
+
 
 
 """
@@ -189,29 +202,18 @@ end
 get statistics about the operations
 """
 function get_stats(ops::Vector{<:QuantumOps})
-    max_index = 0
+    max_index = get_N(ops)
     len = 0
     cx_count=0
     swap_count=0
     two_qubit_count=0
     mid_measurement_count=0
 
-    ops=filter(op -> !isa(op, OpF), ops)
-
     for op in ops
+        isa(op, OpF) && continue
 
         len+=1
         oname=uppercase(op.name)
-
-        if isa(op, ifOp)
-            current_max = op.qubit
-        elseif isa(op, OpQC)
-            current_max = max(op.qubit, op.target_qubit)
-        else
-            current_max = max(op.qubit, op.target_qubit, op.control)
-        end
-
-        max_index = max(max_index, current_max)
 
         if oname=="CX" || oname=="CNOT"
             cx_count+=1
@@ -241,32 +243,31 @@ Calculates the depth of a quantum circuit.
 
 - `ops`: Vector of quantum operations (QuantumOps objects) constituting the circuit.
 
-Returns the depth of the circuit, defined as the maximum number of operations applied to any single qubit.
+Returns the number of layers needed while preserving dependencies on all operated
+qubits. Conditional branches reserve their combined support, and `OpF` is a barrier.
 """
 function _calculate_circuit_depth(ops::Vector{<:QuantumOps})
     qubit_layers = Dict{Int, Int}()
     circuit_depth = 0
+    barrier_layer = 0
 
     for op in ops
-
-        # Initialize max_layer based on the control qubit
-        max_layer = get(qubit_layers, op.qubit, 0)
-
-        # If there's no -1, update max_layer based on it
-        if op.q==2
-            max_layer = max(max_layer, get(qubit_layers, op.target_qubit, 0))
+        if isa(op, OpF)
+            circuit_depth += 1
+            barrier_layer = circuit_depth
+            continue
         end
 
-        # The current operation will be placed in the next layer
+        qubits = _operated_qubits(op)
+        max_layer = barrier_layer
+        for qubit in qubits
+            max_layer = max(max_layer, get(qubit_layers, qubit, 0))
+        end
         current_layer = max_layer + 1
         circuit_depth = max(circuit_depth, current_layer)
-
-        # Update the layers for both qubits involved in the operation
-        qubit_layers[op.qubit] = current_layer
-        if op.q == 2
-            qubit_layers[op.target_qubit] = current_layer
+        for qubit in qubits
+            qubit_layers[qubit] = current_layer
         end
-
     end
 
     return circuit_depth
@@ -278,33 +279,20 @@ get_layers for a given set of ops
 function get_layers(ops::Vector{<:QuantumOps})
     layers = Vector{Vector{QuantumOps}}()
     qubit_layers = Dict{Int, Int}()
-
-    # Determine the maximum qubit index
-    max_q = maximum([max(o.qubit, _target_find(o), _control_find(o)) for o in ops if !isa(o, OpF)])
+    barrier_layer = 0
 
     for op in ops
         if isa(op, OpF)
-            # Create a new layer for OpF
+            # Arbitrary state functions separate all earlier and later operations.
             push!(layers, [op])
-            
-            # Reset all qubit layers to ensure separation
-            for q in 1:max_q
-                qubit_layers[q] = length(layers)
-            end
-
+            barrier_layer = length(layers)
             continue
         end
 
-        # Determine the first possible layer for the operation
-        op_layer = 0
-        if op.q == 2
-            op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.target_qubit, 0), get(qubit_layers, op.control, 0)) + 1
-        elseif op.q == 1
-            if isa(op, ifOp)
-                op_layer = get(qubit_layers, op.qubit, 0) + 1
-            else
-                op_layer = max(get(qubit_layers, op.qubit, 0), get(qubit_layers, op.control, 0)) + 1
-            end
+        qubits = _operated_qubits(op)
+        op_layer = barrier_layer + 1
+        for qubit in qubits
+            op_layer = max(op_layer, get(qubit_layers, qubit, 0) + 1)
         end
 
         # Ensure there is enough space for the new layer
@@ -313,15 +301,8 @@ function get_layers(ops::Vector{<:QuantumOps})
         end
         push!(layers[op_layer], op)
 
-        # Update the engagement layer for the qubits involved
-        qubit_layers[op.qubit] = op_layer
-
-        if op.q == 2
-            qubit_layers[op.target_qubit] = op_layer
-        end
-
-        if isa(op, Op) && op.control != -2
-            qubit_layers[op.control] = op_layer
+        for qubit in qubits
+            qubit_layers[qubit] = op_layer
         end
     end
 
@@ -331,28 +312,29 @@ end
 
 """
 optimize_simple(layers::Vector{Vector{QuantumOps}})
+
+Cancel exact identities of matching built-in gates. This optimizes the ideal
+circuit; applying a noise model to the shorter circuit naturally changes its
+noise exposure. Gates with different `noisy` flags are kept distinct.
 """
 function optimize_simple(layers::Vector{Vector{QuantumOps}})
     len = 0 # Initialize len outside the loop
     while len != length(layers) # Continue until no change in number of layers
         len = length(layers)
-        println("len=$(len)")
-
         for (l, layer) in enumerate(layers)
             i = 1
             while i <= length(layer)
                 op = layer[i]
                 removed = false
 
-                if op.q == 1 && op.control == -2 && l < length(layers)
-                    if op.name in ["X", "Y", "Z", "H"]
+                if op isa Op && op.mat isa AbstractMatrix && op.control == -2 && l < length(layers)
+                    if op.q == 1 && op.name in ("X", "Y", "Z", "H") && op.mat == gates(op.name)
                         removed = _remove_duplicate(layers, l, i, 1)
-                    elseif (op.name in ["S", "SX", "XSQRT"]) && l + 3 <= length(layers)
+                    elseif op.q == 1 && op.name in ("S", "SX", "XSQRT") && op.mat == gates(op.name) && l + 3 <= length(layers)
                         removed = _remove_duplicate(layers, l, i, 3)
+                    elseif op.q == 2 && op.name in ("CX", "CNOT", "CY", "CZ", "ECR", "SWAP", "FSWAP") && op.mat == gates(op.name)
+                        removed = _remove_two_qubit_duplicate(layers, l, i)
                     end
-                elseif op.q == 2 && op.control == -2 && l < length(layers) &&
-                       op.name in ["CX", "CNOT", "CY", "CZ", "ECR", "SWAP", "FSWAP"]
-                    removed = _remove_two_qubit_duplicate(layers, l, i)
                 end
 
                 if !removed
@@ -362,8 +344,15 @@ function optimize_simple(layers::Vector{Vector{QuantumOps}})
         end
 
         layers = get_layers(vcat(layers...))
+        isempty(layers) && break
     end
     return layers
+end
+
+function _same_cancellation_gate(a::Op, b::QuantumOps)
+    return b isa Op && b.name == a.name && b.qubit == a.qubit &&
+           b.target_qubit == a.target_qubit && b.control == a.control &&
+           b.noisy == a.noisy && b.mat isa AbstractMatrix && b.mat == a.mat
 end
 
 function _remove_duplicate(layers, l, i, num_layers)
@@ -373,7 +362,7 @@ function _remove_duplicate(layers, l, i, num_layers)
         if isnothing(next_layer)
             return false
         end
-        duplicate_pos = findfirst(x -> x.name == op.name && x.qubit == op.qubit && x.control == -2, next_layer)
+        duplicate_pos = findfirst(x -> _same_cancellation_gate(op, x), next_layer)
         if !isa(duplicate_pos, Number)
             return false
         end
@@ -382,25 +371,13 @@ function _remove_duplicate(layers, l, i, num_layers)
     # If we've found duplicates in all required layers, remove them
     deleteat!(layers[l], i)
     for j in 1:num_layers
-        deleteat!(layers[l+j], findfirst(x -> x.name == op.name && x.qubit == op.qubit && x.control == -2, layers[l+j]))
+        deleteat!(layers[l+j], findfirst(x -> _same_cancellation_gate(op, x), layers[l+j]))
     end
     return true
 end
 
 function _remove_two_qubit_duplicate(layers, l, i)
-    op = layers[l][i]
-    next_layer = get(layers, l+1, nothing)
-    if isnothing(next_layer)
-        return false
-    end
-    duplicate_pos = findfirst(x -> x.name == op.name && x.qubit == op.qubit && 
-                              x.target_qubit == op.target_qubit && x.control == -2, next_layer)
-    if isa(duplicate_pos, Number)
-        deleteat!(layers[l], i)
-        deleteat!(layers[l+1], duplicate_pos)
-        return true
-    end
-    return false
+    return _remove_duplicate(layers, l, i, 1)
 end
 
 """
@@ -444,245 +421,197 @@ function compile(ops::Vector{<:QuantumOps}, options::Options=Options(); layout::
     return Circuit(stats,stats_init,options,layout,layers)
 end
 
-"""
-`measure_ZNE(circuit::Circuit, number_of_experiment::Int) -> Measurement`
+# Independent readout channels have a tensor-product classical response matrix.
+function _measurement_mitigate_inv_matrix(N::Int, readout_noise::QuantumChannel)
+    readout_noise.q == 1 || throw(ArgumentError("readout noise must be a single-qubit channel"))
+    inverse = inv(sum(abs2.(k) for k in readout_noise.kraus))
+    return foldl(kron, (inverse for _ in 1:N); init=ones(1, 1))
+end
 
-Measure a quantum circuit multiple times.
-
-- `circuit`: A `Circuit` object.
-- `number_of_experiment`: Number of times to execute the circuit.
-
-Returns a `Measurement` object with the results.
-"""
-function measure_ZNE(circuit::Circuit,number_of_experiment::Int,number_of_ZNE::Int=3)
-
-    if isa(circuit.noise,NoiseModel) #if there is any noise then do this
-        measurements=Vector{Measurement}()
-        for id=0:number_of_ZNE #id=0 means no ZNE
-            # println("*** ZNE measurements - extra $(id) CNOT pair applied ***")
-            push!(measurements,measure(circuit::Circuit,number_of_experiment,id))
+function _mitigate_probabilities(bitstr, probabilities, N, readout_noise)
+    readout_noise.q == 1 || throw(ArgumentError("readout noise must be a single-qubit channel"))
+    inverse = inv(sum(abs2.(k) for k in readout_noise.kraus))
+    corrected = zeros(Float64, 2^N)
+    corrected[bitstr .+ 1] = probabilities
+    # Apply each 2x2 inverse directly: O(N*2^N) work, no 4^N response matrix.
+    for shift in 0:N-1
+        stride = 1 << shift
+        for block in 0:2stride:length(corrected)-1, offset in 1:stride
+            i = block + offset
+            j = i + stride
+            a, b = corrected[i], corrected[j]
+            corrected[i] = inverse[1,1]*a + inverse[1,2]*b
+            corrected[j] = inverse[2,1]*a + inverse[2,2]*b
         end
-        return measurements
-    else
-        throw("There is no noise, why ZNE?")
     end
-
+    # Preserve the existing nonnegative, normalized mitigation convention.
+    corrected = la.normalize(abs.(corrected), 1)
+    return collect(0:length(corrected)-1), corrected
 end
-
-function _measurement_mitigate_inv_matrix(N::Int,readout_noise::QuantumChannel)
-    vecs=[]
-    for a=0:2^N-1
-
-        state=sa.spzeros(2^N)
-        state[a+1]=1
-        rho0=state*state'
-
-        for qubit=1:N
-            rho0=readout_noise.apply(rho0,qubit)
-        end
-
-        push!(vecs,Vector(sa.diag(rho0)))
-    end
-    
-    return inv(hcat(vecs...))
-end
-
-
-"""
-`measure(state::AbstractVectorS,number_of_experiment::Int)`
-
-this creates a measurement object from state vector.
-"""
-function measure(state::Union{AbstractVectorS,it.MPS},number_of_experiment::Int=-1;label="state to measurement")
-
-    N=get_N(state)
-    rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
-
-    if number_of_experiment==-1
-        bitstr,avg_prob=sample_exact(state)
-    else
-        bitstr,avg_prob=sample_state(state,number_of_experiment)
-    end
-
-    fock=int2bin.(bitstr,N)
-    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
-
-    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",number_of_experiment,label,N,rho_construct)
-    
-end
-
-
-function measure(sample::Vector{Int},N::Int)
-
-    rho_construct = _measurement_rho_placeholder(N)
-
-    bitstr,avg_prob=get_probs_from_sample(sample,N)
-
-    fock=int2bin.(bitstr,N)
-    expect=[BlueTangle._sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
-
-    return Measurement(bitstr,avg_prob,expect,mag_moments_list,"0",length(sample),"sample to measurement",N,rho_construct)
-    
-end
-
-_is_cnot_like(op::QuantumOps)=op.q==2 && (uppercase(op.name)=="CNOT" || uppercase(op.name)=="CX")
 
 function _measurement_rho_placeholder(N::Int)
-    if N > 16
-        return sa.spzeros(ComplexF64,0,0)
-    end
-    return sa.spzeros(ComplexF64,2^N,2^N)
+    return N > 16 ? sa.spzeros(ComplexF64, 0, 0) : sa.spzeros(ComplexF64, 2^N, 2^N)
 end
 
-function _samples_to_measurement(sample::Vector{Int},circuit::Circuit)
-    N=circuit.stats.N
-    rho_construct = _measurement_rho_placeholder(N)
-
-    bitstr,avg_prob=get_probs_from_sample(sample,N)
-    if circuit.options.measurement_mitigate==true && isa(circuit.options.readout_noise,QuantumChannel)
-        avg_prob=la.normalize(abs.(_measurement_mitigate_inv_matrix(N,circuit.options.readout_noise)*avg_prob),1)
-    end
-
-    fock=int2bin.(bitstr,N)
-    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12]
-
-    return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,length(sample),circuit.options.circuit_name,N,rho_construct)
+function _measurement_from_probs(bitstr, probabilities, N, shots, basis, label, rho)
+    fock = int2bin.(bitstr, N)
+    expectations = [_sample_to_expectation((fock, probabilities), [i]) for i in 1:N]
+    moments = [mag_moments(N, bitstr, probabilities, order) for order in 1:12]
+    return Measurement(bitstr, probabilities, expectations, moments, basis, shots, label, N, rho)
 end
 
-function _expanded_ops_for_shot(circuit::Circuit,id::Int=0)
-    local_ops=Vector{QuantumOps}()
-    for op in vcat(circuit.layers...)
-        if id>0 && _is_cnot_like(op)
-            for _=1:2id+1
-                if circuit.options.twirl==true
-                    append!(local_ops,apply_twirl(op))
-                else
-                    push!(local_ops,op)
-                end
-            end
-        elseif circuit.options.twirl==true && _is_cnot_like(op)
-            append!(local_ops,apply_twirl(op))
+"""
+    measure(state, shots=-1; label="state to measurement")
+
+Measure a statevector or density matrix. `shots=-1` returns exact probabilities.
+For an MPS the default is 1000 samples; request `measure(psi, -1)` explicitly for
+exact enumeration (limited to 16 qubits). Large sampled MPS results carry an
+empty density-matrix placeholder, never an exponentially large zero matrix.
+"""
+function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, number_of_experiment::Int=-1; label="state to measurement")
+    number_of_experiment == -1 || number_of_experiment > 0 || throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
+    N = get_N(state)
+    bitstr, probabilities = number_of_experiment == -1 ? sample_exact(state) : sample_state(state, number_of_experiment)
+    rho = state isa AbstractMatrix ? sa.sparse(state) : _measurement_rho_placeholder(N)
+    return _measurement_from_probs(bitstr, probabilities, N, number_of_experiment, "0", label, rho)
+end
+
+measure(psi::it.MPS; label="state to measurement") = measure(psi, 1000; label=label)
+
+function measure(samples::Vector{<:Integer}, N::Int)
+    isempty(samples) && throw(ArgumentError("at least one sample is required"))
+    bitstr, probabilities = get_probs_from_sample(samples, N)
+    return _measurement_from_probs(bitstr, probabilities, N, length(samples), "0", "sample to measurement", _measurement_rho_placeholder(N))
+end
+
+_is_cnot_like(op::QuantumOps) = op isa Op && op.q == 2 && op.control == -2 &&
+    uppercase(op.name) in ("CNOT", "CX") && op.mat isa AbstractMatrix && op.mat == gate.CX
+
+function _samples_to_measurement(samples::Vector{<:Integer}, circuit::Circuit; rho=_measurement_rho_placeholder(circuit.stats.N))
+    N = circuit.stats.N
+    bitstr, probabilities = get_probs_from_sample(samples, N)
+    options = circuit.options
+    if options.measurement_mitigate && options.readout_noise isa QuantumChannel
+        bitstr, probabilities = _mitigate_probabilities(bitstr, probabilities, N, options.readout_noise)
+    end
+    return _measurement_from_probs(bitstr, probabilities, N, length(samples), options.measurement_basis, options.circuit_name, rho)
+end
+
+function _circuit_ops(circuit::Circuit)
+    operations = QuantumOps[]
+    for layer in circuit.layers, op in layer
+        if circuit.options.twirl && _is_cnot_like(op)
+            append!(operations, apply_twirl(op))
         else
-            push!(local_ops,op)
+            push!(operations, op)
         end
     end
-    return local_ops
+    return operations
 end
 
-function _final_measurement(psi::it.MPS,options::Options;kwargs...)
-    if options.measurement_basis=="Z"
-        return psi
-    elseif options.measurement_basis=="X"
-        for qubit=1:get_N(psi)
-            psi=apply(psi,Op("H",qubit);kwargs...)
+function _final_measurement(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, options::Options; kwargs...)
+    basis = options.measurement_basis
+    basis in ("X", "Y", "Z", "R") || throw(ArgumentError("measurement_basis must be X, Y, Z, or R"))
+    for qubit in 1:get_N(state)
+        name = basis == "R" ? rand(("H", "HSP", "I")) : basis == "X" ? "H" : basis == "Y" ? "HSP" : "I"
+        name != "I" && (state = apply(state, Op(name, qubit); kwargs...))
+        if options.readout_noise isa QuantumChannel
+            channel = options.readout_noise
+            channel.q == 1 || throw(ArgumentError("readout noise must be a single-qubit channel"))
+            state = apply(state, OpQC(channel.name, channel.kraus, qubit); kwargs...)
         end
-        return psi
-    elseif options.measurement_basis=="Y"
-        for qubit=1:get_N(psi)
-            psi=apply(psi,Op("HSP",qubit);kwargs...)
-        end
-        return psi
-    elseif options.measurement_basis=="R"
-        final_basis = ("H","HSP","I")
-        for qubit=1:get_N(psi)
-            psi=apply(psi,Op(final_basis[rand(1:3)],qubit);kwargs...)
-        end
-        return psi
     end
-
-    throw("measurement_basis error!")
+    return state
 end
 
-function measure(circuit::Circuit,number_of_experiment::Int,id::Int=0)
+_has_state_callback(op::QuantumOps) = false
+_has_state_callback(op::OpF) = op.data isa Function ||
+    (op.data isa Vector{<:QuantumOps} && any(_has_state_callback, op.data))
 
-    all_sample=[]
-    N=circuit.stats.N
+"""
+    measure(circuit, shots; backend=:statevector, kwargs...)
 
-    rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
-    
-    if circuit.options.noise==false && circuit.stats.mid_measurement_count==0 && circuit.options.readout_noise==false
-
-        state=to_state(circuit,0)# id=0 no noise no zne
-        state=_final_measurement(state,circuit.options)#notice how state is changed
-        classical_state=sample(state,number_of_experiment) #shots=number_of_experiment
-        append!(all_sample,classical_state)
-        if circuit.options.density_matrix==true
-            rho_construct = state*state'
-        end
-
-    else #noisy circuit
-
-        println("noisy or measurement operations detected!")
-        for _ =1:number_of_experiment
-            state=to_state(circuit,id)
-            state=_final_measurement(state,circuit.options)#notice how state is changed
-
-            classical_state=sample(state,1)#shot=1 #this should stay as 1 for noisy experiments
-            append!(all_sample,classical_state)
-
-            if circuit.options.density_matrix==true
-                rho_construct += (state*state')/number_of_experiment
-            end
-
-        end
+Sample final outcomes with statevector, MPS (`:tensor`), or density-matrix
+(`:density_matrix`) evolution. MPS accepts `cutoff` and `maxdim`. `run` instead
+returns the mid-circuit measurement records.
+"""
+function measure(circuit::Circuit, number_of_experiment::Int;
+                 backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
+    number_of_experiment > 0 || throw(ArgumentError("shots must be positive"))
+    N = circuit.stats.N
+    backend_name = _resolve_backend(backend)
+    _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
+    T = N < 8sizeof(Int) ? Int : BigInt
+    all_sample = T[]
+    options = circuit.options
+    rho = _measurement_rho_placeholder(N)
+    if options.density_matrix
+        N <= 16 || throw(ArgumentError("density_matrix=true explicitly materializes 4^N entries; disable it for large MPS circuits"))
     end
 
-    bitstr,avg_prob=get_probs_from_sample(all_sample,N)
-
-    if circuit.options.measurement_mitigate==true && isa(circuit.options.readout_noise,QuantumChannel)
-        println("measurement error mitigation applied")
-        avg_prob=la.normalize(abs.(_measurement_mitigate_inv_matrix(N,circuit.options.readout_noise)*avg_prob),1) #fix size issue here
+    ops = [op for layer in circuit.layers for op in layer]
+    stochastic = options.noise != false || options.readout_noise != false ||
+                 any(op -> op isa OpQC || op isa ifOp || op isa OpF || op.type == "🔬", ops)
+    # Density evolution already sums noise and measurement branches exactly.
+    reuse_state = (backend_name == "density_matrix" || !stochastic) &&
+                  !any(_has_state_callback, ops) && !options.twirl && options.measurement_basis != "R"
+    repetitions = reuse_state ? 1 : number_of_experiment
+    for _ in 1:repetitions
+        state = if backend_name == "tensor"
+            apply(_circuit_ops(circuit), zero_state(N_MPS(N)); noise=options.noise, kwargs...)
+        elseif backend_name == "density_matrix"
+            to_rho(circuit)
+        else
+            to_state(circuit)
+        end
+        state = _final_measurement(state, options; kwargs...)
+        append!(all_sample, sample(state, reuse_state ? number_of_experiment : 1))
+        if options.density_matrix
+            vector = state isa it.MPS ? to_state(state) : state
+            rho += (vector isa AbstractMatrix ? vector : vector * vector') / repetitions
+        end
     end
-
-    fock=int2bin.(bitstr,N)
-    expect=[_sample_to_expectation((fock,avg_prob),[i]) for i=1:N]
-    mag_moments_list=[mag_moments(N,bitstr,avg_prob,moment_order) for moment_order=1:12] #fix this
-
-    return Measurement(bitstr,avg_prob,expect,mag_moments_list,circuit.options.measurement_basis,number_of_experiment,circuit.options.circuit_name,N,rho_construct)
-    
+    return _samples_to_measurement(all_sample, circuit; rho=sa.sparse(rho))
 end
 
 function _resolve_backend(backend::Union{Symbol,AbstractString})
     backend_s = lowercase(String(backend))
     if backend_s in ["statevector","state_vector","state","sv"]
         return "statevector"
+    elseif backend_s in ["density_matrix","density","dm","rho"]
+        return "density_matrix"
     elseif backend_s in ["tensor","tensor_network","tn","mps"]
         return "tensor"
     else
-        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector` or `:tensor`."))
+        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector`, `:tensor`, or `:density_matrix`."))
     end
 end
 
 function run(circuit::Circuit,number_of_experiment::Int=1;
-             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,kwargs...)
+             backend::Union{Symbol,AbstractString}=:statevector,kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("`number_of_experiment` must be positive."))
 
     N=circuit.stats.N
     backend_name = _resolve_backend(backend)
     measurements = Vector{Vector{Int}}(undef,number_of_experiment)
 
-    if backend_name=="statevector"
+    if backend_name in ("statevector", "density_matrix")
         _unsupported_keyword_check(kwargs,[])
         nm=circuit.options.noise
 
         for shot=1:number_of_experiment
             state=zero_state(N)
-            ops_shot=_expanded_ops_for_shot(circuit,id)
+            backend_name == "density_matrix" && (state = state * state')
+            ops_shot=_circuit_ops(circuit)
             _,mid_values = apply(ops_shot,state;noise=nm,track_measurements=true)
             measurements[shot] = mid_values
         end
     else
         _unsupported_keyword_check(kwargs,[:cutoff,:maxdim])
-        if circuit.options.readout_noise!=false
-            throw("MPS readout noise is not supported")
-        end
 
         for shot=1:number_of_experiment
             psi=zero_state(N_MPS(N))
-            ops_shot=_expanded_ops_for_shot(circuit,id)
+            ops_shot=_circuit_ops(circuit)
             _,mid_values = apply(ops_shot,psi;noise=circuit.options.noise,track_measurements=true,kwargs...)
             measurements[shot] = mid_values
         end
@@ -712,18 +641,18 @@ end
 
 function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
              options::Options=Options(),layout::Union{Layout,Int}=-1,
-             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,kwargs...)
+             backend::Union{Symbol,AbstractString}=:statevector,kwargs...)
     circuit = compile(ops, options; layout=layout)
-    return run(circuit,number_of_experiment;backend=backend,id=id,kwargs...)
+    return run(circuit,number_of_experiment;backend=backend,kwargs...)
 end
 
 function run(qasm_or_path::AbstractString,number_of_experiment::Int=1;
              options::Options=Options(),layout::Union{Layout,Int}=-1,
-             backend::Union{Symbol,AbstractString}=:statevector,id::Int=0,
+             backend::Union{Symbol,AbstractString}=:statevector,
              is_file::Union{Nothing,Bool}=nothing,kwargs...)
     qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
     ops = from_qasm(qasm)
-    return run(ops,number_of_experiment;options=options,layout=layout,backend=backend,id=id,kwargs...)
+    return run(ops,number_of_experiment;options=options,layout=layout,backend=backend,kwargs...)
 end
 
 
@@ -787,9 +716,10 @@ Convert a quantum circuit to a state vector.
 
 Returns a state vector representing the circuit.
 """
-function to_state(circuit::Circuit,id::Int=0)
-    state=zero_state(circuit.stats.N)
-    ops_shot=_expanded_ops_for_shot(circuit,id)
+function to_state(circuit::Circuit; init_state::AbstractVectorS=zero_state(circuit.stats.N))
+    get_N(init_state) == circuit.stats.N || throw(DimensionMismatch("initial state must match the circuit qubit count"))
+    state=init_state
+    ops_shot=_circuit_ops(circuit)
     return apply(ops_shot,state;noise=circuit.options.noise)
 
 end
@@ -803,115 +733,16 @@ Convert a quantum circuit to a density matrix (rho).
 
 Returns a density matrix representing the circuit.
 """
-function to_rho(circuit::Circuit;id::Int=0)
-
-    N=circuit.stats.N
-    state=zero_state(N)
-    rho=state*state'
-    nm=circuit.options.noise #noisemodel
-
-    for op in vcat(circuit.layers...)
-        # for op=layer
-            if op.q==2 && (op.name=="CNOT" || op.name=="CX") && id>0 #apply ZNE
-                
-                for cnot_pair=1:2id+1 #number of id = extra CNOT pair
-
-                    if circuit.options.twirl==true #for each CNOT, twirl applies
-                        t_ops = apply_twirl(op)
-                        for t_op in t_ops
-                            rho=apply(rho,t_op;noise=nm)
-                        end
-                    else #twirl false but ZNE still applies
-                        rho=apply(rho,op;noise=nm)
-                    end
-
-                end
-
-            elseif op.q==2 && circuit.options.twirl==true #apply twirling/note even ZNE true and id==0
-
-                t_ops = apply_twirl(op)
-                for t_op in t_ops
-                    rho=apply(rho,t_op;noise=nm)
-                end
-
-            else #no twirling or ZNE
-                rho=apply(rho,op;noise=nm)
-            end
-        # end
-    end
-
-    return rho
+function to_rho(circuit::Circuit)
+    state = zero_state(circuit.stats.N)
+    return apply(_circuit_ops(circuit), state * state'; noise=circuit.options.noise)
 end
 
-"""
-`_final_measurement(state::AbstractVectorS, options::Options)`
+"""Expand an operation on an N-qubit Hilbert space (legacy alias)."""
+hilbert_op(op::QuantumOps, N::Int) = op.expand(N)
 
-Performs the final measurement on a quantum state based on specified options.
-
-- `state`: The quantum state vector (sa.SparseVector) to be measured.
-- `options`: Measurement options specifying the basis and error model.
-
-Return the state vector to reflect the measurement outcome.
-"""
-function _final_measurement(state::AbstractVectorS,options::Options)#todo parallel measurement use apply_all()
-
-    N=get_N(state)
-    final_noise=options.readout_noise #measurement noise
-
-    # final measurement_error or random measurement
-    if options.measurement_basis=="Z"
-        for qubit=1:N
-
-            o=Op("ZBasis",gate.I,qubit)
-            state=o.expand(N)*state
-
-            if isa(final_noise,QuantumChannel)
-                state=apply_noise(state, o, final_noise)
-            end
-
-        end
-    elseif options.measurement_basis=="X"
-        for qubit=1:N
-
-            o=Op("XBasis",gate.H,qubit)
-            state=o.expand(N)*state
-
-            if isa(final_noise,QuantumChannel)
-                state=apply_noise(state, o, final_noise)
-            end
-
-        end
-    elseif options.measurement_basis=="Y"
-        for qubit=1:N
-
-            o=Op("YBasis",gate.HSP,qubit)
-            state=o.expand(N)*state
-
-            if isa(final_noise,QuantumChannel)
-                state=apply_noise(state, o, final_noise)
-            end
-
-        end
-    elseif options.measurement_basis=="R"
-            # random measurement basis
-        for qubit=1:N
-            rOp=rand(1:3)
-
-            o=Op("RBasis",[gate.H,gate.HSP,gate.I][rOp],qubit)
-            state=o.expand(N)*state
-
-            if isa(final_noise,QuantumChannel)
-                state=apply_noise(state, o, final_noise)
-            end
-
-        end
-    else
-        throw("measurement_basis error!")
-    end
-
-    return state
-
-end
+"""Compile operations into a circuit (alias for `compile`)."""
+quantum_circuit(args...; kwargs...) = compile(args...; kwargs...)
 
 
 """

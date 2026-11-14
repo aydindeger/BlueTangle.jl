@@ -9,6 +9,14 @@ end
 Base.adjoint(op::OpF)=op
 Base.adjoint(op::ifOp)=op
 
+# Preserve the original function's parameter count when taking a variational
+# gate's adjoint, so VQA can allocate the same parameter slice.
+struct _AdjointGate{F} <: Function
+    parent::F
+end
+(f::_AdjointGate)(args...) = adjoint(f.parent(args...))
+_find_argument_number(f::_AdjointGate) = _find_argument_number(f.parent)
+
 function Base.adjoint(op::Op)
 
     matf = op.mat
@@ -18,15 +26,18 @@ function Base.adjoint(op::Op)
         return op #return original op
     end
 
-    if matf isa Function
-        adjmatf = x -> adjoint(matf(x))
+    if matf isa _AdjointGate
+        name = op.name[1:end-1]
+        adjmatf = matf.parent
+    elseif matf isa Function
+        adjmatf = _AdjointGate(matf)
     elseif matf isa la.Adjoint
         name = op.name[1:end-1]
         adjmatf = matf.parent
     else
         adjmatf = adjoint(matf)
     end
-    return Op(name, adjmatf, op.qubit, op.target_qubit; type=op.type, noisy=op.noisy, control=op.control)
+    return Op(name, adjmatf, op.qubit, op.target_qubit; noisy=op.noisy, control=op.control)
 
 end
 
@@ -67,7 +78,7 @@ psi==exp(im*θ)*phi
 function same_up_to_global_phase(psi::AbstractVectorS, phi::AbstractVectorS)
     inner_product = la.dot(phi,psi)
     global_phase = la.angle(inner_product)
-    is_same = abs(inner_product) ≈ 1
+    is_same = isapprox(psi, exp(im * global_phase) * phi)
     return is_same, global_phase
 end
 
@@ -75,67 +86,77 @@ end
 ## 
 ##========== partial trace  ==========
 
-"""
-    partial_trace(ρ::AbstractVectorS, dims::Vector, keep_qubits::Vector)
-
-    This function can handle nonlocal operations.
-"""
-function partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
-    N=get_N(state)
-    return partial_trace(state*state', fill(2,N),setdiff(1:N,keep_qubits))
+# Basis offsets for selected subsystems, with subsystem 1 the most significant.
+# Compute these once instead of rebuilding full indices for every matrix element.
+function _partial_trace_offsets(dims, subsystems)
+    sub_dims = dims[subsystems]
+    strides = [prod(dims[i+1:end]) for i in subsystems]
+    offsets = zeros(Int, prod(sub_dims))
+    for i in eachindex(offsets)
+        value = i - 1
+        for k in reverse(eachindex(sub_dims))
+            value, digit = divrem(value, sub_dims[k])
+            offsets[i] += digit * strides[k]
+        end
+    end
+    return offsets
 end
 
-function partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
-    # julia version of algorithm: https://copyprogramming.com/howto/how-to-take-partial-trace
+"""
+    partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
 
-    # Calculate the total dimension of the system and initialize the reduced density matrix
-    total_dim = prod(dims)
-    trace_dims = [dims[i] for i in trace_out]
-    keep_dims = deleteat!(copy(dims), trace_out)
-    reduced_dim = prod(keep_dims)
+Return the reduced density matrix of the selected qubits, in ascending qubit
+order. Nonlocal qubits are supported. Contract the amplitudes directly, without
+constructing the full density matrix of the state.
+"""
+function partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
+    N = get_N(state)
+    dims = fill(2, N)
+    trace_out = setdiff(1:N, keep_qubits)
+    keep = setdiff(1:N, trace_out)
+    keep_offsets = _partial_trace_offsets(dims, keep)
+    trace_offsets = _partial_trace_offsets(dims, trace_out)
+    reduced_dim = length(keep_offsets)
     ρ_reduced = zeros(ComplexF64, reduced_dim, reduced_dim)
 
-    # Helper function to calculate the index in the reduced density matrix
-    function calc_index(indices, dims)
-        idx = 0
-        for i in 1:length(indices)
-            idx = idx * dims[i] + indices[i] - 1
+    for j in 1:reduced_dim, i in 1:reduced_dim
+        value = 0.0 + 0.0im
+        for offset in trace_offsets
+            value += state[keep_offsets[i] + offset + 1] *
+                     conj(state[keep_offsets[j] + offset + 1])
         end
-        return idx + 1
+        ρ_reduced[i, j] = value
     end
+    return ρ_reduced
+end
 
-    # Iterate over the elements of the reduced density matrix
-    for i in 1:reduced_dim
-        for j in 1:reduced_dim
-            # Convert linear indices to multi-indices for the kept subsystems
-            i_indices = [div((i-1), prod(keep_dims[k+1:end])) % keep_dims[k] + 1 for k in 1:length(keep_dims)]
-            j_indices = [div((j-1), prod(keep_dims[k+1:end])) % keep_dims[k] + 1 for k in 1:length(keep_dims)]
-            
-            # Sum over the traced out dimensions
-            sum = 0.0
-            for k in 1:prod(trace_dims)
-                # Convert linear index to multi-indices for the traced out subsystems
-                k_indices = [div((k-1), prod(trace_dims[l+1:end])) % trace_dims[l] + 1 for l in 1:length(trace_dims)]
-                
-                # Combine indices and calculate linear indices for the full matrix
-                full_i_indices = copy(i_indices)
-                full_j_indices = copy(j_indices)
-                insert!(full_i_indices, trace_out[1], k_indices[1])
-                insert!(full_j_indices, trace_out[1], k_indices[1])
-                for m in 2:length(trace_out)
-                    insert!(full_i_indices, trace_out[m], k_indices[m])
-                    insert!(full_j_indices, trace_out[m], k_indices[m])
-                end
-                
-                lin_idx_i = calc_index(full_i_indices, dims)
-                lin_idx_j = calc_index(full_j_indices, dims)
-                
-                sum += ρ[lin_idx_i, lin_idx_j]
-            end
-            ρ_reduced[i, j] = sum
+"""
+    partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
+
+Trace out the specified subsystems of a density matrix whose subsystem
+sizes are `dims`. The remaining subsystems retain their original order.
+"""
+function partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
+    all(d -> d isa Integer && d > 0, dims) ||
+        throw(ArgumentError("subsystem dimensions must be positive integers"))
+    all(q -> q isa Integer && 1 <= q <= length(dims), trace_out) && allunique(trace_out) ||
+        throw(ArgumentError("trace_out must contain distinct valid subsystem indices"))
+    total_dim = prod(dims)
+    size(ρ) == (total_dim, total_dim) ||
+        throw(DimensionMismatch("density matrix size must match the product of dims"))
+    keep = setdiff(1:length(dims), trace_out)
+    keep_offsets = _partial_trace_offsets(dims, keep)
+    trace_offsets = _partial_trace_offsets(dims, sort(trace_out))
+    reduced_dim = length(keep_offsets)
+    ρ_reduced = zeros(ComplexF64, reduced_dim, reduced_dim)
+
+    for j in 1:reduced_dim, i in 1:reduced_dim
+        value = 0.0 + 0.0im
+        for offset in trace_offsets
+            value += ρ[keep_offsets[i] + offset + 1, keep_offsets[j] + offset + 1]
         end
+        ρ_reduced[i, j] = value
     end
-
     return ρ_reduced
 end
 
@@ -359,35 +380,23 @@ The function uses the least squares method for the linear regression. The standa
 based on the residual sum of squares and the total sum of squares for the x values.
 """
 function linear_fit(xdata::Vector, ydata::Vector)
-
     n = length(xdata)
+    n == length(ydata) || throw(DimensionMismatch("xdata and ydata must have the same length"))
+    n >= 2 || throw(ArgumentError("a line requires at least two points"))
 
-    if n != length(ydata)
-        throw("xdata and ydata must have the same length")
-    end
-
-    # Calculate sums needed for the coefficients
-    sum_x = sum(xdata)
-    sum_y = sum(ydata)
-    sum_x2 = sum(xdata .* xdata)
-    sum_xy = sum(xdata .* ydata)
-
-    # Calculate coefficients
-    b = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x^2)
-    a = (sum_y - b * sum_x) / n
-
-    rss = sum((y - (a + b * x))^2 for (x, y) in zip(xdata, ydata))
-
-    # Calculate total sum of squares for x
-    x_mean = sum_x / n
+    # Center before summing products to avoid subtracting nearly equal large
+    # numbers when the x coordinates have a large common offset.
+    x_mean = sum(xdata) / n
+    y_mean = sum(ydata) / n
     sst_x = sum((x - x_mean)^2 for x in xdata)
-
-    # Standard Error of the Slope (SE(b))
-    se_b = sqrt(rss / (n - 2) / sst_x)
-
-    # Standard Error of the Intercept (SE(a))
-    se_a = se_b * sqrt(sum_x2 / n)
-
+    sst_x > 0 || throw(ArgumentError("xdata must contain at least two distinct values"))
+    b = sum((x - x_mean) * (y - y_mean) for (x, y) in zip(xdata, ydata)) / sst_x
+    a = y_mean - b * x_mean
+    rss = sum((y - (a + b * x))^2 for (x, y) in zip(xdata, ydata))
+    # Two points fix a line but cannot estimate residual uncertainty.
+    residual_variance = n == 2 ? NaN : rss / (n - 2)
+    se_b = sqrt(residual_variance / sst_x)
+    se_a = sqrt(residual_variance * (1 / n + x_mean^2 / sst_x))
     return a, b, se_a, se_b
 end
 
@@ -420,7 +429,8 @@ function quadratic_fit(xdata::Vector{Float64}, ydata::Vector{Float64})
     end
     Y = reshape(ydata, n, 1)  # Convert y to a column vector
 
-    beta = inv(X' * X) * X' * Y
+    # QR least squares avoids squaring the condition number via X'X.
+    beta = X \ Y
 
     return beta # the coefficients [a, b, c]
 end

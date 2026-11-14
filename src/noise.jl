@@ -77,7 +77,7 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
         
     elseif model == "phase_flip" || model == "bit_flip" || model == "bit_phase_flip"
         E₀ = sqrt(1 - p) * id
-        E₁ = sqrt(p) * (model == :phase_flip ? Z : (model == "bit_flip" ? X : Y))
+        E₁ = sqrt(p) * (model == "phase_flip" ? Z : (model == "bit_flip" ? X : Y))
         ops=[E₀, E₁]
         
     elseif model == "depolarizing_amp"#|| model == "depolarizing_qiskit"
@@ -120,13 +120,7 @@ function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=fals
     if two_qubit==false
         return ops
     else
-        # if model=="depolarizing_qiskit"
-                # ops2=qiskit_depolarizing_two_qubit(p)
-        # else
-                ops2=[kron(Ki, Kj) for Ki in ops for Kj in ops]
-        # end
-
-        return ops2
+        return [kron(Ki, Kj) for Ki in ops for Kj in ops]
     end
 end
 
@@ -229,16 +223,18 @@ Returns a vector of QuantumOps representing the twirled operation with noise.
 """
 function apply_twirl(op::QuantumOps)
 
-    if op.q==2 && (uppercase(op.name) == "CNOT" || uppercase(op.name) =="CX" || uppercase(op.name) == "ECR")
+    if op isa Op && op.q == 2 && op.control == -2 &&
+       uppercase(op.name) in ("CNOT", "CX", "ECR") && op.mat isa AbstractMatrix &&
+       op.mat == gates(uppercase(op.name))
 
         local_ops=Vector{QuantumOps}()
         
-        least=min(op.qubit,op.target_qubit)
+        first_qubit, second_qubit = minmax(op.qubit, op.target_qubit)
 
         twirl_list=_twirl_set(op.name,op.qubit,op.target_qubit)
 
         for (i,set_op)=enumerate(twirl_list)
-            final_qubit=isodd(i) ? least : least+1
+            final_qubit = isodd(i) ? first_qubit : second_qubit
             if i==3
                 push!(local_ops,op)
             end
@@ -253,5 +249,3 @@ function apply_twirl(op::QuantumOps)
     end
 
 end
-
-    

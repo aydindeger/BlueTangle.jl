@@ -21,17 +21,6 @@ jobs:
         with:
           version: '1.11'
 
-      # # Set up Python and install matplotlib
-      # - name: Set up Python
-      #   uses: actions/setup-python@v5
-      #   with:
-      #     python-version: '3.x'
-
-      # - name: Install matplotlib
-      #   run: |
-      #     python3 -m pip install --upgrade pip
-      #     pip3 install matplotlib
-
       # Install Julia dependencies
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
