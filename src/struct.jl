@@ -101,6 +101,9 @@ Represents a quantum noise channel.
 - `kraus`: A vector of matrices representing Kraus operators for the channel.
 
 Constructs a QuantumChannel object for specified qubits, noise model, and probability.
+Kraus operators are copied on construction. The stored `kraus` list is shared by
+all application and probability methods; direct edits are not revalidated.
+Construct a new channel to validate changed operators.
 """
 struct QuantumChannel
     q::Int
@@ -113,9 +116,14 @@ struct QuantumChannel
     function QuantumChannel(model::String,kraus_ops::Vector{<:AbstractMatrix},p::Float64)
 
         if !is_valid_quantum_channel(kraus_ops)
-            throw("not valid kraus operators: not CPTP!")
+            throw(ArgumentError("Kraus operators must be nonempty, finite square matrices satisfying sum(K' * K) ≈ I"))
         end
 
+        size(kraus_ops[1], 1) in (2, 4) ||
+            throw(ArgumentError("QuantumChannel supports one or two qubits (2×2 or 4×4 Kraus operators)"))
+        # Capture the same owned list stored in the struct, including when the
+        # caller supplied a concretely typed vector such as Vector{Matrix{Float64}}.
+        kraus_ops = AbstractMatrix[copy(K) for K in kraus_ops]
         q=Int(log2(size(kraus_ops[1],1)))
         model=lowercase(model)
 
@@ -136,11 +144,12 @@ struct QuantumChannel
             return new(q,model,p,kraus_ops,new_prob2,new_apply2)
 
         else
-            throw("Noise models are available only for 1 and 2 qubits!")
+            throw(ArgumentError("Noise models are available only for 1 and 2 qubits"))
         end
     end
 
     function QuantumChannel(q::Int,model::String,p::Float64)
+        q in (1, 2) || throw(ArgumentError("QuantumChannel supports one or two qubits"))
         model=lowercase(model)
         kraus_ops=q==1 ? BlueTangle.noise_model1(model,p) : BlueTangle.noise_model2(model,p)
         return QuantumChannel(model,kraus_ops,p)
@@ -193,6 +202,10 @@ end
 
     OpQC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1)
     OpQC(q::Int,model::String,p::Float64,qubit::Int,target_qubit::Int=-1)
+
+Kraus operators are copied and shared by this operation's application and
+probability methods. Direct edits to `kraus` are not revalidated; construct a
+new operation to validate changed operators.
 """
 struct OpQC <: QuantumOps
     q::Int
@@ -210,16 +223,19 @@ struct OpQC <: QuantumOps
     function OpQC(name::String,kraus_ops::Vector{<:AbstractMatrix},qubit::Int,target_qubit::Int=-1;type="")
 
         if !is_valid_quantum_channel(kraus_ops)
-            throw("not valid kraus operators: not CPTP!")
+            throw(ArgumentError("Kraus operators must be nonempty, finite square matrices satisfying sum(K' * K) ≈ I"))
         end
 
+        size(kraus_ops[1], 1) in (2, 4, 8) ||
+            throw(ArgumentError("OpQC supports one, two or three qubits (2×2, 4×4 or 8×8 Kraus operators)"))
+        kraus_ops = AbstractMatrix[copy(K) for K in kraus_ops]
         q=Int(log2(size(kraus_ops[1],1)))
         name=lowercase(name)
 
         if q==1
 
             if target_qubit>0
-                throw("for 1-qubit quantum channel, target_qubit should be -1")
+                throw(ArgumentError("for 1-qubit quantum channel, target_qubit should be -1"))
             end
 
             new_prob_op(state::Union{AbstractVectorS,AbstractMatrixS})=__calc_prob(state,kraus_ops,qubit)
@@ -231,7 +247,7 @@ struct OpQC <: QuantumOps
         elseif q==2
 
             if target_qubit<0
-                throw("for 2-qubit quantum channel, you must select the target_qubit")
+                throw(ArgumentError("for 2-qubit quantum channel, you must select the target_qubit"))
             end
 
             new_prob2_op(state::Union{AbstractVectorS,AbstractMatrixS})=__calc_prob(state,kraus_ops,qubit,target_qubit)
@@ -252,7 +268,7 @@ struct OpQC <: QuantumOps
             return new(q,name,qubit,-1,-2,kraus_ops,false,type,new_prob3_op,new_apply3_op)
 
         else
-            throw("Noise models are available only for up to 3 qubits!")
+            throw(ArgumentError("Noise models are available only for up to 3 qubits"))
         end
     end
 
@@ -283,7 +299,8 @@ This function constructs a `QuantumChannel` object for a custom noise model base
 
 # Example
 ```julia
-kraus_ops = [Matrix([[0.9, 0], [0, 1.0]]), Matrix([[0.0, 0.1], [0.0, 0.0]])]
+p = 0.3
+kraus_ops = [sqrt(1-p)*gate.I, sqrt(p)*gate.Z]
 custom_noise_model = custom_noise(1, "MyNoiseModel", kraus_ops)
 ```
 
@@ -306,28 +323,19 @@ Determines the validity of a set of Kraus operators.
 
 - `kraus`: A vector of matrices, each representing a Kraus operator.
 
-This function checks if the provided Kraus operators form a valid quantum channel. 
-It does so by verifying if the sum of the products of each Kraus operator and its adjoint 
-(approximately) equals the identity matrix. Returns `true` if the set is valid, `false` otherwise.
+Checks for a nonempty list of finite square matrices of the same size and the
+trace-preserving condition `sum(K' * K for K in kraus) ≈ I`. Complete positivity
+already follows from the Kraus representation. Returns `false` for malformed
+operators; supported qubit counts are checked separately by the constructors.
 """
 function is_valid_quantum_channel(kraus_operators::Vector)
+    isempty(kraus_operators) && return false
+    first(kraus_operators) isa AbstractMatrix || return false
     n = size(kraus_operators[1],1)
-    sum_kdagger_k = zeros(Complex{Float64}, n, n)
-    
-    # Iterate over each Kraus operator
-    for K in kraus_operators
-        sum_kdagger_k += K' * K
-    end
-    
-    trace_preserving = sum_kdagger_k ≈ Matrix{Complex{Float64}}(la.I, n, n)
-    
-    choi_matrix = kraus_to_choi(kraus_operators)
-
-    eigvals = la.eigen(la.Hermitian(choi_matrix)).values  # real eigenvalues
-
-    completely_positive = (choi_matrix ≈ choi_matrix') && all(round.(eigvals,digits=10) .>= 0)#ishermitian and is_positive_semidefinite
-    
-    return trace_preserving && completely_positive
+    n > 0 || return false
+    all(K -> K isa AbstractMatrix{<:Number} && size(K) == (n, n) && all(isfinite, K),
+        kraus_operators) || return false
+    return sum(K' * K for K in kraus_operators) ≈ la.I
 end
 
 function kraus_to_choi(kraus_operators::Vector)
@@ -339,10 +347,6 @@ function kraus_to_choi(kraus_operators::Vector)
     end
     return choi
 end
-# function is_valid_quantum_channel(kraus::Vector)
-#     sumk = sum(k' * k for k in kraus)
-#     sumk ≈ Matrix(sa.I, size(sumk, 1), size(sumk, 1))
-# end
 
 """
 `Noise1(model::String, p::Float64)`
@@ -383,6 +387,13 @@ The common `Op` entry point also accepts a channel (`Op(channel, qubit)`), a
 measurement with conditional branches (`Op("MZ", qubit; if0="I", if1="X")`),
 or a named whole-register block (`Op(name, operations_or_matrix_or_callback)`).
 These constructors return `OpQC`, `ifOp`, or `OpF` as appropriate.
+
+`Op("RESET", qubit)` and `Op("RES", qubit)` return the ideal reset channel to
+`|0⟩`. Reset adds no measurement bit, even with `track_measurements=true`.
+Use `ifOp("MZ", qubit, "I", "X")` with tracking to retain the pre-reset outcome.
+Those explicit feedback gates receive gate noise by default; use
+`Op("I", qubit; noisy=false)` and `Op("X", qubit; noisy=false)` as the branches
+when the correction should be ideal under a gate-noise model.
 """
 struct Op <: QuantumOps
     q::Int
@@ -587,7 +598,19 @@ function __measurement_hilbert(N::Int,name::String,qubit::Int)
     BlueTangle.hilbert(N,_measurement_mat(rname),qubit)
 end
 
-function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
+# Keep the outer result before any measurements performed by the chosen branch.
+# The default scalar result preserves the direct `born_apply` interface.
+function _apply_conditional_branch(state, bit, if0, if1, noise; track_measurements=false, kwargs...)
+    ops = bit == 0 ? if0 : if1
+    if track_measurements
+        state, bits = apply(ops, state; noise=noise, track_measurements=true, kwargs...)
+        return state, vcat(bit, bits)
+    end
+    return apply(ops, state; noise=noise, kwargs...), bit
+end
+
+function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false;
+                      track_measurements=false, kwargs...)
 
     N=get_N(state)
     rname = _resolve_measurement_name(name)
@@ -596,16 +619,12 @@ function __ifOp_apply(state::AbstractVectorS,name::String,qubit::Int,if0::Vector
     state,ind=born_measure_Z(N,state,qubit)
     state=rotMat'*state #rotate back
 
-    if_op_list=ind==0 ? if0 : if1
-    for ifop=if_op_list
-        state=BlueTangle.apply(state,ifop;noise=noise)
-    end
-
-    return state,ind
+    return _apply_conditional_branch(state, ind, if0, if1, noise; track_measurements, kwargs...)
 
 end
 
-function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false)
+function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op},noise=false;
+                      track_measurements=false, kwargs...)
 
     M=get_M(psi)
     rname = _resolve_measurement_name(name)
@@ -615,19 +634,15 @@ function __ifOp_apply(psi::it.MPS,name::String,qubit::Int,if0::Vector{Op},if1::V
     psi,ind=born_measure_Z(psi,qubit)
     psi=la.normalize(it.apply(it.op(rotMat',M[qubit]),psi)) #rotate back
 
-    if_op_list=ind==0 ? if0 : if1
-    for ifop=if_op_list
-        psi=BlueTangle.apply(psi,ifop;noise=noise)
-    end
-
-    return psi,ind
+    return _apply_conditional_branch(psi, ind, if0, if1, noise; track_measurements, kwargs...)
 end
 
 function __ifOp_apply(rho::AbstractMatrixS, name::String, qubit::Int,
-                      if0::Vector{Op}, if1::Vector{Op}, noise=false; selective=false)
-    if selective
+                      if0::Vector{Op}, if1::Vector{Op}, noise=false;
+                      selective=false, track_measurements=false, kwargs...)
+    if selective || track_measurements
         measured, bit = _measure_density(rho, name, qubit; selective=true)
-        return apply(bit == 0 ? if0 : if1, measured; noise=noise), bit
+        return _apply_conditional_branch(measured, bit, if0, if1, noise; track_measurements, kwargs...)
     end
 
     # Each branch retains its Born probability. Averaging random measurement
@@ -636,7 +651,7 @@ function __ifOp_apply(rho::AbstractMatrixS, name::String, qubit::Int,
     result = zero(rho)
     for basis in bases
         for (branch, ops) in zip(_density_measurement_branches(rho, basis, qubit), (if0, if1))
-            result += apply(ops, branch; noise=noise) / length(bases)
+            result += apply(ops, branch; noise=noise, kwargs...) / length(bases)
         end
     end
     return result, nothing
@@ -655,6 +670,8 @@ qubit 1 is measured as 1. Equivalently, use the common constructor
 
 Vector and MPS evolution sample the measurement. Density-matrix evolution sums
 both branches unless `track_measurements=true` requests a conditional state.
+Tracked records include the outer outcome followed by measurements in the chosen
+branch. MPS `cutoff` and `maxdim` settings also apply to branch operations.
 """
 struct ifOp <: QuantumOps
     q::Int
@@ -669,9 +686,9 @@ struct ifOp <: QuantumOps
     function ifOp(name::String,qubit::Int,if0::Vector{Op},if1::Vector{Op})
 
         new_expand(N::Int)=__measurement_hilbert(N,name,qubit)
-        new_born_apply(state::AbstractVectorS,noise=false)=__ifOp_apply(state,name,qubit,if0,if1,noise)
-        new_born_apply(psi::it.MPS,noise=false)=__ifOp_apply(psi,name,qubit,if0,if1,noise)
-        new_born_apply(rho::AbstractMatrixS,noise=false;selective=false)=__ifOp_apply(rho,name,qubit,if0,if1,noise;selective=selective)
+        new_born_apply(state::AbstractVectorS,noise=false;kwargs...)=__ifOp_apply(state,name,qubit,if0,if1,noise;kwargs...)
+        new_born_apply(psi::it.MPS,noise=false;kwargs...)=__ifOp_apply(psi,name,qubit,if0,if1,noise;kwargs...)
+        new_born_apply(rho::AbstractMatrixS,noise=false;kwargs...)=__ifOp_apply(rho,name,qubit,if0,if1,noise;kwargs...)
 
         new_expand(sites::Vector) = _mat_to_tensor(sites, _measurement_mat(_resolve_measurement_name(name)), qubit)
 
@@ -808,7 +825,7 @@ struct Layout
 end
 
 ##
-##========== Circuit ==========
+##========== Execution options ==========
 
 """
     Options(; circuit_name="circuit", measurement_basis="Z", noise=false,
@@ -818,11 +835,13 @@ end
 Configure circuit execution and final measurement. `noise` accepts a `NoiseModel`;
 `readout_noise` accepts a single-qubit channel applied before final readout.
 `measurement_mitigate` inverts that channel's classical readout response, retaining
-signed estimates at finite shot counts. These weights sum to one but need not be
+signed estimates at finite shot counts. It requires an invertible response whose
+output populations do not depend on input coherences; other channels are rejected.
+These weights sum to one but need not be
 probabilities; observable estimates can exceed their physical range due to
 sampling error. `density_matrix` requests storage of the final
 density matrix in measurement results; select the simulation backend separately
-with `measure(circuit, shots; backend=:density_matrix)`.
+with `measure(ops, shots; options, backend=:density_matrix)`.
 
 `twirl=true` enables Pauli twirling of supported two-qubit gates. Routing swap
 noise is configured separately through `Layout(...; noisy_swap=true)`.
@@ -848,41 +867,12 @@ mutable struct Options
     ) = new(circuit_name, uppercase(measurement_basis), noise, twirl, readout_noise, measurement_mitigate, density_matrix)
 end
 
-"""
-`Circuit`
-
-Represents a quantum circuit.
-
-- `stats`: NamedTuple containing statistics about the circuit.
-- `options`: Options object with circuit configurations.
-- `layers`: Scheduled vectors of quantum operations.
-- `layout`: Qubit connectivity used when routing operations.
-- `stats_init`: Circuit statistics before routing and optimization.
-
-Constructs a Circuit object representing a quantum circuit.
-"""
-struct Circuit
-    stats::NamedTuple
-    stats_init::NamedTuple
-    options::Options
-    layout::Layout
-    layers::Vector{Vector{<:QuantumOps}}
-end
-
-
-
-sa.sparse(circ) = sa.sparse(ComplexF64, circ)
-function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
-    N = circ.stats.N
-    return prod(o.expand(N) for o=reverse(vcat(circ.layers...)))
-end
-
 function sa.sparse(ops::Vector{<:QuantumOps})
     N=get_stats(ops).N
     return prod(o.expand(N) for o=reverse(ops))
 end
 
-hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
+hilbert(ops::Vector{<:QuantumOps}) = sa.sparse(ops)
 
 """
 `Measurement(bitstr::Union{Vector, UnitRange}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::sa.SparseMatrixCSC)`
@@ -913,27 +903,29 @@ struct Measurement
     density_matrix::sa.SparseMatrixCSC
 end
 
-##========== Circuit ==========
+##========== Saved results ==========
 
 """
 `Data`
 
 Represents a collection of quantum computational data.
 
-- `circuit`: Circuit object representing the quantum circuit.
+- `ops`: Operations used for the experiment, including any explicit routing.
+- `options`: Execution and readout settings used for the experiment.
 - `measurement`: Measurement object containing results of the quantum measurements.
 - `other`: Vector for storing additional data.
 
 Constructs a Data object for storing and managing quantum computational data.
 """
 struct Data
-    circuit::Circuit
+    ops::Vector{<:QuantumOps}
+    options::Options
     measurement::Measurement
     other::Vector
 end
 
 """
-`save_data(circuit::Circuit, measurement::Measurement, other::Vector=[])`
+`save_data(ops, measurement::Measurement, other::Vector=[]; options=Options())`
 `load_data(name::String)`
 
 Functions to save and load quantum computational data.
@@ -942,11 +934,15 @@ Functions to save and load quantum computational data.
   to choose the destination; otherwise the circuit name and a random suffix are used.
 - `load_data`: Deserializes and loads a Data object from a file.
 
-Use these functions for data persistence in quantum computations.
+Pass the same operations and options used for measurement. If routing was used,
+save the routed operations; the register size is stored in `measurement`.
+Files serialized with the former circuit wrapper must first be loaded with
+the version that wrote them and exported as operations, settings, and results.
 """
-function save_data(circuit::Circuit, measurement::Measurement, other::Vector=[];
-                   path::AbstractString="$(circuit.options.circuit_name)$(rand(1:1000)).ser")
-    Serialization.serialize(path, Data(circuit, measurement, other))
+function save_data(ops::Vector{<:QuantumOps}, measurement::Measurement, other::Vector=[];
+                   options::Options=Options(),
+                   path::AbstractString="$(options.circuit_name)$(rand(1:1000)).ser")
+    Serialization.serialize(path, Data(ops, options, measurement, other))
     return path
 end
 

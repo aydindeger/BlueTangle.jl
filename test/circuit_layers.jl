@@ -1,10 +1,9 @@
-@testset "Circuit dependencies and layers" begin
+@testset "Operation dependencies and layers" begin
     conditional = ifOp("MZ", 1, Op("I", 3), Op("X", 3))
     ops = [Op("X", 1), conditional, Op("H", 3)]
     direct = apply(ops, zero_state(3))
-    circuit = compile(ops)
     @test expect(direct, Op("X", 3)) ≈ -1
-    @test to_state(circuit) ≈ direct
+    @test apply(zero_state(3), ops) ≈ direct
     @test get_N([conditional]) == 3
     @test get_stats([conditional]).N == 3
     @test get_stats(ops).depth == length(get_layers(ops)) == 3
@@ -16,7 +15,7 @@
 
     controlled_ops = [Op("X", 3), Op("X", 1; control=3), Op("H", 1)]
     @test get_stats(controlled_ops).depth == length(get_layers(controlled_ops)) == 3
-    @test to_state(compile(controlled_ops)) ≈ apply(controlled_ops, zero_state(3))
+    @test apply(zero_state(3), controlled_ops) ≈ apply(controlled_ops, zero_state(3))
 
     # Independent operations can still share a layer; arbitrary functions cannot.
     parallel_ops = [Op("X", 1), Op("X", 2), Op("CX", 1, 2), Op("Z", 3)]
@@ -25,7 +24,7 @@
     barrier_ops = [Op("X", 1), barrier, Op("H", 2)]
     @test get_stats(barrier_ops).depth == length(get_layers(barrier_ops)) == 3
     @test length(get_layers([barrier])) == 1
-    @test to_state(compile(barrier_ops)) ≈ apply(barrier_ops, zero_state(2))
+    @test apply(zero_state(2), barrier_ops) ≈ apply(barrier_ops, zero_state(2))
 
     @test isempty(get_layers(Op[]))
     @test get_stats(Op[]).depth == 0

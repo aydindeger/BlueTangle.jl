@@ -1,4 +1,4 @@
-# Quantum machine learning (QML)
+# Quantum Machine Learning
 
 A variational calculation has three pieces: an operation list, a vector of
 trainable parameters, and a scalar loss. `variational_apply` evaluates the
@@ -23,7 +23,7 @@ fixed = [Op("RY(0.3)", 1)]    # a fixed gate
 @assert nparameters(ops) == 1
 @assert nparameters(fixed) == 0
 state = variational_apply([0.3], ops)
-@assert state ≈ apply(fixed, zero_state(1))
+@assert state ≈ apply(zero_state(1), fixed)
 plotq(ops)
 nothing # hide
 ```

@@ -1,3 +1,5 @@
+# Matrix product state trajectories.
+
 """
 N_MPS(N::Int)
 """
@@ -130,12 +132,12 @@ function amplitude(psi::it.MPS,config::Vector)
     end
 
     config=config .+1
-  
+
     V = it.ITensor(1.)
     for j=1:N
       V *= (psi[j]*it.state(M[j],config[j]))
     end
-  
+
     return it.scalar(V)
 
 end
@@ -188,7 +190,7 @@ function sample_bit(psi::it.MPS,shots::Int=1;basis="Z")
     else
         throw("basis must be Z or X")
     end
-    
+
     # Prepare the sampling gauge once, and leave the caller's MPS untouched.
     it.orthogonalize!(MPS, 1)
     return [it.sample(MPS).-1 for i=1:shots]
@@ -229,7 +231,7 @@ function fidelity(rho::AbstractMatrix, sigma::AbstractMatrix)
     a = sqrt(rho) * sigma * sqrt(rho)
     b = sqrt(a)
     fidelity_value = la.tr(b)^2
-    
+
     return real(fidelity_value)
 end
 
@@ -301,3 +303,176 @@ function correlation(psi::it.MPS, names::String, qubits::Vector)
     return real(it.inner(psi, result))
 end
 correlation(psi::it.MPS, qubits::Vector) = correlation(psi, join(fill("Z", length(qubits)), ','), qubits)
+
+
+function _apply_quantum_channel_mps(psi::it.MPS, channel::QuantumChannel, qubits::Int...; kwargs...)
+    return _apply_quantum_channel_mps(psi, channel.kraus, qubits...; kwargs...)
+end
+
+function _apply_quantum_channel_mps(psi::it.MPS, kraus_ops::Vector{<:AbstractMatrix},
+                                    qubits::Int...; kwargs...)
+    sites = get_M(psi)
+    # ITensor orders local matrix indices from least to most significant.
+    local_sites = sites[reverse(collect(qubits))]
+    tensors = [it.op(K, local_sites...) for K in kraus_ops]
+    # Evaluate Born probabilities without truncation, and without expanding the
+    # MPS into a 2^N state vector. User truncation applies to the selected branch.
+    probabilities = [la.norm(it.apply(K, psi; cutoff=0.0))^2 for K in tensors]
+    index = _weighted_sample(probabilities)
+    return la.normalize(it.apply(tensors[index], psi; kwargs...))
+end
+
+
+function apply_noise(psi::it.MPS,op::QuantumOps,noise::NoiseModel;kwargs...)
+
+    if !(hasproperty(op,:noisy) && op.noisy==true)
+        return psi
+    end
+
+    if op.q==1
+        if op.control == -2
+            if isa(noise.q1,QuantumChannel)
+                return _apply_quantum_channel_mps(psi,noise.q1,op.qubit;kwargs...)
+            end
+        else
+            if isa(noise.q2,QuantumChannel)
+                return _apply_quantum_channel_mps(psi,noise.q2,op.control,op.qubit;kwargs...)
+            end
+        end
+    elseif op.q==2
+        if isa(noise.q2,QuantumChannel)
+            return _apply_quantum_channel_mps(psi,noise.q2,op.qubit,op.target_qubit;kwargs...)
+        end
+    end
+
+    return psi
+end
+
+
+function apply(
+    psi::it.MPS,
+    op::QuantumOps;
+    noise::Union{NoiseModel,Bool}=false,
+    track_measurements::Bool=false,
+    kwargs...
+)#,cutoff=1e-10,maxdim=500)
+
+    _unsupported_keyword_check(kwargs,[:cutoff,:maxdim,:pars])
+
+    M=get_M(psi)
+    mid_measurements=Int[]
+    # Decide which parameter to pass: if cutoff is defined then use it, otherwise use maxdim.
+    dim_kw = Dict{Symbol,Any}()
+    if haskey(kwargs, :cutoff)
+        dim_kw[:cutoff] = kwargs[:cutoff]
+    end
+    if haskey(kwargs, :maxdim)
+        dim_kw[:maxdim] = kwargs[:maxdim]
+    end
+    dim_kw = (; dim_kw...) # Convert dictionary to a named tuple for kwarg splatting
+
+    # if op.q!=1 && abs(op.qubit-op.target_qubit)>1
+    #     throw("non-local gate $(op.name) is not supported.")
+    # end
+
+    if isa(op,OpF)
+        if op.data isa Vector{<:QuantumOps}
+            if track_measurements
+                psi, mid_measurements = apply(op.data, psi; noise=noise, track_measurements=true, dim_kw...)
+            else
+                psi = apply(op.data, psi; noise=noise, dim_kw...)
+            end
+        else
+            psi = op.apply(psi; dim_kw...)
+        end
+    elseif isa(op,OpQC)
+        if op.q==1
+            psi = _apply_quantum_channel_mps(psi,op.kraus,op.qubit; dim_kw...)
+        elseif op.q==2
+            psi = _apply_quantum_channel_mps(psi,op.kraus,op.qubit,op.target_qubit; dim_kw...)
+        elseif op.q==3
+            psi = _apply_quantum_channel_mps(psi,op.kraus,op.qubit,op.qubit+1,op.qubit+2; dim_kw...)
+        end
+    elseif op.type=="🔬"
+        if isa(op,ifOp)
+            psi,record=op.born_apply(psi,noise;track_measurements,kwargs...)
+            track_measurements && append!(mid_measurements,record)
+        else
+            psi,ind=_born_measure(psi,op)
+            track_measurements && push!(mid_measurements,ind)
+        end
+        # println("measurement result=$(ind)")
+    elseif op.type=="f" #for variational circuits
+        psi=la.normalize(it.apply(op.expand(M,kwargs[:pars]...),psi; dim_kw...))
+    else #good old gates
+        psi=la.normalize(it.apply(op.expand(M),psi; dim_kw...))
+    end
+
+    ##apply noise.
+    if isa(noise, NoiseModel)
+        psi=apply_noise(psi,op,noise; dim_kw...)
+    end
+
+    return track_measurements ? (psi,mid_measurements) : psi
+
+end
+
+
+function _born_measure(psi::it.MPS, o::QuantumOps)
+    sites = get_M(psi)
+    rotation = _measurement_mat(_resolve_measurement_name(o.name))
+    psi = la.normalize(it.apply(it.op(rotation, sites[o.qubit]), psi))
+    psi, bit = born_measure_Z(psi, o.qubit)
+    psi = la.normalize(it.apply(it.op(rotation', sites[o.qubit]), psi))
+    return psi, bit
+end
+
+
+"""
+    born_measure_Z(psi::it.MPS, qubit::Int)
+
+Sample a Z measurement of one qubit in a normalized MPS. Return the normalized
+`(collapsed_mps, bit)`, with bit 0 for `|0⟩` and 1 for `|1⟩`.
+All sites remain in the MPS. Use `apply(psi, Op("MZ", qubit);
+track_measurements=true)` for the common measurement-record interface.
+"""
+function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
+
+    born_ops=[gate.P0, gate.P1]
+    si=get_M(psi)[qubit]
+
+    it.orthogonalize!(psi, qubit)
+    psij=psi[qubit]
+    rho_j = it.prime(it.dag(psij), si) * psij
+    prob0=real.(rho_j[1])#0
+    ind=rand() < prob0 ? 0 : 1
+
+    psi=la.normalize(it.apply(it.op(born_ops[ind+1],si),psi))#;cutoff=cutoff,maxdim=maxdim))
+
+    return psi,ind
+
+end
+
+
+function _reset_Z(psi::it.MPS,qubit::Int)
+    psi,ind=born_measure_Z(psi,qubit)
+    if ind==1
+        M=get_M(psi)
+        psi=la.normalize(it.apply(it.op(gate.X,M[qubit]),psi))
+    end
+    return psi,ind
+end
+
+
+sample(psi::it.MPS, shots)=bin2int.(sample_bit(psi,shots))
+
+
+"""
+    sample_exact(psi::it.MPS)
+"""
+function sample_exact(psi::it.MPS; max_qubits::Int=16)
+    N = get_N(psi)
+    N <= max_qubits || throw(ArgumentError("exact MPS probabilities require 2^N outcomes; use measure(psi, shots), or explicitly raise max_qubits"))
+    # Contract once rather than repeating a full MPS contraction for every basis state.
+    return collect(0:2^N-1), Vector(abs2.(to_state(psi)))
+end

@@ -35,12 +35,46 @@
         @test partial_trace(sa.sparse(rho), fill(2, 4), trace_out) ≈ reference
     end
     @test partial_trace(psi, [4, 1]) ≈ partial_trace(psi, [1, 4])
-    for q in 1:4
-        @test partial_trace(psi, q) ≈ partial_trace(psi, [q])
+    for storage in (identity, sa.sparse)
+        state = storage(psi)
+        for q in 1:4
+            reference = projected_partial_trace(rho, fill(2, 4), setdiff(1:4, [q]))
+            @test partial_trace(state, q) ≈ reference
+        end
+        for q in 1:3
+            reference = projected_partial_trace(rho, fill(2, 4), setdiff(1:4, [q, q + 1]))
+            @test partial_trace(state, q, q + 1) ≈ reference
+            @test partial_trace(state, q + 1, q) ≈ reference
+        end
+        @test BlueTangle.bipartition_trace(storage(rho)) ≈
+              projected_partial_trace(rho, fill(2, 4), [1, 2])
+
+        for keep in ([0], [5], [1, 5], [1, 1], [1.0])
+            @test_throws ArgumentError partial_trace(state, keep)
+        end
+        for q in (0, 5)
+            @test_throws ArgumentError partial_trace(state, q)
+        end
+        for q in 1:4
+            @test_throws ArgumentError partial_trace(state, q, q)
+        end
+        @test_throws ArgumentError partial_trace(state, 1, 3)
+        @test_throws ArgumentError partial_trace(state, 0, 1)
+        @test_throws ArgumentError partial_trace(state, 4, 5)
     end
-    for q in 1:3
-        @test partial_trace(psi, q, q + 1) ≈ partial_trace(psi, [q, q + 1])
+    for state in (ComplexF64[], ones(ComplexF64, 3))
+        @test_throws DimensionMismatch partial_trace(state, Int[])
     end
+
+    # Known product states expose bit-order and conjugation errors directly.
+    plus_y = ComplexF64[1, im] / sqrt(2)
+    product = kron(ComplexF64[0, 1], plus_y, ComplexF64[1, 0])
+    @test partial_trace(product, 1) ≈ [0 0; 0 1]
+    @test partial_trace(product, 2) ≈ plus_y * plus_y'
+    @test partial_trace(product, 3) ≈ [1 0; 0 0]
+    @test partial_trace(2product, Int[]) ≈ fill(4, 1, 1)
+    @test partial_trace(plus_y, 1) ≈ plus_y * plus_y'
+    @test partial_trace(ComplexF64[2im], Int[]) == fill(4, 1, 1)
 
     # Mixed states and unequal subsystem dimensions exercise the matrix API.
     dims = [2, 3, 2]
@@ -56,4 +90,14 @@
     @test_throws DimensionMismatch partial_trace(mixed, [2, 2], [1])
     @test_throws ArgumentError partial_trace(mixed, dims, [1, 1])
     @test_throws ArgumentError partial_trace(mixed, dims, [4])
+    for storage in (identity, sa.sparse)
+        @test BlueTangle.partial_trace_second_subsystem(storage(mixed), 2, 6) ≈
+              projected_partial_trace(mixed, [2, 6], [2])
+        @test_throws DimensionMismatch BlueTangle.partial_trace_second_subsystem(storage(mixed), 2, 2)
+        @test_throws DimensionMismatch BlueTangle.bipartition_trace(storage(ones(4, 3)))
+        @test_throws ArgumentError BlueTangle.bipartition_trace(storage(ones(8, 8)))
+    end
+    for invalid_dims in ([0, 6], [-2, 6], [2.0, 6.0])
+        @test_throws ArgumentError partial_trace(mixed, invalid_dims, [1])
+    end
 end

@@ -6,16 +6,19 @@ Reference documentation for the main public APIs.
 
 ```@docs
 sample
+born_measure_Z
 get_probs_from_sample
 expect
 correlation
 ```
 
-## Circuit functions
+## Operation execution and routing
 
 ```@docs
-compile
+apply
+route
 measure
+run(::Vector{<:QuantumOps}, ::Int)
 to_state
 to_rho
 to_MPS
@@ -24,6 +27,7 @@ to_MPS
 ## Quantum Toolkit
 
 ```@docs
+partial_trace
 entanglement_entropy
 shadow
 mag_moments
@@ -51,7 +55,6 @@ one_state
 product_state
 neel_state01
 neel_state10
-apply
 linear_fit
 quadratic_fit
 ```
@@ -65,7 +68,6 @@ ifOp
 Measurement
 QuantumChannel
 NoiseModel
-Circuit
 Options
 Layout
 ```
@@ -101,7 +103,7 @@ hamiltonian_exp
 evolve
 ```
 
-## QML
+## Quantum Machine Learning
 
 The [QML API reference](qml.md#API-reference) documents trainable circuit
 construction, ansatz generators, `train`, and the legacy `AnsatzOptions`, `VQA`,

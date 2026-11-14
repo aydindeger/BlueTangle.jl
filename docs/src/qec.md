@@ -10,6 +10,127 @@ generators. Its built-in decoder searches for a matching **single-qubit Pauli**
 error. This is sufficient for the example below; it is not a decoder for arbitrary
 multi-qubit errors, and setting `d=3` does not independently certify a code's distance.
 
+## Start developing encoded algorithms
+
+For a concrete starting point, `steane_code(blocks)` builds independent
+[[7,1,3]] Steane blocks: one logical qubit per seven consecutive physical
+qubits. `steane_code(2)` therefore has 14 data qubits and two logical qubits.
+It is a product of two codes, not a concatenated code: its distance remains
+`code.d == 3`, rather than increasing with the number of blocks.
+
+Logical `H`, `S`, `SD`, `X`, `Y`, `Z`, `CX`/`CNOT`, `CZ`, and `SWAP` have
+transversal implementations. A one-qubit logical gate acts separately on the
+physical wires; a two-qubit logical gate couples matching positions in distinct
+blocks. Thus a fault at one physical gate cannot spread to several positions
+within a block through these gates. The logical phase convention matters:
+logical `S` uses physical `SD` on every wire, and logical `SD` uses physical `S`.
+See [Gottesman's stabilizer-code thesis, §5.3](https://arxiv.org/html/quant-ph/9705052v1)
+for the logical action of these transversal gates.
+
+Use the existing `code.ops` interface to turn an ordinary logical circuit into
+physical operations:
+
+```@example qec_ft
+using BlueTangle, LinearAlgebra
+
+code = steane_code(2)
+decoder = steane_decoder(code)
+logical_ops = [Op("H", 1), Op("CX", 1, 2)]
+physical_gates = code.ops(logical_ops)
+expected = apply(zero_state(2), logical_ops)
+encoded = apply(code.encode(), physical_gates)
+@assert isapprox(abs2(dot(expected, code.decode(encoded))), 1; atol=1e-12)
+(logical_qubits=code.k, physical_qubits=code.n, physical_gates=length(physical_gates))
+```
+
+This produces the logical Bell state `(|00⟩ + |11⟩)/sqrt(2)`. The circuit acts
+on encoded data throughout; decoding at the end is a simulation diagnostic.
+No logical `T` gate is supplied. These Clifford gates are a starting point for
+encoded algorithm and gadget development, not a universal gate set.
+
+To simulate physical gate noise, use `apply(encoded, physical_gates;
+noise=NoiseModel("depolarizing", 0.001))`. Noise follows the `noisy` flags on
+the compiled physical operations; setting `noisy=false` on a logical `Op`
+does not change those flags.
+
+### Repeated ideal correction rounds
+
+`qec_round` applies ideal projectors directly in the data space without adding
+ancillas. It returns a state containing only the original data qubits, so it
+can be placed between logical gates and called repeatedly:
+
+```@example qec_ft
+# This is the output error produced by X_2 before the transversal CNOT.
+damaged = apply(encoded, [Op("X", 2), Op("X", 9)])
+first_round = qec_round(code, damaged; decoder=decoder)
+second_round = qec_round(code, first_round.state; decoder=decoder)
+@assert get_N(second_round.state) == code.n
+@assert all(iszero, second_round.syndrome)
+@assert isapprox(abs2(dot(expected, code.decode(second_round.state))), 1; atol=1e-12)
+(first_syndrome=first_round.syndrome, second_syndrome=second_round.syndrome)
+```
+
+The Steane decoder treats X and Z components separately in each block. It
+corrects one arbitrary single-qubit Pauli per block, including a Y error; a
+fault propagated between two blocks can therefore be corrected even though the
+whole register contains two errors. Supply `decoder=steane_decoder(code)`
+explicitly: the generic default still searches for a single error across the
+whole register. Higher-weight errors can produce the same syndrome and lead to
+a logical error after recovery.
+
+For statevectors and MPS, `qec_round` samples the ideal syndrome and returns
+`(state=corrected_data, syndrome=bits)`. For density matrices it sums the
+recovered sectors and returns `syndrome=nothing`; an ensemble has no single
+record. It supports the same decoder callbacks as `code.correct`. By contrast,
+the older `code.syndrome` and `code.correct(state)` paths retain their appended
+syndrome ancillas, as explained below.
+
+`qec_round` is an **ideal reference operation**: its stabilizer projectors and
+recovery have no faults. The general synthesized encoder is also not a verified
+fault-tolerant preparation circuit. The existing `code.ops_syndrome` uses a
+bare ancilla for each check, and an ancilla fault can spread to multiple data
+qubits. These distinctions matter when interpreting a successful simulation.
+
+### Two runnable worked examples
+
+From the repository root, run:
+
+```sh
+julia --project=. examples/qec/01_logical_bell.jl
+julia --project=. examples/qec/02_fault_propagation.jl
+```
+
+- `01_logical_bell.jl` prepares an encoded Bell pair, injects a control-X error
+  before logical CNOT, and shows its propagation to one qubit in each block.
+  It corrects the errors, continues with phase and Hadamard gates, injects a
+  second error, and corrects again. Both decoded fidelities should be 1 up to
+  floating-point precision, with 14 data qubits after each round.
+- `02_fault_propagation.jl` enumerates every nonidentity Pauli fault on the
+  operands after each physical gate of logical `H₁, S₂, CX₁₂`. All 147 cases
+  have trivial residual logical action after ideal recovery. It also exhibits
+  an ancilla-X fault in bare-ancilla extraction that produces data `X₃X₄` and
+  a residual logical X after recovery. This is a concrete failure of that
+  extraction circuit's fault containment.
+
+The second example uses `propagate_pauli(error, circuit; nqubits=code.n)` to
+compute `U E U†`, ignoring its global phase. `pauli_syndrome(code, error)`
+predicts the check outcomes without building a quantum state.
+`logical_pauli(code, residual)` requires zero syndrome and returns binary
+vectors `(x, z)` describing the remaining logical Pauli. Both vectors must be
+zero for recovery to act trivially on arbitrary logical inputs. A zero
+syndrome alone does not suffice. These helpers accept Pauli products as lists
+of single-qubit `Op`s; unsupported gates in propagation are rejected.
+
+The 147-case check covers one gate fault in that specified circuit with perfect
+input preparation and final recovery. It omits idle, preparation, measurement,
+and recovery faults and does not estimate a threshold. To develop a complete
+fault-tolerant implementation, the next concrete step is a syndrome gadget
+with verified ancillas or flags and an appropriate repeated-measurement
+decoder. Shor's [fault-tolerant error-correction construction, §4](https://arxiv.org/html/quant-ph/9605011v2)
+explains why containing data errors and obtaining a reliable syndrome are
+separate requirements. Universal algorithms additionally need a non-Clifford
+construction, such as a validated magic-state protocol.
+
 ## Encode an arbitrary logical qubit
 
 The five-qubit code has four independent generators, leaving one logical qubit.
@@ -162,5 +283,11 @@ dimensions; a small example succeeding is not a scaling guarantee.
 
 ```@docs
 StabilizerCode
+steane_code
+steane_decoder
+qec_round
+pauli_syndrome
+propagate_pauli
+logical_pauli
 qec_state_prep
 ```

@@ -10,8 +10,7 @@ logical operations, syndrome extraction, and recovery.
 ```@example home
 using BlueTangle
 ops = [Op("H", 1), Op("CX", 1, 2)]
-circuit = compile(ops)
-state = to_state(circuit)
+state = apply(zero_state(get_N(ops)), ops)
 @assert correlation(state, "Z,Z", [1, 2]) ≈ 1
 @assert correlation(state, "X,X", [1, 2]) ≈ 1
 (state=state, ZZ=correlation(state, "Z,Z", [1, 2]))
@@ -21,19 +20,30 @@ state = to_state(circuit)
 mid-circuit measurements. Qubit indices start at 1, and qubit 1 is the most
 significant bit in statevectors and integer measurement outcomes.
 
+Use `apply(state, ops)` to evolve an existing state, or `measure(ops, shots)` to
+prepare and sample repeated shots. Gate noise is passed to `apply` as
+`noise=...`, and to sampling functions as `options=Options(noise=...)`.
+Operations run in their supplied order; no layout or SWAPs are added by default.
+Use `route(ops, layout)` when connectivity matters. See the
+[operation-list migration notes](examples.md#Operation-lists-and-migration) for
+replacements for the removed wrapper API.
+
 ## Choose a workflow
 
 - [Circuit examples](examples.md): gates, noise channels, measurements, plotting,
-  and the distinction between an ensemble and a single trajectory.
-- [QML](qml.md): VQE, held-out regression and XOR classification, gradient
-  crosschecks, noisy training, MPS truncation, and the complete QML API.
+  and the distinction between an ensemble and a single trajectory. The
+  [conditional measurement](@ref conditional-measurements) and
+  [reset](@ref reset-and-records) sections explain outcome records and feedback.
+  Later examples cover Hamiltonian evolution, entanglement,
+  [partial trace](@ref partial-trace), Pauli twirling, and noise amplification.
+- [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
+  classification, gradient crosschecks, noisy training, MPS truncation, and the
+  complete QML API.
 - [Quantum error correction](qec.md): encode an arbitrary logical qubit in the
   five-qubit code, inspect a syndrome, correct a physical error, and decode;
   repeat with density matrices or an MPS.
 - [OpenQASM import and export](qasm.md): read strings or files, use whole-register
   operations, preserve idle qubits, and diagnose unsupported input.
-- [Advanced examples](advanced.md): Hamiltonian evolution,
-  entanglement, Pauli twirling, and explicit noise-amplification experiments.
 - [Function reference](functions.md): signatures and detailed API documentation.
 
 ## Installation
@@ -55,9 +65,9 @@ For a local checkout, start Julia in its root with `julia --project=.` and run
 `using Pkg; Pkg.instantiate(); using BlueTangle`. Run the tests with
 `julia --project=. -e 'using Pkg; Pkg.test()'`.
 
-`plotq(circuit)` prints a boxed text circuit without extra dependencies. For
+`plotq(ops)` prints a boxed text circuit without extra dependencies. For
 graphical output, install and load `PyPlot`, then call
-`plotq(circuit; backend=:pyplot)` and `savefigure`. `plotqt` is also available for text. Loading `PhasePoly`
+`plotq(ops; backend=:pyplot)` and `savefigure`. `plotqt` is also available for text. Loading `PhasePoly`
 enables `phasepoly` for its supported structured noiseless circuits; see the
 [optional backend example](examples.md#Optional-PhasePoly-backend).
 

@@ -31,8 +31,8 @@ feedback_ops = QuantumOps[
 save_plot("circuit_feedback.png", feedback_ops)
 bell_ops = [Op("H", 1), Op("CX", 1, 2)]
 rho0 = zero_state(2) * zero_state(2)'
-ideal = measure(apply(bell_ops, rho0); label="Ideal")
-noisy = measure(apply(bell_ops, rho0; noise=NoiseModel("depolarizing", 0.08)); label="With gate noise")
+ideal = measure(apply(rho0, bell_ops); label="Ideal")
+noisy = measure(apply(rho0, bell_ops; noise=NoiseModel("depolarizing", 0.08)); label="With gate noise")
 save_plot("measurement_comparison.png", [ideal, noisy], ["Ideal", "With gate noise"])
 
 ## Examples 6 and 8: conditional measurement and a random Clifford circuit.
@@ -40,12 +40,49 @@ conditional_ops = QuantumOps[
     Op("X", 1), Op("MX", 1; if0="Z", if1="H"),
     Op("CX", 1, 2), Op("CX", 2, 3),
 ]
-conditional_measurement = measure(to_rho(compile(conditional_ops)); label="Conditional circuit")
+conditional_measurement = measure(apply(to_rho(zero_state(3)), conditional_ops); label="Conditional circuit")
 save_plot("measure_mid.png", conditional_measurement)
 Random.seed!(108)
-random_circuit = compile(random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX", "MZ"]))
-save_plot("random_circuit.png", random_circuit; fold=12)
+random_ops_example = random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX", "MZ"])
+save_plot("random_circuit.png", random_ops_example; fold=12)
 println("Basic example figures regenerated.")
+
+## Example 9: local MPS shadows compared with an exact reduced state.
+shadow_ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
+kept_qubits = [1, 3]
+# Only this small reference calculation uses a statevector, never the shadows.
+rho_exact = partial_trace(apply(zero_state(3), shadow_ops), kept_qubits)
+@assert rho_exact ≈ Diagonal([0.5, 0.0, 0.0, 0.5])
+shot_counts = [100, 300, 1000, 3000]
+repetitions = 3
+shadow_errors = zeros(length(shot_counts), repetitions)
+Random.seed!(2026) # Reproducible teaching example; independent runs below.
+for (i, shots) in enumerate(shot_counts), repetition in 1:repetitions
+    rho_hat = shadow(shadow_ops, shots; qubits=kept_qubits,
+                     backend=:mps, cutoff=0.0, maxdim=2)
+    shadow_errors[i, repetition] = norm(rho_hat - rho_exact) # Frobenius norm.
+end
+rms_error = sqrt.(vec(mean(shadow_errors.^2; dims=2)))
+expected_rms = sqrt.((25 - real(tr(rho_exact * rho_exact))) ./ shot_counts)
+println("MPS shadow comparison (shots per estimate, RMS over $repetitions runs, expected RMS):")
+for i in eachindex(shot_counts)
+    println((shots=shot_counts[i], rms_error=rms_error[i], expected_rms=expected_rms[i]))
+end
+fig, ax = subplots(figsize=(6.4, 3.9))
+for repetition in 1:repetitions
+    ax.loglog(shot_counts, shadow_errors[:, repetition], "o";
+              color="#aab3bf", markersize=4, alpha=0.7,
+              label=repetition == 1 ? "Individual estimates" : "_nolegend_")
+end
+ax.loglog(shot_counts, rms_error, "o-"; color="#3267a8", label="RMS over 3 runs")
+ax.loglog(shot_counts, expected_rms, "--"; color="#d18032", label="Expected RMS")
+ax.set_xticks(shot_counts)
+ax.set_xticklabels(string.(shot_counts))
+ax.set_xlabel("Shots per estimate")
+ax.set_ylabel("Frobenius error of the two-qubit density matrix")
+ax.set_title("Local MPS shadows of a three-qubit GHZ state", loc="left", fontsize=12)
+ax.legend(frameon=false)
+save_scientific_plot("shadow_mps_convergence.png", fig, ax)
 
 ## Example 11: product-formula evolution and its exact small-system reference.
 N = 4
@@ -54,13 +91,12 @@ time = 0.6
 H = hamiltonian(N, terms)
 exact_state = evolve(zero_state(N), H, time)
 trotter_ops = hamiltonian_exp(N, time, terms; dt=0.05)
-trotter_circuit = compile(trotter_ops)
-trotter_state = to_state(trotter_circuit)
+trotter_state = apply(zero_state(N), trotter_ops)
 trotter_measurement = measure(trotter_state; label="Trotter dt=0.05")
 exact_measurement = measure(exact_state; label="Exact")
-finer_state = to_state(compile(hamiltonian_exp(N, time, terms; dt=0.025)))
+finer_state = apply(zero_state(N), hamiltonian_exp(N, time, terms; dt=0.025))
 @assert norm(finer_state-exact_state) < norm(trotter_state-exact_state)
-save_plot("trotter_circuit.png", trotter_circuit.layers[1:16]; fold=6)
+save_plot("trotter_circuit.png", get_layers(trotter_ops)[1:16]; fold=6)
 save_plot("trotter_comparison.png", [trotter_measurement, exact_measurement])
 fig, ax = subplots(figsize=(5.4, 3.3))
 ax.plot(1:N, trotter_measurement.expect, "o-", color="#3267a8", label="Trotter dt=0.05")
@@ -78,27 +114,28 @@ rotation_error = 0.2
 noise = NoiseModel(false, Noise2("rot_z", rotation_error))
 twirl_ops = [Op("H", 1), Op("H", 2), Op("CX", 1, 2),
              Op("CX", 2, 1), Op("H", 1), Op("H", 2)]
-ideal_circuit = compile(twirl_ops, Options(circuit_name="Ideal"))
-noisy_circuit = compile(twirl_ops, Options(circuit_name="Coherent noise", noise=noise))
-twirled_circuit = compile(twirl_ops,
-    Options(circuit_name="Randomized frames", noise=noise, twirl=true))
-twirl_measurements = [measure(circuit, 4000) for circuit in
-                      (ideal_circuit, noisy_circuit, twirled_circuit)]
-save_plot("circuit_noisy.png", noisy_circuit)
+twirl_options = [
+    Options(circuit_name="Ideal"),
+    Options(circuit_name="Coherent noise", noise=noise),
+    Options(circuit_name="Randomized frames", noise=noise, twirl=true),
+]
+twirl_measurements = [measure(twirl_ops, 4000; options=options)
+                      for options in twirl_options]
+save_plot("circuit_noisy.png", twirl_ops)
 save_plot("twirl_measure.png", twirl_measurements)
 
 ## Example 14: readout inversion with a known independent bit-flip response.
 Random.seed!(114)
 readout_ops = [Op("H", 1), Op("CX", 1, 2)]
 readout_error = Noise1("bit_flip", 0.1)
-readout_circuits = [
-    compile(readout_ops, Options(circuit_name="Ideal")),
-    compile(readout_ops, Options(circuit_name="Readout error", readout_noise=readout_error)),
-    compile(readout_ops, Options(circuit_name="Inverse corrected",
-        readout_noise=readout_error, measurement_mitigate=true)),
+readout_options = [
+    Options(circuit_name="Ideal"),
+    Options(circuit_name="Readout error", readout_noise=readout_error),
+    Options(circuit_name="Inverse corrected",
+        readout_noise=readout_error, measurement_mitigate=true),
 ]
-readout_measurements = [measure(circuit, 4000; backend=:density_matrix)
-                       for circuit in readout_circuits]
+readout_measurements = [measure(readout_ops, 4000; options=options, backend=:density_matrix)
+                       for options in readout_options]
 save_plot("measurement_mitigate.png", readout_measurements)
 
 ## Examples 15–17: occupancy-grid routing, Hadamard test, and controlled swap.
@@ -106,19 +143,19 @@ layout = Layout(sa.sparse([1 1 1; 1 0 1]))
 nonlocal_ops = [Op("H", 1), Op("CX", 1, 5)]
 local_ops = [Op("H", 1), Op("CX", 1, 3), Op("I", 5)]
 controlled_ops = [Op("H", 1), Op("X", 5; control=1)]
-nonlocal_circuit = compile(nonlocal_ops; layout=layout)
-local_circuit = compile(local_ops; layout=layout)
-controlled_circuit = compile(controlled_ops; layout=layout)
-@assert to_state(nonlocal_circuit) ≈ apply(nonlocal_ops, zero_state(5))
-@assert to_state(controlled_circuit) ≈ apply(controlled_ops, zero_state(5))
-save_plot("layout1.png", nonlocal_circuit)
-save_plot("layout2.png", local_circuit)
-save_plot("layout3.png", controlled_circuit)
+routed_nonlocal = route(nonlocal_ops, layout)
+routed_local = route(local_ops, layout)
+routed_controlled = route(controlled_ops, layout)
+@assert apply(zero_state(5), routed_nonlocal) ≈ apply(zero_state(5), nonlocal_ops)
+@assert apply(zero_state(5), routed_controlled) ≈ apply(zero_state(5), controlled_ops)
+save_plot("layout1.png", routed_nonlocal)
+save_plot("layout2.png", routed_local)
+save_plot("layout3.png", routed_controlled)
 hadamard_ops = [Op("X", 2), Op("H", 1), Op("Z", 2; control=1), Op("H", 1)]
-@assert isapprox(expect(apply(hadamard_ops, zero_state(2)), "Z")[1], -1; atol=1e-12)
+@assert isapprox(expect(apply(zero_state(2), hadamard_ops), "Z")[1], -1; atol=1e-12)
 save_plot("hadamard_test.png", hadamard_ops)
 swap_ops = [Op("H", 3), Op("H", 1), Op("SWAP", 2, 3; control=1), Op("H", 1)]
-@assert isapprox(expect(apply(swap_ops, zero_state(3)), "Z")[1], 0.5; atol=1e-12)
+@assert isapprox(expect(apply(zero_state(3), swap_ops), "Z")[1], 0.5; atol=1e-12)
 save_plot("swap.png", swap_ops)
 
 ## QML: a short variational optimization with an exact energy reference.
@@ -276,8 +313,8 @@ close(fig)
 ## Example 19: finite-size monitored trajectories, without deliberate truncation.
 Random.seed!(119)
 unitary_ops = random_ops(6, 4)
-dense = apply(unitary_ops, zero_state(6))
-psi = apply(unitary_ops, zero_state(N_MPS(6)); cutoff=0.0, maxdim=8)
+dense = apply(zero_state(6), unitary_ops)
+psi = apply(zero_state(N_MPS(6)), unitary_ops; cutoff=0.0, maxdim=8)
 @assert isapprox(abs2(dot(dense, to_state(psi))), 1; atol=1e-10)
 illustrative_ops = random_ops(6, 3; measure_prob=0.2, measure_basis=["MZ"])
 save_plot("random_ops_m.png", illustrative_ops; fold=12)
@@ -291,7 +328,7 @@ for N in sizes, p in probabilities
     samples = Float64[]
     for repetition in 1:trajectories
         ops = random_ops(N, depth; measure_prob=p, measure_basis=["MZ"])
-        trajectory_state = apply(ops, zero_state(N_MPS(N)); cutoff=0.0, maxdim=2^(N÷2))
+        trajectory_state = apply(zero_state(N_MPS(N)), ops; cutoff=0.0, maxdim=2^(N÷2))
         push!(samples, entanglement_entropy(trajectory_state, N÷2))
     end
     @assert all(S -> -1e-10 <= S <= (N÷2)*log(2) + 1e-10, samples)
@@ -312,4 +349,4 @@ ax.set_title("8 layers · 24 trajectories per point", loc="left", fontsize=12)
 ax.set_xticks(probabilities)
 ax.legend(frameon=false)
 save_scientific_plot("mie.png", fig, ax)
-println("All 22 currently referenced documentation figures regenerated.")
+println("All documentation figures regenerated.")

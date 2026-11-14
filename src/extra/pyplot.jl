@@ -209,7 +209,6 @@ function _plotq_pyplot(input::AbstractVector;
 end
 
 _plotq_pyplot(op::QuantumOps; kwargs...) = _plotq_pyplot([op]; kwargs...)
-_plotq_pyplot(circuit::Circuit; nqubits::Int=circuit.stats.N, kwargs...) = _plotq_pyplot(circuit.layers; nqubits=nqubits, kwargs...)
 _plotq_pyplot(ansatz::AnsatzOptions; kwargs...) = _plotq_pyplot(ansatz.ops; kwargs...)
 
 """

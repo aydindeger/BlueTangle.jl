@@ -31,14 +31,15 @@ function to_qasm(ops::Vector{<:QuantumOps};
 
     # op → QASM lines
     function _op_to_qasm(op::QuantumOps)::Vector{String}
-        # Special-case: reset is represented internally as OpQC("res", ...) (γ=1)
+        # Only the canonical reset Kraus operators may be exported by name.
         if op isa OpQC
             nameU = uppercase(op.name)
-            if nameU == "RES" || nameU == "RESET"
+            if nameU in ("RES", "RESET") && op.q == 1 &&
+               op.kraus == [gate.P0, [0 1; 0 0]]
                 qi = _qi0(op.qubit)
                 return ["reset $qreg[$qi];"]
             end
-            throw(ArgumentError("Cannot export quantum channel '$(op.name)' to OpenQASM; only RES/RESET (γ=1) is supported."))
+            throw(ArgumentError("Cannot export quantum channel '$(op.name)' to OpenQASM; only RES/RESET with the built-in reset Kraus operators is supported."))
         end
 
         # Everything else: export only plain Op
@@ -207,17 +208,6 @@ function to_qasm(ops::Vector{<:QuantumOps}, filename::AbstractString; kwargs...)
 end
 
 """
-    to_qasm(circuit::Circuit; kwargs...) -> String
-    to_qasm(circuit::Circuit, filename::AbstractString; kwargs...) -> String
-
-Convenience overloads that export a compiled `Circuit` by flattening `circuit.layers`.
-"""
-to_qasm(circuit::Circuit; kwargs...)::String = to_qasm(vcat(circuit.layers...); kwargs...)
-to_qasm(circuit::Circuit, filename::AbstractString; kwargs...)::String =
-    to_qasm(vcat(circuit.layers...), filename; kwargs...)
-
-
-"""
     from_qasm(qasm_or_path::AbstractString; is_file=nothing) -> Vector{QuantumOps}
 
 Read the supported OpenQASM 2 gate subset from text or a file. Quantum registers
@@ -363,7 +353,7 @@ function from_qasm(qasm_or_path::AbstractString; is_file::Union{Nothing,Bool}=no
     end
 
     # The vector API carries its register size through the highest used index.
-    # Retain a declared idle tail so later compile/run calls allocate every qubit.
+    # Retain a declared idle tail so later simulation calls allocate every qubit.
     nqubits > get_N(ops) && push!(ops, Op("I", nqubits))
     return ops
 end

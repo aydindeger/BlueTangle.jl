@@ -45,17 +45,6 @@ function Base.adjoint(ops::Vector{T}) where T<:QuantumOps
     return reverse(Base.adjoint.(ops))
 end
 
-function Base.adjoint(circ::Circuit)
-    circ2=deepcopy(circ)
-    for ops=circ2.layers
-        replace!(op -> la.ishermitian(op) ? op : adjoint(op), ops)
-    end
-
-    reverse!(circ2.layers)
-
-    return circ2
-end
-
 """
     isunitary(mat::AbstractMatrix) --> Bool
 """
@@ -106,11 +95,17 @@ end
     partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
 
 Return the reduced density matrix of the selected qubits, in ascending qubit
-order. Nonlocal qubits are supported. Contract the amplitudes directly, without
-constructing the full density matrix of the state.
+order, with qubit 1 the most significant tensor factor. The indices must be
+distinct integers in `1:get_N(state)`; nonlocal qubits are supported. An empty
+selection returns a 1×1 matrix containing the squared norm of the state.
+Contract the amplitudes directly, without constructing the full density matrix.
 """
 function partial_trace(state::AbstractVectorS, keep_qubits::AbstractVector)
+    ispow2(length(state)) ||
+        throw(DimensionMismatch("state length must be a positive power of two"))
     N = get_N(state)
+    all(q -> q isa Integer && 1 <= q <= N, keep_qubits) && allunique(keep_qubits) ||
+        throw(ArgumentError("keep_qubits must contain distinct valid qubit indices"))
     dims = fill(2, N)
     trace_out = setdiff(1:N, keep_qubits)
     keep = setdiff(1:N, trace_out)
@@ -134,7 +129,9 @@ end
     partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
 
 Trace out the specified subsystems of a density matrix whose subsystem
-sizes are `dims`. The remaining subsystems retain their original order.
+sizes are `dims`, with subsystem 1 the most significant tensor factor. The
+remaining subsystems retain their original order. Unlike the state-vector API,
+the indices specify subsystems to discard, not keep.
 """
 function partial_trace(ρ::AbstractMatrixS, dims::Vector, trace_out::Vector)
     all(d -> d isa Integer && d > 0, dims) ||
@@ -163,114 +160,42 @@ end
 """
     bipartition_trace(rho) -> Matrix
 
-Computes the partial trace of a density matrix.
-
-- `rho`: The density matrix (sa.SparseMatrixCSC) for which to perform the partial trace.
-
-Returns the resulting matrix after performing the partial trace.
+Trace out the first half of an even number of qubits, retaining the second half.
 """
 function bipartition_trace(rho::AbstractMatrixS)
-    dim=Int(get_N(rho)/2)
-    d=2^dim
-    ptr = zeros(Complex{Float64}, d, d)
-    for i = 1:d, j = 1:d
-        for k = 0:d-1
-            ptr[i, j] += rho[i+k*d, j+k*d]
-        end
-    end
-    return ptr
+    N = get_N(rho)
+    iseven(N) || throw(ArgumentError("bipartition_trace requires an even number of qubits"))
+    d = 2^(N ÷ 2)
+    return partial_trace(rho, [d, d], [1])
 end
 
 
 """
-    partial_trace(state::AbstractVectorS,keep_index1::Int)
+    partial_trace(state::AbstractVectorS, keep_index::Int)
+
+Return the reduced density matrix of one qubit.
 """
-function partial_trace(state::AbstractVectorS,keep_index1::Int)
-
-    N=get_N(state)
-
-    qubit_index =  N - keep_index1 + 1
-
-    size_left = 2^(qubit_index - 1)
-    size_middle = 2
-    size_right = 2^(N - qubit_index)
-
-    # Reshape the state vector to correctly isolate the two-qubit subsystem
-    tensor = reshape(state, (size_left, size_middle, size_right))
-
-    # Initialize the reduced density matrix for the qubit of interest
-    ρ_reduced = zeros(ComplexF64, size_middle, size_middle)
-
-    # Sum over the other qubits to obtain the reduced density matrix
-    for i in 1:size_left
-        for j in 1:size_right
-            ρ_reduced += tensor[i, :, j] * tensor[i, :, j]'
-        end
-    end
-
-    ρ_reduced
-
-end
+partial_trace(state::AbstractVectorS, keep_index::Int) = partial_trace(state, [keep_index])
 
 """
-    partial_trace(state::AbstractVectorS,keep_index1::Int,keep_index2::Int)
-    index1 and index2 are local
+    partial_trace(state::AbstractVectorS, keep_index1::Int, keep_index2::Int)
+
+Return the reduced density matrix of two distinct adjacent qubits, in ascending
+qubit order. Use `partial_trace(state, [q1, q2])` for nonadjacent qubits.
 """
-function partial_trace(state::AbstractVectorS,keep_index1::Int,keep_index2::Int)
-
-    N=get_N(state)
-
-    if abs(keep_index1-keep_index2)>1
-        throw("must be local")
-    end
-
-    qubit_index1 = N-minimum([keep_index1,keep_index2])#this fixes enumeration.
-    qubit_index2 = qubit_index1+1
-
-    size_left = 2^(qubit_index1 - 1)
-    size_middle = 4  # Since we're dealing with a two-qubit subsystem, this should directly be 2^2
-    size_right = 2^(N - qubit_index2)
-
-    # Reshape the state vector to correctly isolate the two-qubit subsystem
-    tensor = reshape(state, (size_left, size_middle, size_right))
-
-    # Initialize the reduced density matrix for the two-qubit subsystem as a 4x4 matrix
-    ρ_reduced = zeros(ComplexF64, 4, 4)
-
-    # Adjust the loop to correctly compute the reduced density matrix
-    for i in 1:size_left
-        for k in 1:size_right
-            # Isolate the two-qubit subsystem
-            mat = tensor[i, :, k]  # This should be a 4-element vector for the two-qubit subsystem
-            ρ_reduced += mat * mat'
-        end
-    end
-
-    return ρ_reduced
-
+function partial_trace(state::AbstractVectorS, keep_index1::Int, keep_index2::Int)
+    abs(keep_index1 - keep_index2) == 1 ||
+        throw(ArgumentError("the two qubit indices must be distinct and adjacent"))
+    return partial_trace(state, [keep_index1, keep_index2])
 end
 
 
-# Define a function to perform the partial trace over the second subsystem
-function partial_trace_second_subsystem(ρ, dimA, dimB)
-    # ρ is the full density matrix of the system A ⊗ B
-    # dimA is the dimension of subsystem A
-    # dimB is the dimension of subsystem B
-    
-    # Initialize the reduced density matrix for subsystem A
-    ρA = zeros(ComplexF64, dimA, dimA)
-    
-    # Perform the partial trace over subsystem B
-    for i in 1:dimA
-        for j in 1:dimA
-            for k in 1:dimB
-                ρA[i, j] += ρ[(i-1)*dimB + k, (j-1)*dimB + k]
-            end
-        end
-    end
-    
-    return ρA
-end
+"""
+    partial_trace_second_subsystem(ρ, dimA, dimB)
+
+Trace out B from a density matrix on A ⊗ B, retaining A.
+"""
+partial_trace_second_subsystem(ρ, dimA, dimB) = partial_trace(ρ, [dimA, dimB], [2])
 
 """
     stinespring_dilation(kraus_ops::Vector{AbstractMatrix}) -> Unitary Matrix

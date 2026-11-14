@@ -298,6 +298,28 @@ function identify_error(syndrome::AbstractVector, generator_standard::AbstractMa
     return "No single-qubit error matches this syndrome"
 end
 
+# A decoder returns physical Pauli operations, independently of the state
+# representation used for syndrome extraction (dense, density matrix, or MPS).
+function _qec_recovery(syndrome::AbstractVector, generator::AbstractMatrix, decoder)
+    decoder === nothing && return identify_error(syndrome, generator)
+    length(syndrome) == size(generator, 1) || throw(DimensionMismatch("syndrome length must match the number of stabilizers"))
+    all(x -> x == 0 || x == 1, syndrome) || throw(ArgumentError("syndrome values must be zero or one"))
+    recovery = decoder(copy(syndrome))
+    ops = recovery isa Op ? [recovery] : recovery
+    ops isa AbstractVector || throw(ArgumentError("a decoder must return an Op or a vector of Pauli Ops"))
+    n = size(generator, 2) ÷ 2
+    predicted = zeros(Int, size(generator, 1))
+    for op in ops
+        op isa Op && op.q == 1 && op.control < 0 && 1 <= op.qubit <= n &&
+            op.name in ("I", "X", "Y", "Z") && op.mat ≈ gates(op.name) ||
+            throw(ArgumentError("decoder recovery must contain single-qubit I, X, Y, or Z operations on the data qubits"))
+        op.name in ("X", "Y") && (predicted .+= generator[:, n+op.qubit])
+        op.name in ("Z", "Y") && (predicted .+= generator[:, op.qubit])
+    end
+    mod.(predicted, 2) == syndrome || throw(ArgumentError("decoder recovery does not match the measured syndrome"))
+    return recovery
+end
+
 """
 physical_ops(name::String, logical_qubit::Int, logicals::Dict)
 """
@@ -311,16 +333,34 @@ physical_ops(name::String, logical_qubit::Int, target_qubit::Int, logicals::Dict
 _physical_op_list(op::QuantumOps) = QuantumOps[op]
 _physical_op_list(ops::AbstractVector) = QuantumOps[x isa QuantumOps ? x : Op(x...) for x in ops]
 
+function _qec_validate_logical_op(op::Op)
+    op.control == -2 || throw(ArgumentError("provide an explicit logical gate mapping for controlled operations"))
+    op.q in (1, 2) || throw(ArgumentError("logical Op mappings support one or two logical qubits"))
+    # Lookup is by name. A built-in name must not silently discard a different
+    # supplied matrix; custom names still use their explicit logical mapping.
+    name = _clean_name(op.name)
+    if haskey(gate, Symbol(uppercase(strip(op.name)))) || haskey(_parameterized_gates, name)
+        op.mat isa AbstractMatrix && isapprox(op.mat, gates(op.name); atol=1e-12, rtol=1e-12) ||
+            throw(ArgumentError("logical operation $(op.name) must use its built-in matrix; give custom logical gates a distinct name"))
+    end
+    return nothing
+end
+
 """
 physical_ops(op::QuantumOps, logicals::Dict)
+
+Compile by logical name and wire indices. Built-in gate names must have their
+usual matrices and extra controls require an explicit named mapping. Physical
+gate noise flags come from the logical mapping, not the input logical `Op`.
 """
 function physical_ops(op::QuantumOps, logicals::Dict)
     if isa(op, OpF)
         vals = logicals[op]
-    elseif op.q == 1
-        vals = logicals[op.name, op.qubit]
-    elseif op.q == 2
-        vals = logicals[op.name, op.qubit, op.target_qubit]
+    elseif op isa Op
+        _qec_validate_logical_op(op)
+        vals = op.q == 1 ? logicals[op.name, op.qubit] : logicals[op.name, op.qubit, op.target_qubit]
+    else
+        throw(ArgumentError("logical compilation requires an Op or explicitly mapped OpF"))
     end
 
     return vals isa QuantumOps ? vals : _physical_op_list(vals)
@@ -433,7 +473,12 @@ end
 
     `code.syndrome(state)` returns the measured state with reset ancillas, the
     syndrome bits in the input-generator order, and a candidate single-qubit
-    correction. `code.correct` uses this bounded decoder. Pure-state `code.decode` requires
+    correction. `code.correct` uses this bounded decoder by default. Supply
+    `decoder=bits -> recovery` to `code.syndrome` or `code.correct` to use another
+    decoder: it must return one physical Pauli `Op` or a vector of them, in the
+    input-generator syndrome order. Recovery is checked against the syndrome,
+    but this cannot distinguish a logical error with the same syndrome.
+    Pure-state `code.decode` requires
     the discarded qubits to be in |0⟩ after inverse encoding; it does not silently
     project an uncorrected state into a pure logical vector.
 
@@ -629,7 +674,7 @@ struct StabilizerCode #alpha version
             return reduce_and_relabel_qubits(psi, logical_indices)
         end
 
-        function new_syndrome(state_encoded::Union{AbstractVectorS,AbstractMatrixS,it.MPS}; noise::Union{Bool,NoiseModel}=false)
+        function new_syndrome(state_encoded::Union{AbstractVectorS,AbstractMatrixS,it.MPS}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
             if get_N(state_encoded) != n
                 throw(DimensionMismatch("syndrome extraction requires $n data qubits"))
             end
@@ -637,7 +682,7 @@ struct StabilizerCode #alpha version
             state_encoded_ancillas = _qec_append_ancillas(state_encoded, m)
             state_encoded_ancillas, syndrome_vec = apply(ops_syndrome, state_encoded_ancillas;
                                                          noise=noise, track_measurements=true)
-            op_error = identify_error(syndrome_vec, generator)
+            op_error = _qec_recovery(syndrome_vec, generator, decoder)
             for i in 1:m
                 if syndrome_vec[i] == 1
                     state_encoded_ancillas = apply(state_encoded_ancillas, Op("X", n+i; noisy=false))
@@ -647,27 +692,32 @@ struct StabilizerCode #alpha version
             return state_encoded_ancillas, syndrome_vec, op_error
         end
 
-        function new_correct(state_encoded_ancillas::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, syndrome_vec::Vector; noise::Union{Bool,NoiseModel}=false)
-            if 0 < d <= 2
+        function new_correct(state_encoded_ancillas::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, syndrome_vec::AbstractVector; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
+            if decoder === nothing && 0 < d <= 2
                 throw(ArgumentError("a code of distance $d cannot correct an arbitrary single-qubit error"))
             end
             get_N(state_encoded_ancillas) in (n, n+m) || throw(DimensionMismatch("correction requires $n data qubits, optionally followed by $m reset ancillas"))
-            op_error = identify_error(syndrome_vec, generator)
-            op_error isa Op || throw(ArgumentError(op_error))
-            return all(iszero, syndrome_vec) ? state_encoded_ancillas : apply(state_encoded_ancillas, op_error; noise=noise)
+            recovery = _qec_recovery(syndrome_vec, generator, decoder)
+            recovery isa AbstractString && throw(ArgumentError(recovery))
+            decoder === nothing && all(iszero, syndrome_vec) && return state_encoded_ancillas
+            state = state_encoded_ancillas
+            for op in (recovery isa Op ? [recovery] : recovery)
+                state = apply(state, op; noise=noise)
+            end
+            return state
 
         end
 
-        function new_correct(state_encoded::Union{AbstractVectorS,it.MPS}; noise::Union{Bool,NoiseModel}=false)
+        function new_correct(state_encoded::Union{AbstractVectorS,it.MPS}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
 
             state_encoded_ancillas, syndrome_vec, _ = new_syndrome(state_encoded; noise=noise)
-            return new_correct(state_encoded_ancillas, syndrome_vec; noise=noise)
+            return new_correct(state_encoded_ancillas, syndrome_vec; noise=noise, decoder=decoder)
 
         end
 
-        function new_correct(rho::AbstractMatrixS; noise::Union{Bool,NoiseModel}=false)
+        function new_correct(rho::AbstractMatrixS; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
             get_N(rho) == n || throw(DimensionMismatch("correction requires $n data qubits"))
-            0 < d <= 2 && throw(ArgumentError("a code of distance $d cannot correct an arbitrary single-qubit error"))
+            decoder === nothing && 0 < d <= 2 && throw(ArgumentError("a code of distance $d cannot correct an arbitrary single-qubit error"))
             recovered = zero(sa.sparse(rho))
             if noise isa NoiseModel
                 # Keep noisy ancilla gates coherent until their final measurement.
@@ -677,7 +727,7 @@ struct StabilizerCode #alpha version
                     indices = (outcome+1):2^m:2^(n+m)
                     branch = joint[indices, indices]
                     real(la.tr(branch)) > 100eps() * abs(la.tr(rho)) || continue
-                    recovered += new_correct(branch, int2bin(outcome, m); noise=noise)
+                    recovered += new_correct(branch, int2bin(outcome, m); noise=noise, decoder=decoder)
                 end
             else
                 # Ideal syndrome extraction needs only data-space projectors.
@@ -695,7 +745,7 @@ struct StabilizerCode #alpha version
                     sectors = next_sectors
                 end
                 for (branch, bits) in sectors
-                    recovered += new_correct(branch, bits)
+                    recovered += new_correct(branch, bits; decoder=decoder)
                 end
             end
             return _qec_append_ancillas(recovered, m)
@@ -745,7 +795,7 @@ struct StabilizerCode #alpha version
         end
 
         function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, op::Op; noise::Union{Bool,NoiseModel}=false)
-            op.control == -2 || throw(ArgumentError("provide an explicit logical gate mapping for controlled operations"))
+            _qec_validate_logical_op(op)
             return op.q == 1 ? new_apply(state, op.name, op.qubit; noise=noise) : new_apply(state, op.name, op.qubit, op.target_qubit; noise=noise)
         end
 

@@ -14,7 +14,7 @@
     @test_throws DimensionMismatch AnsatzOptions(N=2,ops=["RY"],loss=state->0.0,pars_initial=[0.1])
     @test_throws ArgumentError AnsatzOptions(N=1,ops=["RY"],loss=gate.Z,model="typo")
 
-    prepared = compile([Op("X",1)])
+    prepared = apply(zero_state(1), [Op("X",1)])
     opt_init = AnsatzOptions(N=1,ops=["RY"],loss=gate.Z,init=prepared,pars_initial=[0.0])
     @test variational_apply([0.0],opt_init) ≈ one_state(1)
     swap_options = AnsatzOptions(N=2,ops=["SWAPA"],loss=hilbert(2,gate.Z,1),pars_initial=[0.3])

@@ -144,15 +144,56 @@ end
 end
 
 @testset "Data persistence" begin
-    circuit = compile([Op("H", 1)])
+    operations = [Op("H", 1)]
+    options = Options(circuit_name="saved operations")
     measurement = measure(plus_state(1))
     mktempdir() do directory
         path = joinpath(directory, "result.ser")
-        @test BlueTangle.save_data(circuit, measurement, ["note"]; path=path) == path
+        @test BlueTangle.save_data(operations, measurement, ["note"]; options=options, path=path) == path
         loaded = BlueTangle.load_data(path)
         @test loaded.other == ["note"]
         @test loaded.measurement.sample ≈ measurement.sample
-        @test to_state(loaded.circuit) ≈ to_state(circuit)
+        @test apply(zero_state(1), loaded.ops) ≈ plus_state(1)
+        @test loaded.options.circuit_name == options.circuit_name
         @test BlueTangle.load_data(path[1:end-4]).other == ["note"]
+    end
+end
+
+@testset "Channel names preserve supplied Kraus operators" begin
+    excited = one_state(1)
+    for name in ("reset", "RES")
+        channel = custom_noise(1, name, [Matrix{Float64}(I, 2, 2)])
+        @test_throws ArgumentError to_qasm([Op(channel, 1)])
+        for initial in (excited, to_rho(excited), to_MPS(excited, N_MPS(1)))
+            result, bits = apply(initial, Op(channel, 1); track_measurements=true)
+            @test isempty(bits)
+            @test initial isa it.MPS ? to_state(result) ≈ excited : result ≈ initial
+        end
+    end
+
+    # Built-in reset still prepares |0>, without recording a measurement bit.
+    for name in ("RESET", "RES")
+        @test occursin("reset q[0];", to_qasm([Op(name, 1)]))
+        for initial in (excited, to_rho(excited), to_MPS(excited, N_MPS(1)))
+            result, bits = apply(initial, [Op(name, 1), Op("MZ", 1)]; track_measurements=true)
+            @test bits == [0]
+            @test initial isa AbstractMatrix ? result ≈ to_rho(zero_state(1)) :
+                  (initial isa it.MPS ? to_state(result) : result) ≈ zero_state(1)
+        end
+    end
+
+    # Reset on an entangled state retains the untouched qubit's mixed ensemble.
+    bell = ComplexF64[1, 0, 0, 1] / sqrt(2)
+    expected = kron(ComplexF64[1 0; 0 0], Matrix{ComplexF64}(I, 2, 2) / 2)
+    for initial in (bell, to_rho(bell), to_MPS(bell, N_MPS(2)))
+        result, bits = apply(initial, Op("RESET", 1); track_measurements=true)
+        @test isempty(bits)
+        if initial isa AbstractMatrix
+            @test result ≈ expected
+        else
+            vector = initial isa it.MPS ? to_state(result) : result
+            @test norm(vector) ≈ 1
+            @test max(abs2(vector[1]), abs2(vector[2])) ≈ 1
+        end
     end
 end

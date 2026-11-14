@@ -1,4 +1,22 @@
-# using SparseArrays
+"""
+    route(ops, layout::Layout) -> Vector{QuantumOps}
+
+Insert swaps so supported nonlocal operations respect `layout`. The returned
+list restores the original qubit ordering after each routed operation; the input
+list is unchanged. Routing is optional: `apply(state, ops)` uses the given gates
+directly. Set `Layout(...; noisy_swap=true)` to include routing-swap noise when
+applying a noise model. Layers and statistics remain available through
+`get_layers(routed_ops)` and `get_stats(routed_ops)`.
+"""
+function route(ops::Vector{<:QuantumOps}, layout::Layout)
+    get_N(ops) <= layout.N ||
+        throw(DimensionMismatch("the layout must cover every operated qubit"))
+    routed = QuantumOps[]
+    for op in ops
+        append!(routed, layout.swap(op))
+    end
+    return routed
+end
 
 function illustrate_physical_qubits(qubit_grid::sa.SparseMatrixCSC{Int, Int}, qubit_num_to_pos)
     num_rows, num_cols = size(qubit_grid)

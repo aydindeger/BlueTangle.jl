@@ -166,3 +166,49 @@ end
         @test code.decode(encoded) ≈ plus_state(1)
     end
 end
+
+@testset "QEC decoder callbacks across state representations" begin
+    # Two adjacent X errors in the five-qubit repetition code have no matching
+    # single-qubit recovery. A decoder for this error model can correct both.
+    code = StabilizerCode(["Z,Z,I,I,I", "I,Z,Z,I,I", "I,I,Z,Z,I", "I,I,I,Z,Z"])
+    recovery = [Op("X", 1; noisy=false), Op("X", 2; noisy=false)]
+    bits = [0, 1, 0, 0]
+    decoder = syndrome -> all(iszero, syndrome) ? Op[] : copy(recovery)
+    logical = normalize(ComplexF64[1, 0.3+0.2im])
+
+    for initial in (logical, to_MPS(logical, N_MPS(1); cutoff=0.0))
+        encoded = code.encode(initial)
+        damaged = apply(recovery, encoded)
+        measured, syndrome, candidate = code.syndrome(damaged; decoder=decoder)
+        @test syndrome == bits
+        @test getproperty.(candidate, :qubit) == [1, 2]
+        @test_throws ArgumentError code.correct(measured, syndrome)
+        corrected = code.decode(code.correct(measured, syndrome; decoder=decoder))
+        direct = code.decode(code.correct(damaged; decoder=decoder))
+        @test isapprox(abs2(inner(initial, corrected)), 1; atol=1e-10)
+        @test isapprox(abs2(inner(initial, direct)), 1; atol=1e-10)
+        @test (corrected isa it.MPS) == (initial isa it.MPS)
+    end
+
+    logical_rho = logical * logical'
+    encoded_rho = code.encode(logical_rho)
+    noisy_rho = 0.4encoded_rho + 0.6apply(recovery, encoded_rho)
+    @test code.decode(code.correct(noisy_rho; decoder=decoder)) ≈ logical_rho
+    # This enters the explicit noisy-ancilla density branch, even at p=0.
+    @test code.decode(code.correct(noisy_rho; decoder=decoder,
+                                  noise=NoiseModel("depolarizing", 0.0))) ≈ logical_rho
+
+    encoded = code.encode(logical)
+    @test_throws DimensionMismatch code.correct(encoded, [0]; decoder=decoder)
+    @test_throws ArgumentError code.correct(encoded, [0, 2, 0, 0]; decoder=decoder)
+    for invalid in ("X", [Op("H", 1)], [Op("X", 6)], [Op("X", 1; control=2)],
+                    [Op("X", gate.Z, 1)], Op[])
+        @test_throws ArgumentError code.correct(encoded, bits; decoder=_ -> invalid)
+    end
+
+    # A valid zero-syndrome recovery need not be the identity. Do not discard
+    # the decoder's explicit choice; syndrome consistency cannot certify it.
+    flip_logical = _ -> [Op("X", q; noisy=false) for q in 1:5]
+    flipped = code.decode(code.correct(code.encode(), zeros(Int, 4); decoder=flip_logical))
+    @test abs2(dot(one_state(1), flipped)) ≈ 1
+end
