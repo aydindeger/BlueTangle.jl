@@ -16,6 +16,11 @@ export maxlinkdim, _born_measure
 export StabilizerCode, encoding_circuit_from_generator, physical_ops, qec_state_prep, QECState, get_XZ_logicals!, get_XZ_logicals, stabilizers_to_generator, reduce_and_relabel_qubits, get_standard_form #QEC get_codeword, 
 export relabel_swap
 export steane_code, steane_decoder, qec_round, pauli_syndrome, propagate_pauli, logical_pauli
+export shor_qec_round, shor_syndrome_circuit, steane_prepare, QECProtocolFailure
+export steane_readout, steane_measure, steane_t
+export shor_code, reed_muller_code, code_distance
+export raw_magic_state, distill15, distillation15_supports, distillation15_statistics
+export steane_raw_magic, steane_distill15
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude
 export it, its, sa, la, sb, pr #Packages

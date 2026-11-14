@@ -33,8 +33,8 @@ const gate = (
     H  = (1/sqrt(2)) * [1.0 1; 1 -1],
     S  = [1. 0; 0 im],
     SD  = [1. 0; 0 -im], #S†
-    T  = round.([1. 0; 0 exp(im * π / 4)],sigdigits=10),
-    TD  = round.([1. 0; 0 exp(-im * π / 4)],sigdigits=10),
+    T  = [1. 0; 0 exp(im * π / 4)],
+    TD  = [1. 0; 0 exp(-im * π / 4)],
     HSP = (1/sqrt(2)) * [1.0+0im  0-1im;1+0im  0+1im],
     HY = (1/sqrt(2)) * [1+0.0im  0.0+1im; 1+0.0im  0.0-1im], #H*S
     H2 = [0.5 0.5 0.5 0.5;0.5 -0.5 0.5 -0.5;0.5 0.5 -0.5 -0.5;0.5 -0.5 -0.5 0.5],
@@ -48,8 +48,8 @@ const gate = (
     CY = [1. 0  0   0; 0 1.  0   0; 0 0  0 -im; 0 0 im  0],
     CZ = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1],
     CS = la.Diagonal([1, 1, 1, im]),
-    CT = round.([1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(im * π / 4)],sigdigits=10),
-    CTD = round.([1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(-im * π / 4)],sigdigits=10),#CTdagger
+    CT = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(im * π / 4)],
+    CTD = [1. 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 exp(-im * π / 4)],#CTdagger
     CSD = la.Diagonal([1., 1, 1, -im]), #CSdagger
     CI = la.Diagonal([1., 1, 1, 1]),
     CH =  [1 0 0 0; 0 1 0 0; 0 0 1/sqrt(2) 1/sqrt(2); 0 0 1/sqrt(2) -1/sqrt(2)],

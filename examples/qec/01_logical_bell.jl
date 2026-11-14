@@ -58,7 +58,7 @@ println("Second syndrome: ", second_round.syndrome)
 println("Recovered continued-circuit fidelity: ", continued_fidelity)
 println("Data qubits after both rounds: ", get_N(second_round.state))
 
-# Change logical_circuit/next_gates to build a Clifford algorithm. Edit fault
-# locations to investigate propagation. For a circuit-level fault-tolerance
-# claim, replace ideal preparation and qec_round with validated noisy gadgets;
-# the second example demonstrates why the existing bare-ancilla circuit fails.
+# Change next_gates to continue with another Clifford computation. Changing
+# logical_circuit also requires updating the explicit H/CNOT sequence in step 2
+# and the corresponding fault predictions. Example 02 shows why a bare syndrome
+# ancilla can fail; example 05 uses physical noisy preparation and Shor recovery.

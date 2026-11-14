@@ -13,6 +13,8 @@ makedocs(
         "Examples" => "examples.md",
         "Quantum Machine Learning" => "qml.md",
         "Quantum Error Correction" => "qec.md",
+        "Noisy fault-tolerant gadgets" => "fault_tolerance.md",
+        "Codes and magic-state factories" => "magic_factory.md",
         "OpenQASM" => "qasm.md",
         "Functions" => "functions.md"
     ]

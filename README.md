@@ -210,6 +210,10 @@ for the other backends. See `?phasepoly` for the supported gate set and limits.
 
 ## Error correction and evolution
 
+Start with the [QEC learning path](examples/qec/README.md): short examples cover
+logical Bell pairs, fault propagation, code distances, noisy syndrome cycles,
+and distillation before the complete factory-to-algorithm example.
+
 A five-qubit code can preserve an arbitrary logical state through a single
 physical Pauli error:
 
@@ -247,7 +251,29 @@ The first creates an encoded Bell state and corrects a propagated fault. The
 second audits every gate-local Pauli fault in a short transversal circuit and
 demonstrates a harmful fault in the bare-ancilla syndrome circuit. Recovery in
 `qec_round` is ideal; these are building blocks for fault-tolerance studies,
-not a complete fault-tolerant preparation, recovery, or universal gate set.
+not a complete noisy computation.
+
+The physical noisy workflow uses `steane_prepare`, `shor_qec_round`,
+`steane_t`, and `steane_measure`. It includes verified cat ancillas, repeated
+syndromes, physical recovery, and decoded logical readout. The phase-estimation
+example makes a fresh resource for every trial with `steane_distill15`: noisy
+physical raw preparation, a Steane-encoded 15-to-1 distillation circuit, and
+acceptance checks precede logical T consumption and readout. It reports raw
+resources and factory attempts, including rejected and aborted work. Its
+physical peak is 47 qubits, with at most 42 in the entangled MPS simulation.
+Run the full cycle and the code/distance comparison with:
+
+```sh
+julia --project=. examples/qec/03_noisy_phase_estimation.jl
+julia --project=. examples/qec/04_codes_and_distance.jl
+```
+
+`shor_code()`, `steane_code()`, and `reed_muller_code()` supply the three small
+CSS codes. `code_distance` searches for a minimum-weight logical Pauli or
+reports a proven lower bound when the search stops early. See the
+[noisy-gadget guide](docs/src/fault_tolerance.md) and
+[codes and factory guide](docs/src/magic_factory.md) for worked derivations,
+the physical fault model, tests, resource accounting, and MPS accuracy controls.
 
 `hamiltonian_exp` approximates `exp(-im*time*H)`, matching `hamiltonian` and the
 exact `evolve(state, H, time)` helper. It uses a shorter final Trotter step to reach

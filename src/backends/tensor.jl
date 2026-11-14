@@ -314,6 +314,26 @@ function _apply_quantum_channel_mps(psi::it.MPS, kraus_ops::Vector{<:AbstractMat
     sites = get_M(psi)
     # ITensor orders local matrix indices from least to most significant.
     local_sites = sites[reverse(collect(qubits))]
+    # For K = sqrt(p) U, K†K = p I: the Born weight is independent of the
+    # input state, even when its operated wires are entangled with the rest.
+    # Test the actual matrices on every call (channel Kraus lists are mutable),
+    # using roundoff-scale relative tolerances and no absolute tolerance.
+    grams = [K' * K for K in kraus_ops]
+    weights = [real(la.tr(G)) / size(G, 1) for G in grams]
+    tolerances = [8eps(real(float(one(eltype(G))))) for G in grams]
+    if all(isapprox(G, p * la.I; rtol=tol, atol=0) for (G, p, tol) in zip(grams, weights, tolerances))
+        index = _weighted_sample(weights)
+        selected = kraus_ops[index]
+        scalar = selected[1, 1]
+        # An identity branch need not move MPS sites or perform SVDs. Preserve
+        # its global phase. With truncation keywords, retain the usual apply
+        # path so the caller's cutoff/maxdim still acts on the selected branch.
+        if isempty(kwargs) && isapprox(selected, scalar * la.I;
+                                       rtol=tolerances[index], atol=0)
+            return la.normalize(scalar * psi)
+        end
+        return la.normalize(it.apply(it.op(selected, local_sites...), psi; kwargs...))
+    end
     tensors = [it.op(K, local_sites...) for K in kraus_ops]
     # Evaluate Born probabilities without truncation, and without expanding the
     # MPS into a 2^N state vector. User truncation applies to the selected branch.

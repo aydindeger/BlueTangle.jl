@@ -29,8 +29,9 @@ searches for a single error in the entire register.
 
 Transversal gates contain a single gate fault to at most one qubit per block.
 The synthesized encoder and `code.ops_syndrome` are NOT fault-tolerant gadgets;
-`qec_round` assumes perfect syndrome measurement and recovery. No logical T gate
-or magic-state preparation is supplied.
+`qec_round` assumes perfect syndrome measurement and recovery. Use
+`steane_prepare` and `shor_qec_round` for physical noisy preparation/recovery,
+and `steane_t` for T/T† with an explicitly supplied encoded magic resource.
 """
 function steane_code(blocks::Int=1)
     blocks > 0 || throw(ArgumentError("the number of Steane blocks must be positive"))

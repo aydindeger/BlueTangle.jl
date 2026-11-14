@@ -10,6 +10,13 @@ generators. Its built-in decoder searches for a matching **single-qubit Pauli**
 error. This is sufficient for the example below; it is not a decoder for arbitrary
 multi-qubit errors, and setting `d=3` does not independently certify a code's distance.
 
+The [QEC example learning path](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/qec/README.md)
+provides runnable steps in the order Bell pair → fault propagation → code
+distance → noisy syndrome cycle → distillation → full noisy algorithm. Its
+first five examples are small calculations; the last includes the encoded
+MPS resource factory. Each step explains what to edit and how to interpret
+its output.
+
 ## Start developing encoded algorithms
 
 For a concrete starting point, `steane_code(blocks)` builds independent
@@ -45,12 +52,17 @@ encoded = apply(code.encode(), physical_gates)
 
 This produces the logical Bell state `(|00⟩ + |11⟩)/sqrt(2)`. The circuit acts
 on encoded data throughout; decoding at the end is a simulation diagnostic.
-No logical `T` gate is supplied. These Clifford gates are a starting point for
-encoded algorithm and gadget development, not a universal gate set.
+These mappings implement the Clifford part of an algorithm. Logical T/T† uses
+`steane_t` with an explicit encoded magic resource and measurement feed-forward;
+see [Noisy fault-tolerant gadgets](fault_tolerance.md) for this universal gate
+set and physical Shor recovery. The [codes and factory guide](magic_factory.md)
+adds Shor and Reed–Muller constructors, actual distance searches, noisy raw
+preparation, and the encoded 15-to-1 factory used by the full phase-estimation
+example.
 
 To simulate physical gate noise, use `apply(encoded, physical_gates;
 noise=NoiseModel("depolarizing", 0.001))`. Noise follows the `noisy` flags on
-the compiled physical operations; setting `noisy=false` on a logical `Op`
+the generated physical operations; setting `noisy=false` on a logical `Op`
 does not change those flags.
 
 ### Repeated ideal correction rounds
@@ -123,13 +135,13 @@ of single-qubit `Op`s; unsupported gates in propagation are rejected.
 
 The 147-case check covers one gate fault in that specified circuit with perfect
 input preparation and final recovery. It omits idle, preparation, measurement,
-and recovery faults and does not estimate a threshold. To develop a complete
-fault-tolerant implementation, the next concrete step is a syndrome gadget
-with verified ancillas or flags and an appropriate repeated-measurement
-decoder. Shor's [fault-tolerant error-correction construction, §4](https://arxiv.org/html/quant-ph/9605011v2)
+and recovery faults and does not estimate a threshold. For physical extraction,
+`shor_qec_round` now supplies verified ancillas and repeated full syndromes;
+the [noisy-gadget guide](fault_tolerance.md) explains its fault model and tests.
+Shor's [fault-tolerant error-correction construction, §4](https://arxiv.org/html/quant-ph/9605011v2)
 explains why containing data errors and obtaining a reliable syndrome are
-separate requirements. Universal algorithms additionally need a non-Clifford
-construction, such as a validated magic-state protocol.
+separate requirements. `steane_t` adds non-Clifford consumption, with magic-state
+quality left as an explicit resource assumption.
 
 ## Encode an arbitrary logical qubit
 

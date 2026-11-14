@@ -1099,16 +1099,35 @@ function reduce_and_relabel_qubits(psi::it.MPS, logical_indices::Vector, qubit_m
     end
     all(q -> q isa Integer && 1 <= q <= n, logical_indices) && allunique(logical_indices) ||
         throw(ArgumentError("retained qubits must be distinct valid indices"))
-    order = [logical_indices; setdiff(1:n, logical_indices)]
-    reordered = it.movesites(psi, order .=> collect(1:n); cutoff=0.0)
-    sites = get_M(reordered)
-    environment = its.ITensor(1.0)
-    for q in n:-1:k+1
-        environment *= reordered[q] * its.state(sites[q], "0")
-    end
-    if k == 0
-        result = ComplexF64[its.scalar(environment)]
+    if issorted(logical_indices)
+        # Discard measured product wires by local contraction. Moving every
+        # retained wire past a zero prefix adds unnecessary SVDs and can retain
+        # numerical null bonds in large factory trajectories.
+        sites = get_M(psi)
+        tensors = its.ITensor[]
+        environment = its.ITensor(1.0)
+        for q in 1:n
+            if q in logical_indices
+                push!(tensors, environment * psi[q])
+                environment = its.ITensor(1.0)
+            else
+                environment *= psi[q] * its.state(sites[q], "0")
+            end
+        end
+        if k == 0
+            result = ComplexF64[its.scalar(environment)]
+        else
+            tensors[end] *= environment
+            result = it.MPS(tensors)
+        end
     else
+        order = [logical_indices; setdiff(1:n, logical_indices)]
+        reordered = it.movesites(psi, order .=> collect(1:n); cutoff=0.0)
+        sites = get_M(reordered)
+        environment = its.ITensor(1.0)
+        for q in n:-1:k+1
+            environment *= reordered[q] * its.state(sites[q], "0")
+        end
         tensors = [reordered[q] for q in 1:k]
         tensors[end] *= environment
         result = it.MPS(tensors)
