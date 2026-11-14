@@ -273,7 +273,7 @@ end
 
     Return a single-qubit Pauli with this syndrome, or an identity for zero
     syndrome. This decoder assumes at most one correctable Pauli error; a
-    multi-qubit error can share the same syndrome and is not certified corrected.
+    multi-qubit error can share the same syndrome and leave a logical error.
 """
 function identify_error(syndrome::AbstractVector, generator_standard::AbstractMatrix)
 
@@ -478,9 +478,8 @@ end
     decoder: it must return one physical Pauli `Op` or a vector of them, in the
     input-generator syndrome order. Recovery is checked against the syndrome,
     but this cannot distinguish a logical error with the same syndrome.
-    Pure-state `code.decode` requires
-    the discarded qubits to be in |0⟩ after inverse encoding; it does not silently
-    project an uncorrected state into a pure logical vector.
+    Pure-state `code.decode` requires the discarded qubits to be in |0⟩ after
+    inverse encoding and raises an error if that condition is not met.
 
     Density matrices encode and decode by linear evolution and partial trace.
     `code.syndrome(rho)` samples a selective record, while `code.correct(rho)`

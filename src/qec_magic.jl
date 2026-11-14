@@ -8,7 +8,7 @@ the corrected word (0 for the +1 eigenvalue, 1 for -1). `corrected_qubit=0`
 means the word already passed the parity checks.
 
 One physical Pauli before readout or one wrong measurement bit is tolerated.
-Two errors can be misdecoded; this function does not certify readout quality.
+Two errors can be misdecoded and change the reported logical outcome.
 The qubit/check convention is that of `steane_code`.
 """
 function steane_readout(bits::AbstractVector)
@@ -125,17 +125,17 @@ For MPS input, optional `cutoff` controls singular-value truncation in gate
 operations; `nothing` keeps their default settings.
 Check convergence when using truncation for quantitative calculations.
 
-This is a fault-tolerant *consumption gadget*, with a supplied-resource
-boundary: the magic block must have the intended logical state, up to the
-declared resource error model. The function does not prepare, verify, or distill
-magic states. In particular, `steane_code().encode(T|+>)` is an ideal simulation
-input, not a fault-tolerant factory. A logical resource error can become a logical
-data error and is not removed by stabilizer correction.
+This fault-tolerant consumption circuit assumes the supplied magic block has
+the intended logical state, up to its specified resource error model. Use
+`steane_distill15` to prepare and distill a noisy encoded resource;
+`steane_code().encode(T|+>)` supplies an ideal input for simulation checks.
+A logical resource error can become a logical data error and is not removed
+by stabilizer correction.
 
 With otherwise correct inputs, a single physical fault in a CNOT, readout,
 conditional correction, or either input block produces at most a correctable
 physical error on the output. Use a fault-tolerant correction round between
-gadgets to handle accumulated errors. No ideal recovery is hidden here.
+gadgets to handle accumulated errors; consumption itself performs no recovery.
 """
 function steane_t(code::StabilizerCode, state::Union{AbstractVectorS,it.MPS},
                   magic::Union{AbstractVectorS,it.MPS}; block::Int=1, dagger::Bool=false,

@@ -16,7 +16,7 @@ end
 
 Construct `blocks` independent [[7,1,3]] Steane code blocks. Logical qubit `b`
 occupies physical wires `7(b-1)+1:7b`; the input and output logical states use
-this same block order. This is a [[7blocks, blocks, 3]] code, not concatenation.
+this same block order. Their product forms a [[7blocks, blocks, 3]] code.
 
 The existing `code.ops` and `code.apply` interfaces support logical I, X, Y, Z,
 H, S, SD, CX/CNOT, CZ and SWAP. These use single-qubit layers, or two-qubit gates
@@ -28,7 +28,7 @@ one arbitrary Pauli error per block. The default generic decoder instead
 searches for a single error in the entire register.
 
 Transversal gates contain a single gate fault to at most one qubit per block.
-The synthesized encoder and `code.ops_syndrome` are NOT fault-tolerant gadgets;
+The synthesized encoder and `code.ops_syndrome` are not fault-tolerant circuits;
 `qec_round` assumes perfect syndrome measurement and recovery. Use
 `steane_prepare` and `shor_qec_round` for physical noisy preparation/recovery,
 and `steane_t` for T/T† with an explicitly supplied encoded magic resource.
@@ -64,8 +64,8 @@ Pass it as `decoder=steane_decoder(code)` to `qec_round`, `code.correct` or
 locate Z errors, independently in each block. A Y error has both components.
 
 Every single-qubit Pauli per block is corrected. Higher-weight errors can have
-the same syndrome and cause a logical error after this recovery. A zero
-syndrome is not a certificate of a correct logical state.
+the same syndrome and cause a logical error after this recovery. Logical errors
+have zero syndrome and therefore remain undetected by the stabilizer checks.
 """
 function steane_decoder(code::StabilizerCode)
     blocks = code.k

@@ -389,8 +389,8 @@ or a named whole-register block (`Op(name, operations_or_matrix_or_callback)`).
 These constructors return `OpQC`, `ifOp`, or `OpF` as appropriate.
 
 `Op("RESET", qubit)` and `Op("RES", qubit)` return the ideal reset channel to
-`|0⟩`. Reset adds no measurement bit, even with `track_measurements=true`.
-Use `ifOp("MZ", qubit, "I", "X")` with tracking to retain the pre-reset outcome.
+`|0⟩`. Reset adds no measurement bit to a `run` record.
+Use `run(state, ifOp("MZ", qubit, "I", "X"))` to retain the pre-reset outcome.
 Those explicit feedback gates receive gate noise by default; use
 `Op("I", qubit; noisy=false)` and `Op("X", qubit; noisy=false)` as the branches
 when the correction should be ideal under a gate-noise model.
@@ -668,9 +668,9 @@ For example, `ifOp("MZ", 1, Op("I", 1), Op("X", 2))` flips qubit 2 only when
 qubit 1 is measured as 1. Equivalently, use the common constructor
 `Op("MZ", 1; if0=Op("I", 1), if1=Op("X", 2))`.
 
-Vector and MPS evolution sample the measurement. Density-matrix evolution sums
-both branches unless `track_measurements=true` requests a conditional state.
-Tracked records include the outer outcome followed by measurements in the chosen
+Vector and MPS evolution sample the measurement. `apply(rho, op)` sums both
+branches; `run(rho, op)` returns a conditional state and its record.
+Records include the outer outcome followed by measurements in the chosen
 branch. MPS `cutoff` and `maxdim` settings also apply to branch operations.
 """
 struct ifOp <: QuantumOps

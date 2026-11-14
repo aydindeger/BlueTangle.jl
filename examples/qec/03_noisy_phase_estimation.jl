@@ -21,14 +21,14 @@ cutoff = 1e-12                      # MPS singular-value truncation; no bond cap
 noise = NoiseModel("depolarizing", gate_error)
 code = steane_code()
 
-# Verify code properties from actual checks, rather than trusting stored d.
+# Calculate the code distances from its stabilizer checks.
 rm_distance = code_distance(reed_muller_code(); max_weight=7)
 @assert (rm_distance.distance, rm_distance.dx, rm_distance.dz) == (3, 7, 3)
 println("Reed-Muller distance search: d=3, dX=7, dZ=3")
 
-# This reference excludes all physical gate/preparation/readout errors. It is
-# useful for understanding the distillation filter, not as a prediction for
-# the full noisy factory simulated below.
+# This reference assumes perfect Clifford operations and independent raw Z
+# errors. The noisy factory below also includes preparation, gate, and readout
+# faults, so its results can differ from this prediction.
 println("Ideal-Clifford, independent-raw-Z reference: ", distillation15_statistics(raw_error))
 
 function phase_trial(code, basis; noise, prep_error, measurement_error,
@@ -112,7 +112,7 @@ println("Wilson intervals describe finite-shot uncertainty, not physical or MPS 
 println("Factory/raw counts include rejected attempts and aborted trials.")
 
 # This small run demonstrates the complete physical workflow and its records.
-# It does not estimate a threshold or show a noisy advantage. A bad accepted
-# resource is possible when multiple faults occur; postselection is not a
-# fidelity certificate. Idle noise, leakage, and classical-control faults are
-# outside this model. Check cutoff convergence before quantitative MPS studies.
+# It does not estimate a threshold or show a noisy advantage. Multiple faults
+# can produce a logical error in an accepted resource. Idle noise, leakage,
+# and classical-control faults are outside this model. Check cutoff convergence
+# before quantitative MPS studies.

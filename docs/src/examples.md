@@ -176,7 +176,7 @@ Use normalized input states for trajectory simulation.
 ```@example pauli_measurement
 using BlueTangle
 plus_y = ComplexF64[1, im] / sqrt(2)
-after, bits = apply(plus_y, Op("MY", 1); track_measurements=true)
+after, bits = run(plus_y, Op("MY", 1))
 @assert bits == [0]
 @assert after * after' ≈ plus_y * plus_y'
 (record=bits, state=after)
@@ -184,8 +184,8 @@ after, bits = apply(plus_y, Op("MY", 1); track_measurements=true)
 
 `Op("MR", q)` chooses X, Y, or Z uniformly on each trajectory. Its record
 contains only the outcome bit, **not the chosen basis**. If the basis must be
-saved, choose it explicitly in your own operation list. Untracked density-matrix
-evolution averages over all three bases and their outcomes.
+saved, choose it explicitly in your own operation list. `apply(rho, ops)`
+averages over all three bases and their outcomes.
 
 ### Apply gates conditioned on the outcome
 
@@ -212,10 +212,10 @@ probabilities are therefore 25% `000` and 75% `111`.
 
 ![Exact outcome probabilities for the conditional circuit](assets/figs/measure_mid.png)
 
-Track a particular trajectory and its record explicitly:
+Use `run` for a particular trajectory and its record:
 
 ```@example conditional
-trajectory, record = apply(zero_state(3), mid_ops; track_measurements=true)
+trajectory, record = run(zero_state(3), mid_ops)
 @assert length(record) == 1
 @assert only(record) in (0, 1)
 record
@@ -236,13 +236,13 @@ accepts `Op` objects, including ordinary measurement operations; `OpQC` channels
 (including `RESET`), nested `ifOp`s, and `OpF` blocks are not accepted as branch
 objects.
 
-For unitary branches `U_0` and `U_1`, untracked density evolution computes
+For unitary branches `U_0` and `U_1`, `apply(rho, ops)` computes
 `sum(U_b * P_b * rho * P_b * U_b' for b in (0,1))`. Each term retains its Born
 weight. It applies feedback separately in each branch before summing them.
 
 ### Measurements inside a branch
 
-With `track_measurements=true`, the record contains the outer outcome first,
+The record returned by `run` contains the outer outcome first,
 followed by outcomes from the branch that actually ran. The other branch adds
 no bits, so record lengths can depend on the outcome. Inner measurements also
 condition the returned density matrix:
@@ -252,7 +252,7 @@ using BlueTangle
 feedback = ifOp("MZ", 1, Op("I", 2),
                 [Op("H", 2), Op("MZ", 2), Op("MZ", 2)])
 initial = product_state([1, 0])
-conditional_rho, bits = apply(initial * initial', feedback; track_measurements=true)
+conditional_rho, bits = run(initial * initial', feedback)
 @assert length(bits) == 3
 @assert bits[1] == 1 && bits[2] == bits[3]
 expected = product_state([1, bits[2]])
@@ -300,16 +300,16 @@ trajectory selects one of those two states.
 
 ### Reset with or without a measurement record
 
-Standalone reset discards its internal outcome. Even when tracking is enabled,
+Standalone reset discards its internal outcome. In a `run` record,
 `Op("RESET", q)` adds no bit. To retain the pre-reset outcome, explicitly measure
 Z and apply conditional X:
 
 ```@example recorded_reset
 using BlueTangle
 initial = one_state(1)
-silent_state, silent_bits = apply(initial, Op("RESET", 1); track_measurements=true)
+silent_state, silent_bits = run(initial, Op("RESET", 1))
 recorded_reset = ifOp("MZ", 1, "I", "X")
-recorded_state, reset_bits = apply(initial, recorded_reset; track_measurements=true)
+recorded_state, reset_bits = run(initial, recorded_reset)
 @assert silent_state ≈ recorded_state ≈ zero_state(1)
 @assert isempty(silent_bits)
 @assert reset_bits == [1]
@@ -601,8 +601,7 @@ partial_trace(rhoAB, [2, 3], [2])
 Statevector length must be a positive power of two. Selected indices must be
 distinct integers within the available qubit/subsystem range. Matrix `dims`
 must contain positive integers, and the matrix must be square with side
-`prod(dims)`. Invalid indices or dimensions raise errors rather than silently
-dropping a subsystem.
+`prod(dims)`. Invalid indices or dimensions raise errors.
 
 Partial trace differs from [measurement](@ref conditional-measurements) and
 [reset](@ref reset-and-records).
@@ -672,7 +671,7 @@ end
 
 Fourth order uses a negative middle substep and more gates per step, so the
 cheapest choice depends on the Hamiltonian and desired accuracy. Compare gate
-counts at the accuracy you need, rather than choosing solely by the order.
+counts at the required accuracy when selecting the order.
 Consecutive commuting terms are grouped,
 repeated blocks at stage and step boundaries are merged, and zero couplings
 produce no gates. If every term commutes, one exact block suffices.
@@ -1064,7 +1063,7 @@ block = Op("bell block", [Op("H", 1), Op("CX", 1, 2)])
 state = apply(zero_state(2), block)
 @assert correlation(state, "Z,Z", [1, 2]) ≈ 1
 conditional_reset = Op("MZ", 1; if0="I", if1="X")
-reset_state, record = apply(one_state(1), conditional_reset; track_measurements=true)
+reset_state, record = run(one_state(1), conditional_reset)
 @assert record == [1]
 @assert reset_state ≈ zero_state(1)
 ```
@@ -1080,7 +1079,8 @@ using BlueTangle, LinearAlgebra
 state = plus_state(1)
 rho = state * state'
 ensemble = apply(rho, Op("MZ", 1))
-conditional, record = apply(rho, Op("MZ", 1); track_measurements=true)
+result = run(rho, Op("MZ", 1))
+conditional, record = result.state, result.record
 
 @assert ensemble ≈ [0.5 0; 0 0.5]
 @assert only(record) in (0, 1)
@@ -1088,27 +1088,28 @@ conditional, record = apply(rho, Op("MZ", 1); track_measurements=true)
 (ensemble_purity=real(tr(ensemble^2)), conditional_purity=real(tr(conditional^2)))
 ```
 
-Density-matrix `apply` sums unobserved noise and measurement
-branches. With `track_measurements=true`, measurement outcomes are sampled and
-returned alongside the conditional state. Statevectors and MPS states follow a
-single trajectory through stochastic operations.
+Choose the function by the result you need:
 
-| Input to `apply` | Default measurement behavior | With `track_measurements=true` |
-|:--|:--|:--|
-| Statevector, dense or sparse | Sample a normalized trajectory; discard the record | Return `(trajectory, bits)` |
-| MPS | Sample a normalized trajectory with the chosen truncation settings | Return `(mps_trajectory, bits)` |
-| Density matrix, dense or sparse | Sum unnormalized outcome branches | Return `(conditional_density_matrix, bits)` |
+| Call | Result |
+|:--|:--|
+| `apply(state, ops)` | Evolved state |
+| `run(state, ops)` | Named tuple with `.state` and `.record` |
+| `sample(state_or_ops, shots)` | Raw final outcomes as integers |
+| `measure(state_or_ops, shots)` | Probabilities and expectation values in a `Measurement` |
 
-Tracking a density matrix samples measurement outcomes, but noise and standalone
-reset still use their complete Kraus sums. The conditional density matrix can
-therefore remain mixed. Tracking a vector or MPS only exposes the record; it
-does not change the trajectory rule.
+For a density matrix, `apply` sums measurement branches and `run` selects the
+observed branch. Both sum noise and standalone-reset Kraus branches, so a
+conditional density matrix can remain mixed. Statevectors and MPS follow one
+trajectory in either case; `run` also retains its measurement record.
 
-Use `measure(ops, shots; backend=:statevector)`, `:density_matrix`, or
-`:tensor` to sample final outcomes. `run(ops, shots; backend=...)` returns
-one vector of explicit mid-circuit outcomes per shot, with no appended final
-measurement. For example, reset contributes no extra bit between two explicit
-measurements:
+`sample` and `measure` use the same final-readout calculation. Supplying operations
+starts each shot in `|0…0⟩`; supplying a state samples that already prepared state.
+`Measurement(draws, N)` summarizes an existing vector of integer draws without
+sampling again. `measure(state)` without a shot count returns exact probabilities.
+
+For repeated explicit measurement records, `run(ops, shots; backend=...)`
+returns one bit vector per shot. It appends no final measurement. For example,
+reset contributes no extra bit between two explicit measurements:
 
 ```@example run_records
 using BlueTangle
@@ -1120,9 +1121,9 @@ run(ops, 3)
 ```
 
 Records follow execution order, including any measurements inside the selected
-branch. `apply(initial, ops; track_measurements=true)` follows the supplied list
-and lets you choose the initial state. `run` starts each shot in `|0…0⟩` and uses
-the operation list's execution order; independent operations are not rescheduled
+branch. `run(initial, ops)` follows the supplied list and lets you choose the
+initial state. The batch form `run(ops, shots)` starts each shot in `|0…0⟩` and
+uses the operation list's execution order; independent operations are not rescheduled
 into earlier layers. Records are flat bit vectors without qubit or basis labels,
 so keep the operation sequence when interpreting them.
 
@@ -1131,8 +1132,7 @@ For an MPS, pass truncation settings to the outer call; they also reach feedback
 ```@example mps_feedback
 using BlueTangle
 feedback = ifOp("MZ", 3, [Op("H", 1), Op("CX", 1, 2)], Op("I", 1))
-psi, bits = apply(zero_state(N_MPS(3)), feedback;
-                  track_measurements=true, cutoff=0.0, maxdim=2)
+psi, bits = run(zero_state(N_MPS(3)), feedback; cutoff=0.0, maxdim=2)
 @assert bits == [0]
 @assert correlation(psi, "X,X", [1, 2]) ≈ 1
 (record=bits, bond_dimension=maxlinkdim(psi))
@@ -1143,9 +1143,8 @@ This small example needs bond dimension 2. A restrictive `maxdim` or nonzero
 for the circuit of interest. Independent stochastic runs can choose different
 outcomes, so their final pure states need not agree even when both are correct.
 
-On MPS, `measure(psi)` uses 1000 shots by default;
-exact probability enumeration with `measure(psi, -1)` is limited to 16 qubits
-unless the lower-level `sample_exact` limit is explicitly changed.
+Exact MPS probabilities with `measure(psi)` are limited to 16 qubits because
+enumeration grows as `2^N`. Use `measure(psi, shots)` for larger states.
 
 ## [22) Optional PhasePoly backend](@id Optional-PhasePoly-backend)
 

@@ -46,7 +46,7 @@ failures = filter(result -> !result.success, fault_results)
 println("Gate-local Pauli faults checked: ", length(fault_results))
 println("Logical failures after ideal blockwise recovery: ", length(failures))
 
-# 2. Contrast with one fault in the existing bare-ancilla syndrome circuit.
+# 2. Follow one fault in the bare-ancilla syndrome circuit.
 # The first check is XXXXIII, measured by an ancilla controlling four CNOTs.
 # An X on that ancilla after its second CNOT propagates to the remaining data
 # positions 3 and 4. The decoder adds X_7; X_3 X_4 X_7 is a logical X.
@@ -68,7 +68,7 @@ println("Bare-ancilla hook on data: ", [(op.name, op.qubit) for op in data_hook]
 println("Hook syndrome: ", hook_syndrome)
 println("Residual logical Pauli after ideal recovery: ", hook_logical)
 
-# The first result certifies this finite set of gate faults under ideal final
-# recovery. The second is a concrete obstruction to treating bare-ancilla
-# extraction as fault tolerant. Neither is a threshold estimate or a complete
-# fault-tolerance test of preparation, syndrome extraction, and readout.
+# The first calculation checks this finite set of gate faults under ideal
+# final recovery. The bare ancilla example fails to contain a single fault.
+# Preparation, syndrome extraction, and readout require their own fault checks;
+# these calculations do not estimate a threshold.

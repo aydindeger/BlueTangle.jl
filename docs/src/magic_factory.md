@@ -3,12 +3,11 @@
 A fault-tolerant computation needs two kinds of protection. Error correction
 keeps an already encoded state usable after physical faults. Magic-state
 distillation checks several imperfect non-Clifford resources and keeps an
-output only when those checks agree with the desired state. Neither operation
-can replace the other: an undetected logical resource error survives ordinary
-stabilizer correction, while faults in the distillation circuit itself need
-protected Clifford operations.
+output only when those checks agree with the desired state. An undetected
+logical resource error survives ordinary stabilizer correction, while faults
+in the distillation circuit require protected Clifford operations.
 
-BlueTangle now supplies three small codes, a bounded distance calculation,
+BlueTangle supplies three small codes, a bounded distance calculation,
 physical noisy raw-state preparation, a six-wire reference distillation circuit,
 and an encoded 15-to-1 factory. The encoded factory produces a resource that
 can be consumed by `steane_t`, as shown below. The reference circuit is
@@ -20,7 +19,7 @@ puts runnable code-distance and six-wire distillation walkthroughs before the
 more expensive encoded factory. Start there to reproduce the mechanisms one
 at a time.
 
-## Three codes with different jobs
+## Shor, Steane, and Reed–Muller codes
 
 The notation `[[n,k,d]]` means `n` physical qubits, `k` encoded qubits, and
 distance `d`: the smallest number of physical positions on which a nontrivial
@@ -40,25 +39,24 @@ same effect on the encoded information; their differences are stabilizers.
 For example, `Z₁Z₂` has weight two but acts trivially in the code space, so its
 existence does not make the distance two.
 
-**Shor's code and Shor syndrome extraction are different objects.** The former
-is the nine-qubit code above. The latter is a verified-cat measurement method.
-`shor_qec_round(steane_code(), state)` uses that method on seven-qubit Steane
-data. It does not convert the data to Shor's nine-qubit code. The current noisy
-extraction implementation is specialized to Steane blocks; `qec_round` provides
-ideal correction for all three code constructors.
+Shor syndrome extraction is a verified-cat measurement method.
+`shor_qec_round(steane_code(), state)` uses it to measure the stabilizers of
+seven-qubit Steane data. The current noisy extraction implementation is
+specialized to Steane blocks; `qec_round` provides ideal correction for all
+three code constructors.
 
 The Reed–Muller constructor labels its fifteen physical columns by the nonzero
 four-bit words, in increasing integer order. The four coordinate rows give its
 X checks; the ten Z checks span the binary kernel of those rows together with
 the all-ones row. Their independent ranks give `15-4-10=1` logical qubit.
 Physical `T` on all fifteen wires implements logical T† in this convention.
-Accordingly, `rm.ops("T", 1)` uses fifteen physical TD gates. This known
-construction is specified directly; no diagonal-gate finder is used.
+Accordingly, `rm.ops("T", 1)` uses fifteen physical TD gates.
 
-## Calculate distance, rather than trusting its label
+## Code distance
 
-The constructor's `code.d` is declared metadata. `code_distance` actually
-searches Pauli supports in increasing weight. A candidate must commute with
+The constructor stores the declared distance in `code.d`. The function
+`code_distance` calculates distance by searching Pauli supports in increasing
+weight. A candidate must commute with
 every stabilizer and anticommute with at least one logical X/Z representative.
 The second condition excludes stabilizers such as Shor's `Z₁Z₂`.
 
@@ -89,18 +87,13 @@ limited = code_distance(rm; max_weight=2)
  searched_through=limited.searched_through, stop_reason=limited.stop_reason)
 ```
 
-This result says `d ≥ 3`; it does not by itself say `d = 3`. `max_candidates`
-also limits the work, and `truncated=true` identifies a budget interruption.
+This result establishes `d ≥ 3`. Equality additionally requires a weight-three
+logical operator. `max_candidates` also limits the work, and `truncated=true`
+identifies a budget interruption.
 Only fully completed weights contribute to a lower bound. CSS codes need only
 pure X and pure Z searches; a general stabilizer code uses X/Y/Z assignments on
 each support. The method is bounded enumeration, so a large search can still be
 expensive.
-
-The earlier implementation did not call CCQC's distance routines. This version
-adapts the native bounded support-search approach from Aydin Deger's
-`CCQC.jl/src/distance.jl`, with attribution in the source and without adding a
-CCQC dependency. No automorphism, diagonal-gate finder, or Python gatefinder
-code is used. BlueTangle additionally handles general, non-CSS stabilizers.
 
 Run the executable code comparison, including ideal error correction and a
 Reed–Muller transversal T check, from the repository root:
@@ -109,7 +102,7 @@ Reed–Muller transversal T check, from the repository root:
 julia --project=. examples/qec/04_codes_and_distance.jl
 ```
 
-## A raw magic state is an actual noisy preparation
+## Noisy magic-state preparation
 
 The resource consumed by a logical T gate is
 
@@ -131,12 +124,12 @@ raw = raw_magic_state()
 [(event.stage, event.op.name) for event in raw.trace]
 ```
 
-Encoding this state into Steane data does not make its logical preparation
-error disappear. The encoded raw-preparation path therefore includes the
-noisy encoder and Shor recovery, and sends the remaining logical resource error
-to distillation. It is not labelled a fault-tolerant raw encoder.
+The encoded raw-preparation path applies the physical Steane encoder and Shor
+recovery. Faults in that encoder can produce logical errors that survive
+recovery. These remaining logical resource errors enter the distillation
+protocol.
 
-## Why fifteen raw states can yield a better one
+## The 15-to-1 distillation circuit
 
 The reference circuit uses five persistent wires and one reusable raw-resource
 wire. Persistent wire 1 is the output; wires 2–5 hold four checks. For column
@@ -149,8 +142,8 @@ P_j = Z_1 Z_2^{b_1} Z_3^{b_2} Z_4^{b_3} Z_5^{b_4},\qquad j=1,\ldots,15.
 Prepare the five wires in plus states. For each column, parity CNOTs compute
 that Z product onto wire 1, one raw magic state implements a T on that parity,
 and the CNOTs are undone. The net operation is
-`exp(-iπ Pⱼ/8)`, up to a global phase. All fifteen rotations are retained
-explicitly, so every consumed raw resource has its own preparation and noise.
+`exp(-iπ Pⱼ/8)`, up to a global phase. The circuit consumes fifteen raw
+resources, each with its own preparation and noise.
 This is the compressed Reed–Muller circuit described in
 [Litinski, §3.1](https://arxiv.org/abs/1808.02892).
 
@@ -159,9 +152,10 @@ For example, column 3 is `0011`, so its support is `[1,4,5]`. CNOTs from 4 and
 those CNOTs restores the original wire labels. The four check wires are finally
 measured in X; only `0000` is accepted.
 
-The output sign can be checked directly. Let `a` be the four computational bits
-on the check wires. Summing their character over the fifteen nonzero columns
-gives 15 when `a=0000`, and −1 otherwise. In the product of fifteen rotations,
+To determine the output phase, let `a` be the four computational bits on the
+check wires. Summing `(-1)^(a⋅j)` over the fifteen nonzero binary columns,
+with `a⋅j` the binary dot product, gives 15 when `a=0000` and −1 otherwise.
+In the product of fifteen rotations,
 these phases coincide modulo `2π` on the check register, while the relative
 phase of output `|1⟩` to `|0⟩` is `exp(-iπ/4)`. Thus the output is initially
 `T†|+⟩`; a final S converts it to `|A⟩`. The circuit simulates that final gate
@@ -175,16 +169,15 @@ reference = distill15()
  check_records=reference.syndromes)
 ```
 
-The six-wire `distill15` function is an **unencoded reference circuit**. A late
-fault in its final S can corrupt the output after the checks have passed. It is
-therefore unsuitable as evidence that arbitrary factory gate faults have been
-suppressed. The encoded factory protects the Clifford computation with Steane
-blocks and produces a seven-qubit output directly.
+The six-wire `distill15` function is an unencoded reference circuit. A fault
+in its final S can corrupt the output after the checks have passed. Protecting
+these Clifford operations requires encoding: `steane_distill15` uses Steane
+blocks throughout the distillation circuit and produces a seven-qubit output.
 
-## Where the `35p³` law comes from
+## Acceptance probability and output error
 
-First isolate a precise model: each of the fifteen raw inputs independently
-has a Z defect with probability `p`, and every other operation is perfect. Let
+Consider a model in which each of the fifteen raw inputs independently has
+a Z defect with probability `p`, and every other operation is perfect. Let
 `eⱼ` indicate which raw inputs were defective. The four check outcomes are the
 binary column XOR `H e`. An accepted odd-weight pattern adds logical Z to the
 output; an accepted even-weight pattern is harmless.
@@ -193,8 +186,8 @@ A single bad input cannot pass because every column is nonzero. Two cannot
 pass because distinct columns cannot XOR to zero. Three can: the worked
 example is columns 1, 2, and 3. Every pair of distinct nonzero columns determines
 a unique third column that closes such a triple. There are `15×14/2 = 105`
-pairs, and each triple is counted three times, giving **35** undetected triples.
-That is the origin of the leading term, rather than a fitted coefficient.
+pairs, and each triple is counted three times, giving 35 undetected triples.
+These patterns contribute the leading term `35p³` to the output error.
 
 Writing `q=1-2p`, the exact acceptance and conditional output-error probabilities
 for this model are
@@ -220,17 +213,17 @@ statistics
 At 1% raw phase error, about 86.0% of attempts pass. The accepted error is about
 `3.61×10⁻⁵`, and the mean raw-state cost is `15/P_accept ≈ 17.44`. Rejected
 attempts still consume fifteen inputs; this mean cost assumes independent
-retries without a cap. These numbers do not include noisy
-Clifford gates, readout, encoded preparation, or recovery; the full factory
-simulator includes those operations instead of substituting this formula.
+retries without a cap. These values apply to perfect Clifford gates, readout,
+encoded preparation, and recovery. The full factory simulator includes noise
+in those operations as well as errors in the raw states.
 
-## Worked distillation: a rejected single and an accepted triple
+## Worked example: one and three raw-state errors
 
 ```sh
 julia --project=. examples/qec/06_distillation_walkthrough.jl
 ```
 
-This short example begins with an actual noisy physical raw preparation and a
+This example begins with a noisy physical raw preparation and a
 clean run of the six-wire reference. It then inserts one raw Z defect during
 the first factory attempt. Its nonzero column label appears in the check
 syndrome, so the attempt is discarded. A second, clean attempt passes: the
@@ -238,17 +231,16 @@ printed cost is two attempts and 30 raw states.
 
 The next case places Z defects on columns 1, 2, and 3. The check labels cancel,
 so the attempt passes, but its odd number of defects changes the output to
-`Z|A⟩`. The fidelity checks distinguish this wrong accepted output from the
-desired state. This demonstrates both what postselection detects and why it
-cannot certify perfect fidelity.
+`Z|A⟩`. Since `⟨A|Z|A⟩=0`, the output fidelity with the desired state is zero
+even though all four checks passed.
 
 The final table evaluates exact ideal-Clifford probabilities for several raw
 error rates and compares them with the leading `35p³` approximation. The
 physical preparation noise settings and table probabilities are near the top
-of the script. These are different experiments: the raw-state demonstration
-contains physical gate/preparation noise, whereas the table assumes only
-independent raw Z defects. The script does not run the encoded factory; use
-example 03 below when studying noise in its protected Clifford computation.
+of the script. The raw-state demonstration includes physical gate and
+preparation noise; the table uses the independent raw-Z model. Example 03
+below extends the simulation to the encoded factory and its noisy Clifford
+operations.
 
 ## The encoded resource factory
 
@@ -260,8 +252,8 @@ order, not the protocol defined above.
 Each attempted factory run follows these physical steps:
 
 1. Prepare five logical plus states with `steane_prepare`. Independent blocks
-   can be simulated separately until they interact; joining their tensors is
-   their exact tensor product, not an ideal encoded-state replacement.
+   can be simulated separately until they interact; joining their tensors
+   gives their exact tensor product.
 2. For each of the fifteen columns, use transversal CNOTs to compute its parity.
    `steane_raw_magic` prepares seven physical zero states, performs H and T on
    the encoder's input wire, applies the noisy physical encoder, and runs noisy
@@ -273,8 +265,8 @@ Each attempted factory run follows these physical steps:
    The returned seven-qubit state goes directly into the computational T gadget.
 
 Successive column labels follow Gray-code order: adjacent labels differ in
-exactly one bit. Rather than uncomputing every parity from scratch, one logical
-CNOT toggles the changed check bit. Fifteen toggles visit all nonzero columns,
+exactly one bit. One logical CNOT toggles the changed check bit between
+successive rotations. Fifteen toggles visit all nonzero columns,
 and one final toggle returns to zero. This gives sixteen logical parity CNOTs;
 the fifteen Z rotations commute, so their changed order preserves the ideal
 distillation operation.
@@ -298,12 +290,10 @@ readout = steane_measure(code, corrected.state; basis=:X,
                         noise=physical_noise, measurement_error=1e-5)
 ```
 
-This longer example is an ordinary Julia block because the encoded factory is
-more expensive than the small documentation checks. Every noisy preparation
-and measurement is actually simulated. `resource.state` is the factory's
-accepted output, rather than a fresh ideal encoding of `|A⟩`. An ideal decoder
-may be used separately to diagnose a simulated output, but is not part of the
-operational factory or computation.
+This calculation simulates the noisy preparations, gates, and measurements
+in the factory and computation. The returned `resource.state` passes directly
+to the logical T gadget. An ideal decoder can be used separately to diagnose
+a simulated output.
 
 The largest entangled MPS has 42 physical wires: five data blocks and one
 consumed raw block. The **physical peak is 47**, since preparation of that raw
@@ -321,15 +311,14 @@ reduce `cutoff` and check convergence of the quantities being reported;
 `cutoff=0.0` retains every numerically nonzero singular value and can cost much
 more memory and time.
 
-## What is protected, and what can still fail
+## Single-fault protection
 
 A single fault in a raw encoder can produce several physical errors in that
 one resource block. With otherwise fault-free recovery, the syndrome is removed
 and the remaining error acts on its logical qubit. Any resulting logical state
 can be expanded in the orthogonal basis `|A⟩, Z|A⟩`. With only that resource
 faulty, the second component gives a nonzero outer distillation syndrome.
-Acceptance therefore filters it out; the preparation need not have been a
-fault-tolerant encoder.
+Acceptance therefore removes that component from the output.
 
 A single fault in a verified preparation or recovery gadget leaves an error
 equivalent, up to stabilizers, to at most one physical error per block. During
@@ -338,8 +327,7 @@ blocks but stays at that same physical position within each block. Decoded
 logical readout tolerates that position's measurement error. The final Shor
 round removes an incoming correctable error or, if the fault is in that final
 round, may leave a correctable residual. This is the finite single-fault
-condition; it does not imply an error-free output for every nonzero-noise
-trajectory.
+condition used here.
 
 Two or more physical faults may defeat the inner code, and three defective raw
 resources can already produce the accepted logical error described above.
@@ -349,17 +337,16 @@ resource errors must be varied separately when studying that question. The
 current examples do not claim a threshold or a fault-tolerant advantage at the
 chosen sample size.
 
-The tests separate these claims. An independent five-qubit calculation checks
+An independent five-qubit calculation checks
 the Gray-code circuit against the full ideal operator, including T and T†,
 and checks both injection outcomes for an arbitrary single faulty logical
 resource. The physical reference tests reject all 15 single and 105 double
 raw-Z error patterns, and identify all 35 accepted triples with a logical
 error. The raw-preparation audit injects all 201 nonidentity Pauli faults at
-its preparation, H/T, and encoder locations, then runs the actual fault-free
-Shor circuit and checks that the result is an encoded logical state. These are
-finite circuit and algebra checks, combined with the same-position
-transversality argument above; they are not an exhaustive fault enumeration of
-the full 42-wire simulation.
+its preparation, H/T, and encoder locations, then runs the fault-free
+Shor circuit and checks that the result is an encoded logical state. The full
+factory analysis combines these circuit and algebra checks with the
+transversality argument above.
 
 ## Acceptance, resource cost, and computation
 
@@ -368,8 +355,7 @@ The encoded factory returns `state`, `attempts`, `raw_states`, `syndromes`,
 passing the checks, failing those checks, or exhausting a bounded Shor protocol.
 `history` records those outcomes. `raw_states` counts every raw preparation
 started, even when a later step aborts. If no attempt succeeds within
-`max_attempts`, the factory raises `QECProtocolFailure` instead of returning an
-unverified resource.
+`max_attempts`, the factory raises `QECProtocolFailure`.
 
 The factory trace contains the usual physical location plus `factory_attempt`,
 `component`, `block`, and `resource` tags. `resource` is the column label 1–15;
@@ -392,13 +378,13 @@ Every trial first runs the encoded factory, then prepares the computational
 extraction, and performs decoded logical measurement. Preparing the
 computational block after the factory keeps the physical peak at 47 wires;
 keeping that block alive during the factory would raise the count to 54.
-There is no ideal encoding of a magic state or ideal recovery in this path.
+Preparation and recovery use physical gate and measurement sequences.
 
 For a perfect T acting on `|+⟩`, logical X and Y have expectations `cos(π/4)`
 and `sin(π/4)`. The script estimates these quadratures from fresh noisy trials,
 then estimates the phase with `atan(sin_phi, cos_phi)`. Its default two shots
-per basis demonstrate the workflow and records; they do not give precise phase
-statistics. The settings are physical gate/preparation/readout errors `10⁻⁴`,
+per basis demonstrate the workflow and have large statistical uncertainty.
+The settings are physical gate/preparation/readout errors `10⁻⁴`,
 extra raw phase error `0.01`, at most five factory attempts, and MPS
 `cutoff=1e-12`. Edit those settings at the top of the script.
 
@@ -406,16 +392,14 @@ The reported `factory_attempts` and `raw_states` include discarded work even
 when a trial ultimately aborts. Probability estimates use completed shots
 only, with aborted shots listed separately. Approximate 95% Wilson intervals
 describe the binomial sampling uncertainty of those completed-shot zero
-probabilities; they do not include physical-model or MPS truncation error.
-The printed ideal-Clifford
-statistics are a reference calculation; they are not a prediction for these
-noisy factory trajectories or a certificate of an accepted resource's fidelity.
+probabilities. Physical-model assumptions and MPS truncation contribute
+separate sources of error. The printed ideal-Clifford statistics describe
+independent raw Z defects with perfect Clifford operations.
 
 Each fresh physical trial needs a fresh factory output. Reusing a cloned
-simulated output for many measurements would condition all those measurements
-on the same sampled preparation errors; that is a different statistical
-experiment. Keep that distinction explicit when increasing the shot count or
-using the simulator to inspect a conditional state.
+simulated output for many measurements estimates the measurement probabilities
+conditioned on that one factory trajectory. Fresh factory runs also sample
+the variation between preparations.
 
 ```@docs
 shor_code

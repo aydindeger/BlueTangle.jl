@@ -6,6 +6,7 @@ Reference documentation for the main public APIs.
 
 ```@docs
 sample
+measure
 born_measure_Z
 get_probs_from_sample
 expect
@@ -17,7 +18,7 @@ correlation
 ```@docs
 apply
 route
-measure
+run(::AbstractVector{<:Number}, ::Vector{<:QuantumOps})
 run(::Vector{<:QuantumOps}, ::Int)
 to_state
 to_rho

@@ -114,13 +114,16 @@ end
 
 
 """
-    amplitude(psi::it.MPS,config::Vector)
+    amplitude(psi::it.MPS, config::Vector)
 
-this will give amplitude of given configuration
+Return the amplitude of a computational-basis configuration. Supply one bit
+per qubit, ordered from qubit 1 to qubit N.
 
-Example:
-N=3
-config=[0,0,0] or [1,1,1]
+```julia
+psi = product_state(N_MPS(3), [1, 0, 1])
+@assert amplitude(psi, [1, 0, 1]) ≈ 1
+@assert amplitude(psi, [0, 0, 0]) ≈ 0
+```
 """
 function amplitude(psi::it.MPS,config::Vector)
 
@@ -453,8 +456,8 @@ end
 
 Sample a Z measurement of one qubit in a normalized MPS. Return the normalized
 `(collapsed_mps, bit)`, with bit 0 for `|0⟩` and 1 for `|1⟩`.
-All sites remain in the MPS. Use `apply(psi, Op("MZ", qubit);
-track_measurements=true)` for the common measurement-record interface.
+All sites remain in the MPS. Use `run(psi, Op("MZ", qubit))` for the common
+measurement-record interface.
 """
 function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
 

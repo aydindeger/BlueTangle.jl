@@ -30,10 +30,10 @@ the ten Z checks span the binary kernel of these rows and the all-ones row.
 Logical X and Z are equivalent to X and Z on all fifteen wires. Physical
 `T⊗15` implements logical T†, so `code.ops("T", 1)` uses physical TD and
 `code.ops("TD", 1)` uses physical T. This follows from the weights 0/8 in
-logical zero and 15/7 in logical one. No diagonal-gate finder is used.
+logical zero and 15/7 in logical one.
 
 `code_distance(code; max_weight=7)` verifies `dx=7`, `dz=3`, hence `d=3`.
-The general synthesized encoder is not certified fault tolerant.
+Faults in the synthesized encoder can spread to multiple physical qubits.
 """
 function reed_muller_code()
     coordinates = [Int((column >> (4-row)) & 1) for row in 1:4, column in 1:15]

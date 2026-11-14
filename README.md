@@ -96,7 +96,39 @@ correlations = correlation(measurement, [1, 2])
 println("Correlations:", correlations)
 ```
 
-## Backends and measurement
+## States, shots, and measurement records
+
+Choose the result you need:
+
+| Call | Returns |
+|:--|:--|
+| `apply(state, ops)` | The evolved state |
+| `run(state, ops)` | The evolved state and its explicit measurement record |
+| `sample(state_or_ops, shots)` | Raw final outcomes, as integers |
+| `measure(state_or_ops, shots)` | Outcome frequencies and expectation values in a `Measurement` |
+
+```julia
+ops = [Op("H", 1), Op("CX", 1, 2)]
+draws = sample(ops, 1000)       # e.g. [0, 3, 3, 0, ...]
+measurement = Measurement(draws, 2) # summarize these draws on two qubits
+measurement.bitstr             # observed outcomes: [0, 3]
+measurement.sample             # their frequencies, approximately [0.5, 0.5]
+
+measured_ops = [ops; Op("MZ", 1)]
+result = run(zero_state(2), measured_ops)
+result.record                  # one observed bit: [0] or [1]
+result.state                   # the state conditioned on that bit
+```
+
+Use `measure(state)` without a shot count for exact probabilities. This has the
+same meaning for statevectors, density matrices, and MPS; exact MPS enumeration
+is limited to 16 qubits. For a larger MPS, supply a shot count explicitly.
+
+For density matrices, `apply` averages over measurement outcomes, while `run`
+selects outcomes and returns their record. Noise remains averaged in either
+case. Statevectors and MPS represent a single trajectory.
+
+### Backends
 
 Julia 1.10 or later is required. The same operation list works across backends:
 
@@ -107,26 +139,18 @@ measure(ops, 1000; backend=:tensor, cutoff=1e-12)
 measure(ops, 1000; backend=:density_matrix)
 ```
 
-`measure` samples final outcomes. `run` returns the explicit mid-circuit measurement
-records. Applying operations to a density matrix sums measurement and noise branches;
-`apply(...; track_measurements=true)` instead samples measurement outcomes and
-returns the conditional density matrix with its record.
-
 The [measurement and reset examples](docs/src/examples.md) explain Pauli outcome
 bits, conditional branches, records from measurements inside a branch, and MPS
 truncation. `Op("RESET", q)` resets without recording its internal outcome;
-`ifOp("MZ", q, "I", "X")` with tracking retains the pre-reset bit. The examples
+`run(state, Op("MZ", q; if0="I", if1="X"))` retains the pre-reset bit. The examples
 also explain why explicit feedback gates can receive gate noise while standalone
 reset is ideal. See [reduced states and partial trace](docs/src/examples.md) for
 the distinction between keeping qubits in the vector API and discarding
 subsystems in the density-matrix API.
 
-Readout mitigation uses signed inverse-response weights, which can be negative
-at finite shot counts.
+Readout mitigation is available through `measure`; its corrected weights can be
+negative at finite shot counts. `sample` returns raw outcomes.
 
-MPS `measure(psi)` defaults to 1000 shots. Use `measure(psi, shots)` to set the
-sample count, or `measure(psi, -1)` for exact probabilities on up to 16 qubits.
-`sample_exact(psi; max_qubits=...)` explicitly overrides that enumeration limit.
 Sampled results above 16 qubits carry an empty `density_matrix` placeholder.
 MPS conversion and integer outcomes follow BlueTangle's convention: qubit 1 is
 the most significant bit. Outcomes wider than a machine integer use `BigInt`.
@@ -150,19 +174,19 @@ _RX(theta), 1)`.
 
 ## Operation lists and optional routing
 
-`apply(state, ops)` evolves the supplied state in list order. The state type
-selects the backend; pass `noise=...` for gate noise and
-`track_measurements=true` to return `(state, record)`.
+`apply(state, ops)` and `run(state, ops)` execute the supplied list in order.
+The state type selects the backend; pass `noise=...` for gate noise.
 
 `measure(ops, shots; options=Options(noise=noise))` prepares independent noisy
-shots. Sampling one noisy state repeatedly would instead sample one realized
-trajectory. Density-matrix evolution sums noise branches and can reuse the
+shots. Repeated sampling of a single noisy state gives statistics conditioned
+on that trajectory. Density-matrix evolution sums noise branches and can reuse the
 resulting ensemble. Readout noise, mitigation, measurement bases, and per-shot
 Pauli twirling are configured through `Options`.
 
 Routing is explicit: `routed = route(ops, layout)` inserts the needed SWAPs and
-returns another operation list. `measure`, `run`, and `shadow` also accept an
-optional `layout` keyword. Without one, the given gates are applied directly.
+returns another operation list. Circuit calls to `sample`, `measure`,
+`run(ops, shots)`, and `shadow` also accept an optional `layout` keyword.
+Without one, the given gates are applied directly.
 Use `get_stats(ops)`, `get_layers(ops)`, and `plotq(ops)` for inspection.
 
 Save operations and settings with
@@ -249,9 +273,8 @@ julia --project=. examples/qec/02_fault_propagation.jl
 
 The first creates an encoded Bell state and corrects a propagated fault. The
 second audits every gate-local Pauli fault in a short transversal circuit and
-demonstrates a harmful fault in the bare-ancilla syndrome circuit. Recovery in
-`qec_round` is ideal; these are building blocks for fault-tolerance studies,
-not a complete noisy computation.
+demonstrates a harmful fault in the bare-ancilla syndrome circuit. These examples
+assume ideal preparation and recovery to isolate the effects of gate faults.
 
 The physical noisy workflow uses `steane_prepare`, `shor_qec_round`,
 `steane_t`, and `steane_measure`. It includes verified cat ancillas, repeated

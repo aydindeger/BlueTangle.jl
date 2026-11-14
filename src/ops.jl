@@ -108,6 +108,7 @@ Operations run in their listed order; routing is performed only when `layout`
 is supplied. `N` can include idle qubits, and omitted `qubits` selects all qubits.
 
 ```julia
+ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
 rho_13 = shadow(ops, 10_000; qubits=[1, 3]) # only a 4 × 4 estimate
 rho_2 = shadow(ops, 10_000; qubits=2)       # only a 2 × 2 estimate
 rho_13_mps = shadow(ops, 10_000; qubits=[1, 3], backend=:mps, cutoff=1e-12)
@@ -408,12 +409,14 @@ function _measurement_from_probs(bitstr, probabilities, N, shots, basis, label, 
 end
 
 """
-    measure(state, shots=-1; label="state to measurement")
+    measure(state; label="state to measurement")
+    measure(state, shots; label="state to measurement")
 
-Measure a statevector or density matrix. `shots=-1` returns exact probabilities.
-For an MPS the default is 1000 samples; request `measure(psi, -1)` explicitly for
-exact enumeration (limited to 16 qubits). Large sampled MPS results carry an
-empty density-matrix placeholder, never an exponentially large zero matrix.
+Return measurement statistics for a statevector, density matrix, or MPS.
+Omitting `shots` uses exact probabilities; a positive count
+uses sampled frequencies. Exact MPS enumeration is limited to 16 qubits, so
+pass a shot count for larger states. Use `sample(state, shots)` for raw outcomes.
+Large sampled MPS results carry an empty density-matrix placeholder.
 """
 function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, number_of_experiment::Int=-1; label="state to measurement")
     number_of_experiment == -1 || number_of_experiment > 0 || throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
@@ -423,12 +426,21 @@ function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, number_of
     return _measurement_from_probs(bitstr, probabilities, N, number_of_experiment, "0", label, rho)
 end
 
-measure(psi::it.MPS; label="state to measurement") = measure(psi, 1000; label=label)
+"""
+    Measurement(samples::Vector{<:Integer}, N::Int; label="sample to measurement")
 
-function measure(samples::Vector{<:Integer}, N::Int)
+Summarize existing integer outcomes from an `N`-qubit register. Outcomes must
+lie in `0:2^N-1`. This replaces `measure(samples, N)`, whose arguments could be
+confused with an integer-valued statevector and a shot count.
+"""
+function Measurement(samples::Vector{<:Integer}, N::Int; label="sample to measurement")
+    N >= 0 || throw(ArgumentError("N must be nonnegative"))
     isempty(samples) && throw(ArgumentError("at least one sample is required"))
+    limit = big(1) << N
+    all(outcome -> 0 <= outcome < limit, samples) ||
+        throw(ArgumentError("samples must be integer outcomes in 0:2^N-1"))
     bitstr, probabilities = get_probs_from_sample(samples, N)
-    return _measurement_from_probs(bitstr, probabilities, N, length(samples), "0", "sample to measurement", _measurement_rho_placeholder(N))
+    return _measurement_from_probs(bitstr, probabilities, N, length(samples), "0", label, _measurement_rho_placeholder(N))
 end
 
 _is_cnot_like(op::QuantumOps) = op isa Op && op.q == 2 && op.control == -2 &&
@@ -479,16 +491,50 @@ _has_state_callback(op::OpF) = op.data isa Function ||
     measure(ops, shots; options=Options(), N=get_N(ops), layout=nothing,
             backend=:statevector, kwargs...)
 
-Sample final outcomes with statevector, MPS (`:tensor`), or density-matrix
-(`:density_matrix`) evolution. MPS accepts `cutoff` and `maxdim`. `run` instead
-returns the mid-circuit measurement records. `N` can include idle qubits.
-Operations run in their listed order, with routing only when `layout` is supplied.
+Return final-outcome statistics from fresh circuit shots. `sample(ops, shots)`
+returns the corresponding raw integer outcomes. Choose statevector, MPS
+(`:tensor`), or density-matrix (`:density_matrix`) evolution; MPS accepts `cutoff`
+and `maxdim`. `N` can include idle qubits. Operations run in their listed order,
+with routing only when `layout` is supplied. Readout mitigation and optional
+density-matrix storage are configured through `Options`.
 """
 function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
                  options::Options=Options(), N::Int=get_N(ops),
                  layout::Union{Nothing,Layout}=nothing,
                  backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("shots must be positive"))
+    result = _sample_circuit(ops, number_of_experiment; options, N, layout, backend, kwargs...)
+    return _samples_to_measurement(result.samples, result.N, options; rho=result.rho)
+end
+
+"""
+    sample(ops, shots; options=Options(), N=get_N(ops), layout=nothing,
+           backend=:statevector, kwargs...)
+
+Return raw final outcomes as integers, starting each shot in `|0…0⟩`.
+Qubit 1 is the most significant bit. Noisy statevector and MPS circuits use
+independent trajectories; density-matrix evolution sums unobserved branches.
+The circuit's explicit measurement records are available through `run`.
+
+The backend, routing, measurement basis, readout noise, and twirling options
+match `measure`. Use `measure` for summary statistics, readout mitigation, or
+stored density matrices: raw outcomes cannot include those additional results.
+"""
+function sample(ops::Vector{<:QuantumOps}, shots::Int;
+                options::Options=Options(), N::Int=get_N(ops),
+                layout::Union{Nothing,Layout}=nothing,
+                backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
+    options.measurement_mitigate &&
+        throw(ArgumentError("raw samples cannot contain readout-mitigated weights; use measure(ops, shots; options=...)"))
+    options.density_matrix &&
+        throw(ArgumentError("raw samples cannot store a density matrix; use measure(ops, shots; options=...)"))
+    return _sample_circuit(ops, shots; options, N, layout, backend, kwargs...).samples
+end
+
+function _sample_circuit(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
+                         options::Options, N::Int, layout::Union{Nothing,Layout},
+                         backend::Union{Symbol,AbstractString}, kwargs...)
+    number_of_experiment >= 0 || throw(ArgumentError("shots must be nonnegative"))
     N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
     N >= get_N(ops) || throw(ArgumentError("N must include every operated qubit"))
     ops = isnothing(layout) ? ops : route(ops, layout)
@@ -507,7 +553,7 @@ function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     # Density evolution already sums noise and measurement branches exactly.
     reuse_state = (backend_name == "density_matrix" || !stochastic) &&
                   !any(_has_state_callback, ops) && !options.twirl && options.measurement_basis != "R"
-    repetitions = reuse_state ? 1 : number_of_experiment
+    repetitions = reuse_state ? min(1, number_of_experiment) : number_of_experiment
     for _ in 1:repetitions
         initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
         backend_name == "density_matrix" && (initial = initial * initial')
@@ -519,7 +565,7 @@ function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
             rho += (vector isa AbstractMatrix ? vector : vector * vector') / repetitions
         end
     end
-    return _samples_to_measurement(all_sample, N, options; rho=sa.sparse(rho))
+    return (samples=all_sample, N=N, rho=sa.sparse(rho))
 end
 
 function _resolve_backend(backend::Union{Symbol,AbstractString})
@@ -536,22 +582,46 @@ function _resolve_backend(backend::Union{Symbol,AbstractString})
 end
 
 """
+    run(state, ops; noise=false, kwargs...)
+
+Execute operations once and return `(state=final_state, record=bits)`.
+The input state selects the backend. Operations run in their listed order;
+`record` contains each explicit measurement outcome, including measurements
+inside the selected feedback branch. Outcomes 0 and 1 denote the +1 and −1
+Pauli eigenvalues. Reset adds no bit, and no final measurement is appended.
+
+Density matrices are conditioned on the recorded measurement outcomes, while
+noise and reset still use their complete Kraus sums. Statevectors and MPS states
+follow one stochastic trajectory. MPS accepts `cutoff` and `maxdim`.
+Use `apply(state, ops)` when only the evolved state is needed; density-matrix
+`apply` averages over unobserved measurement outcomes.
+"""
+function run(state::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},
+             ops::Union{QuantumOps,Vector{<:QuantumOps},AbstractVector{<:Tuple}};
+             noise::Union{NoiseModel,Bool}=false, kwargs...)
+    haskey(kwargs, :track_measurements) &&
+        throw(ArgumentError("run always returns the measurement record; omit track_measurements"))
+    final_state, bits = apply(state, ops; noise, track_measurements=true, kwargs...)
+    return (state=final_state, record=bits)
+end
+
+"""
     run(ops, shots=1; options=Options(), N=get_N(ops), layout=nothing,
         backend=:statevector, kwargs...)
     run(qasm_or_path::AbstractString, shots::Int=1; backend=:statevector, kwargs...)
 
-Return one vector of explicit mid-circuit measurement bits per shot, starting
-each shot in `|0…0⟩`. Outcomes 0 and 1 denote the +1 and −1 eigenvalues of the
-measured Pauli. Records follow operation-list order and include measurements
-inside the chosen conditional branch. Reset adds no bit, and no final measurement
-is appended; use `measure` for final-outcome sampling.
+Return a batch of measurement records, starting each shot in `|0…0⟩`.
+This existing convenience form returns only records; `run(initial, ops)` returns
+both the final state and record for one execution. Records follow operation-list
+order and include measurements inside the chosen conditional branch. Reset adds
+no bit, and no final measurement is appended; use `sample` for raw final outcomes
+or `measure` for their statistics.
 
 Choose `:statevector`, `:density_matrix`, or `:tensor` (`:mps`). MPS accepts
 `cutoff` and `maxdim`, including for conditional branch operations. Density-matrix
 execution conditions on the recorded measurements but still sums noise and
-reset Kraus branches. For a custom initial state and literal operation-list
-order, use `apply(initial, ops; track_measurements=true)`. `N` can include idle
-qubits. Routing is performed only when `layout` is supplied.
+reset Kraus branches. `N` can include idle qubits. Routing is performed only when
+`layout` is supplied. Final-readout options do not affect these explicit records.
 """
 function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
              options::Options=Options(), N::Int=get_N(ops),
@@ -568,8 +638,8 @@ function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
     for shot=1:number_of_experiment
         initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
         backend_name == "density_matrix" && (initial = initial * initial')
-        _, measurements[shot] = apply(initial, _execution_ops(ops, options);
-                                     noise=options.noise, track_measurements=true, kwargs...)
+        measurements[shot] = run(initial, _execution_ops(ops, options);
+                                 noise=options.noise, kwargs...).record
     end
 
     return measurements
@@ -723,7 +793,7 @@ Constructs the Kronecker product of the operator `observable` repeated `n` times
 # Returns
 - An `AbstractMatrix` representing the Kronecker product of the operator repeated `n` times.
 
-Example: get_operator("X", 3) -> kron(X, X, X)
+For example, `get_operator("X", 3)` equals `kron(gate.X, gate.X, gate.X)`.
 """
 function get_operator(observable::Union{String,Vector{String}}, N::Int)
 
@@ -745,13 +815,18 @@ end
 expand_multi_op(list_of_operators::String,qubits_applied::Int,N::Int)=expand_multi_op(list_of_operators,[qubits_applied],N)
 
 """
-`string_to_matrix(list_of_operators::String) -> Matrix`
+    string_to_matrix(list_of_operators::String)
 
 Convert a string of comma-separated operators into a matrix representation.
 
-- `list_of_operators`: A string representing a list of operators, e.g.: "Z,Z,sa.IP(.2)"
+- `list_of_operators`: Comma-separated gate names, such as `"Z,Z,RX(0.2)"`.
 
 Returns a matrix representation of the operators.
+
+```julia
+matrix = string_to_matrix("Z,Z,RX(0.2)")
+@assert matrix ≈ kron(gate.Z, gate.Z, _RX(0.2))
+```
 """
 function string_to_matrix(list_of_operators::String)
     ops_str=String.(split(list_of_operators,","));

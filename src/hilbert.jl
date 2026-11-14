@@ -186,33 +186,6 @@ function _swap_control_target(matrix::Union{AbstractMatrixS,Function})
     return result
 end
 
-"""
-    relabel_swap(ops::Vector{Op}, qubit_mapping::Vector{Int}=Int[]) -> Tuple{Vector{Op}, Vector{Int}}
-
-Relabel qubit indices in a sequence of quantum operations, simulating the effect of SWAP gates without actually performing them.
-
-This function processes a list of quantum operations, updating qubit indices to reflect the effect of SWAP operations. It handles both SWAP gates and other quantum operations, adjusting their qubit references according to the cumulative effect of all SWAP operations.
-
-# Arguments
-- `ops::Vector{Op}`: A vector of `Op` objects representing quantum operations.
-- `qubit_mapping::Vector{Int}=Int[]`: Existing qubit mapping to continue from. If omitted,
-  the mapping starts from the identity permutation.
-
-# Returns
-- `Tuple{Vector{Op}, Vector{Int}}`: A tuple containing:
-  1. A vector of relabeled `Op` objects, excluding SWAP operations.
-  2. The final qubit mapping, where `mapping[i]` gives the final label of the qubit initially labeled `i`.
-
-# Details
-- SWAP operations are used to update the qubit mapping but are not included in the output operations.
-- For non-SWAP operations, qubit indices are updated based on the current mapping.
-- The function assumes qubit indices start from 1 and that any provided `qubit_mapping`
-  is a permutation of `1:N`. If later operations reference higher-index qubits that were
-  not tracked yet, the mapping is extended with identity entries for those qubits.
-
-relabeled_ops, final_mapping = relabel_swap(ops)
-```
-"""
 function _relabel_operation(op::QuantumOps, mapping::Vector{Int})
     relabel(q) = q > 0 ? findfirst(==(q), mapping) : q
     if op isa Op
@@ -237,6 +210,27 @@ function _relabel_operation(op::QuantumOps, mapping::Vector{Int})
     throw(ArgumentError("an opaque OpF cannot be relabeled; provide its constituent gates instead"))
 end
 
+"""
+    relabel_swap(ops::Vector{<:QuantumOps}, qubit_mapping::Vector{Int}=Int[])
+
+Remove unconditional SWAP gates by relabeling subsequent operations. Return
+`(relabeled_ops, final_mapping)`, where `final_mapping[i]` gives the final
+physical label of qubit `i` in the relabeled circuit. Account for this mapping
+when interpreting the final state or measurements.
+
+The initial mapping is the identity unless supplied as a permutation of `1:N`;
+newly encountered higher-index qubits extend it with identity entries. Controlled
+SWAPs cannot be removed this way. An opaque whole-state `OpF` cannot be relabeled
+after a permutation; use a block containing explicit operations instead.
+
+```julia
+ops = [Op("SWAP", 1, 2), Op("X", 1)]
+relabeled_ops, final_mapping = relabel_swap(ops)
+@assert length(relabeled_ops) == 1
+@assert only(relabeled_ops).qubit == 2
+@assert final_mapping == [2, 1]
+```
+"""
 function relabel_swap(ops::Vector{T}, qubit_mapping::Vector{Int}=Int[]) where T<:QuantumOps
     max_qubit = get_N(ops)
     if isempty(qubit_mapping)
@@ -283,11 +277,13 @@ end
 
 
 """
-    apply(state, ops; noise=false, track_measurements=false, kwargs...)
+    apply(state, ops; noise=false, kwargs...)
 
 Apply operations in their listed order to a statevector, density matrix, or MPS.
-No routing or scheduling is performed. With `track_measurements=true`, return
-the final state and the recorded mid-circuit outcomes.
+Return the evolved state. Density matrices sum measurement and noise branches;
+statevectors and MPS follow one sampled trajectory. Use `run(state, ops)` to
+obtain a conditional state and its measurement record. No routing or scheduling
+is performed. The older `track_measurements=true` keyword remains supported.
 """
 function apply(
     psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},

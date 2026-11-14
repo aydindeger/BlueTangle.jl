@@ -3,12 +3,8 @@
 """
 `apply(state::AbstractVectorS, op::QuantumOps)`
 
-Apply a quantum gate operation to a state vector in place.
-
-- `state`: A sparse quantum state vector to be modified.
-- `op`: A `QuantumOps` object representing the gate operation.
-
-Modifies the state vector directly.
+Return the state after applying an operation. Measurements and noise sample one
+trajectory. Use `run(state, op)` to return the state and measurement record.
 """
 function apply(
     state::AbstractVectorS,
@@ -84,7 +80,7 @@ Sample a Z measurement of one qubit in a normalized `N`-qubit statevector.
 Return `(collapsed_state, bit)`, with bit 0 for `|0⟩` and 1 for `|1⟩`.
 The returned state is normalized and retains all qubits. Qubit 1 is the most
 significant tensor factor. For other bases or automatic record collection, use
-`apply(state, Op("MZ", qubit); track_measurements=true)` and its MX/MY variants.
+`run(state, Op("MZ", qubit))` and its MX/MY variants.
 """
 function born_measure_Z(N::Int,state::AbstractVectorS,qubit::Int)
 
@@ -205,14 +201,12 @@ random_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
 
 
 """
-    sample(state::AbstractVectorS, shots::Int) -> Vector
+    sample(state, shots) -> Vector
 
-Sample outcomes from a quantum state vector based on the probability distribution.
-
-- `state`: A dense or sparse quantum state vector.
-- `shots`: Number of samples to be taken.
-
-Returns a vector of sampled outcomes.
+Return raw computational-basis outcomes sampled from a statevector, density
+matrix, or MPS. Outcomes are integers starting at 0; qubit 1 is the most
+significant bit. The state is not collapsed. Use `measure(state, shots)` for
+summary statistics or `measure(state)` for exact probabilities.
 """
 function sample(state::AbstractVectorS, shots)
 

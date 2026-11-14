@@ -28,9 +28,9 @@ raw = raw_magic_state(; noise, prep_error, phase_error=raw_phase_error)
 println("One noisy raw preparation: overlap with A = ", abs2(dot(A, raw.state)))
 println("  Extra raw Z sampled: ", raw.trace[end].phase_error_applied)
 
-# 2. With no faults, the actual injection/readout circuit returns A.
-# It still prepares and consumes fifteen separate raw states; the simulator
-# does not substitute the probability formula below for these operations.
+# 2. With no faults, the injection/readout circuit returns A.
+# The simulation prepares and consumes fifteen separate raw states through
+# physical gates and measurements.
 ideal = distill15(; max_attempts=1)
 @assert ideal.attempts == 1 && ideal.raw_states == 15
 @assert ideal.syndromes == [zeros(Int, 4)]
@@ -39,7 +39,7 @@ println("Ideal circuit: ", ideal.raw_states, " raw states, checks ", ideal.syndr
 
 # 3. A single raw Z defect gives a nonzero check string and costs an attempt.
 # The callback injects Z after the raw T at column 1 of attempt 1 only. Faults
-# target actual physical locations; all other operations here are noiseless.
+# target physical locations; all other operations here are noiseless.
 one_bad_raw = loc -> loc.stage == :raw_t && loc.attempt == 1 && loc.check == 1 ?
     [Op("Z", loc.op.qubit; noisy=false)] : Op[]
 retried = distill15(; fault=one_bad_raw, max_attempts=2)
@@ -50,9 +50,9 @@ retried = distill15(; fault=one_bad_raw, max_attempts=2)
 println("One raw Z: checks ", retried.syndromes, "; attempts = ", retried.attempts,
         ", raw states consumed = ", retried.raw_states)
 
-# 4. Acceptance does not certify fidelity. Check columns are the four-bit
-# representations of 1:15. Since 0001 XOR 0010 XOR 0011 = 0000, defects on
-# columns 1,2,3 are undetected. Their odd parity leaves a logical Z on A.
+# 4. Three raw Z defects can produce an accepted logical error. Check columns
+# are the four-bit representations of 1:15. Since 0001 XOR 0010 XOR 0011 = 0000,
+# defects on columns 1,2,3 are undetected. Their odd parity leaves a logical Z on A.
 three_bad_raw = loc -> loc.stage == :raw_t && loc.check in (1, 2, 3) ?
     [Op("Z", loc.op.qubit; noisy=false)] : Op[]
 undetected = distill15(; fault=three_bad_raw, max_attempts=1)

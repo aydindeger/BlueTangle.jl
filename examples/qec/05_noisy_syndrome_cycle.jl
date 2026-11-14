@@ -34,7 +34,7 @@ expected_syndrome = pauli_syndrome(code, incoming_fault)
 @assert get_N(repaired.state) == 7
 
 # Decode only to diagnose this ideal-gadget experiment. No decoded state is
-# fed back into the computation, and extraction used actual ancilla circuits.
+# fed back into the computation; extraction simulates the ancilla circuits.
 recovered_fidelity = abs2(dot(plus_state(1), code.decode(repaired.state)))
 @assert isapprox(recovered_fidelity, 1; atol=1e-10)
 println("Incoming Y3: predicted syndrome = ", expected_syndrome)
@@ -100,7 +100,7 @@ try
             (length(noisy_prepared.trace), length(corrected.trace), length(readout.trace)))
 catch err
     # A heralded protocol failure is an aborted trajectory, not an outcome 0.
-    # Programming errors are rethrown rather than mistaken for physical noise.
+    # Report protocol exhaustion here; propagate other exceptions to the caller.
     err isa QECProtocolFailure || rethrow()
     println("Noisy trajectory aborted: ", sprint(showerror, err))
 end

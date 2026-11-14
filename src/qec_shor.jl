@@ -156,17 +156,16 @@ syndromes are repeated until two consecutive records agree. The matching record
 is decoded and physical Pauli recovery gates receive the supplied gate noise.
 The result is `(state, syndrome, history, attempts, trace)`, with only the
 original data wires retained. `attempts[r][j]` counts cat preparations for check
-`j` in round `r`. Exhausting either bound raises `QECProtocolFailure`, never a
-success flag.
+`j` in round `r`. Exhausting either bound raises `QECProtocolFailure`.
 
-`noise::NoiseModel` applies to actual one- and two-qubit gates, including cat
+`noise::NoiseModel` applies to one- and two-qubit gates, including cat
 preparation, verification, data interactions, readout H gates, and recovery.
 `prep_error` is the independent probability of X after a fresh |0> preparation;
 `measurement_error` is an independent outcome flip at each MZ. No idle faults,
 leakage, or correlated faults at distinct locations are introduced implicitly.
 Statevectors and native MPS trajectories are supported; density matrices are not.
 
-For reproducible adversarial tests, `fault(location)` returns a Pauli `Op` or
+For reproducible fault tests, `fault(location)` returns a Pauli `Op` or
 vector of them on that location's operands. A location contains `index`, `kind`,
 `op`, `stage`, `round`, `check`, and `attempt`. Faults occur after preparations
 and gates, and before measurements. `trace` records these events plus the
@@ -176,11 +175,10 @@ zero isolates the injected fault. The callback is also invoked on recovery.
 The single-fault claim concerns this fixed circuit and repetition rule: with
 clean encoded input, one faulty location leaves an error equivalent, up to
 stabilizers, to at most one Pauli per block; without internal faults it corrects
-one input Pauli per block. It
-does not assert success for arbitrary multiple faults or establish a threshold.
-Unlike `qec_round`, this function does not replace extraction by ideal check
-projectors. The fault-containment claim uses the default `steane_decoder(code)`;
-syndrome consistency alone cannot certify the logical action of a custom decoder.
+one input Pauli per block. Multiple faults can produce logical errors, and a
+threshold requires a separate analysis. Extraction simulates the full ancilla
+circuit. The fault-containment claim uses the default `steane_decoder(code)`;
+custom decoders require separate validation of their logical action.
 """
 function shor_qec_round(code::StabilizerCode, state::Union{AbstractVectorS,it.MPS}; kwargs...)
     return _shor_qec_round(code, state, NamedTuple[]; kwargs...)

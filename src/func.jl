@@ -23,18 +23,11 @@ return _sample_to_expectation((fock_basis.(a,get_N(state)),b),qubits)
 end
 
 """
-Alias:
-```
-expect(m::Measurement, qubit::Int) -> Float64
-expect(m::Measurement) -> Vector
-```
+    expect(m::Measurement, qubit::Int)
 
-Calculate the expectation value from a measurement.
-
-- `m`: A `Measurement` object.
-- `qubit`: (Optional) Specific qubit for which to calculate the expectation value.
-
-Returns the expectation value(s).
+Return the expectation value on one qubit from the sampled outcomes. Use
+`m.expect` for the vector of expectations on all qubits, in the measurement's
+recorded basis.
 """
 expect(m::Measurement,qubit::Int)=_sample_to_expectation((fock_basis.(m.bitstr,m.number_of_qubits),m.sample),[qubit])
 
@@ -43,50 +36,24 @@ expect(m::Measurement,qubit::Int)=_sample_to_expectation((fock_basis.(m.bitstr,m
 ##========== expectation from state & rho and operator ==========
 
 """
-Alias for density matrix:
+    expect(state, op::QuantumOps)
+    expect(state, matrix::AbstractMatrix)
+    expect(state, op_str::String)
+
+Calculate expectations for a statevector or density matrix. An `Op` specifies
+the qubits on which the observable acts; a matrix acts on the full register.
+A single-qubit operator string returns one expectation per qubit. For one
+selected qubit, use `expect(state, Op("Z", q))`. Results are real-valued.
+
+```julia
+state = apply(zero_state(2), Op("X", 2))
+rho = to_rho(state)
+@assert expect(state, "Z") ≈ [1, -1]
+@assert expect(rho, Op("Z", 2)) ≈ -1
+@assert expect(state, gate.Z ⊗ gate.Z) ≈ -1
+measurement = measure(state)
+@assert expect(measurement, 2) ≈ measurement.expect[2] ≈ -1
 ```
-expect(state::AbstractVectorS, op::QuantumOps) -> Float64
-expect(state::AbstractVectorS, op_str::String, qubit::Int) -> Float64
-expect(state::AbstractVectorS, matrix::sa.SparseMatrixCSC) -> Float64
-expect(state::AbstractVectorS, op_str::String) -> Vector{Float64}
-```
-
-Alias for state vector:
-```
-expect(rho::AbstractMatrixS, op::QuantumOps) -> Float64
-expect(rho::AbstractMatrixS, op_str::String, qubit::Int) -> Float64
-expect(rho::AbstractMatrixS, matrix::sa.SparseMatrixCSC) -> Float64
-expect(rho::AbstractMatrixS, op_str::String) -> Vector{Float64}
-```
-
-Calculate the expectation value for quantum states or density matrices given an operator. This function has several forms depending on the input parameters:
-
-- `expect(state::AbstractVectorS, op::QuantumOps)`: Computes the expectation value for a quantum state vector with a given operator.
-
-- `expect(rho::AbstractMatrixS, op::QuantumOps)`: Computes the expectation value for a density matrix with a given operator.
-
-- `expect(state::AbstractVectorS, op_str::String, qubit::Int)`: Computes the expectation value for a specific qubit in a quantum state vector with an operator specified as a string.
-
-- `expect(rho::AbstractMatrixS, op_str::String, qubit::Int)`: Computes the expectation value for a specific qubit in a density matrix with an operator specified as a string.
-
-- `expect(state::AbstractVectorS, op_str::String)`: Computes the expectation values for all qubits in a quantum state vector given an operator as a string.
-
-- `expect(rho::AbstractMatrixS, op_str::String)`: Computes the expectation values for all qubits in a density matrix given an operator as a string.
-
-- `expect(state::AbstractVectorS, matrix::sa.SparseMatrixCSC)`: Computes the expectation value using a sparse matrix representation of an operator for a state vector.
-
-- `expect(rho::AbstractMatrixS, matrix::sa.SparseMatrixCSC)`: Computes the expectation value using a sparse matrix representation of an operator for a density matrix.
-
-# Arguments
-- `state::AbstractVectorS`: The quantum state vector.
-- `rho::AbstractMatrixS`: The density matrix.
-- `op::QuantumOps`: The quantum operator.
-- `op_str::String`: The string representation of the operator.
-- `qubit::Int`: The specific qubit index.
-- `matrix::sa.SparseMatrixCSC`: The sparse matrix representation of the operator.
-
-# Returns
-- The expectation value as a `Float64` or a vector of `Float64` for multiple qubits.
 """
 expect(state::AbstractVectorS,op::QuantumOps)=real(state'*op.expand(get_N(state))*state)
 expect(rho::AbstractMatrixS,op::QuantumOps)=real(la.tr(rho*op.expand(get_N(rho))))
@@ -113,8 +80,6 @@ Calculate the correlation for a given set of operators applied to specific qubit
 
 - `correlation(rho::AbstractMatrixS, list_of_operators::String, qubits_applied::Vector)`: Computes the correlation for a density matrix (`rho`) with a specified list of operators and qubits.
 
-The `corr_from_rho` function is an alias to `get_corr` for density matrices.
-
 # Arguments
 - `state::AbstractVectorS`: The quantum state vector.
 - `rho::AbstractMatrixS`: The density matrix.
@@ -126,13 +91,10 @@ The `corr_from_rho` function is an alias to `get_corr` for density matrices.
 
 # Examples
 ```julia
-# For a state vector
-state = sa.SparseVector([...]) # define your state vector
-correlation = correlation(state, "Z,Z", [2, 4])
-
-# For a density matrix
-rho = sa.SparseMatrixCSC([...]) # define your density matrix
-correlation = correlation(rho, "Z,Z", [2, 4])
+state = apply(zero_state(2), [Op("H", 1), Op("CX", 1, 2)])
+rho = to_rho(state)
+@assert correlation(state, "Z,Z", [1, 2]) ≈ 1
+@assert correlation(rho, "X,X", [1, 2]) ≈ 1
 ```
 
 """

@@ -8,7 +8,7 @@ Column `j` is `(1, binary(j, 4)...)`, in most-significant-bit order, for
 measure wires 2:5 in X, and accept only four zero outcomes. The ideal output
 before the final S is T†|+>; S converts it to T|+>.
 
-The fifteen rotations are implemented by actual magic-state consumption in
+The fifteen rotations are implemented by magic-state consumption in
 `distill15`. This schedule is also shared with the encoded factory.
 """
 function distillation15_supports()

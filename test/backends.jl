@@ -14,7 +14,8 @@
     @test to_state(psi) ≈ before
     @test entanglement_entropy(zero_state(N_MPS(1))) == 0
     @test sample_exact(psi)[2] ≈ abs2.(vector)
-    @test measure(psi).number_of_experiment == 1000
+    @test measure(psi).number_of_experiment == -1
+    @test measure(psi).sample ≈ abs2.(vector)
 
     large = one_state(N_MPS(72))
     measurement = measure(large, 3)
@@ -22,6 +23,7 @@
     @test measurement.expect == -ones(72)
     @test size(measurement.density_matrix) == (0,0)
     @test_throws ArgumentError sample_exact(large)
+    @test_throws ArgumentError measure(large)
     @test int2bin(bin2int(ones(Int,72)),72) == ones(Int,72)
 
     for backend in (:statevector, :tensor, :density_matrix)

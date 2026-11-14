@@ -48,7 +48,7 @@ end
 Search increasing Pauli weights for a nontrivial logical operator. A candidate
 must commute with every stabilizer and anticommute with a stored logical X or
 Z. The result therefore excludes low-weight stabilizers of degenerate codes.
-The declared `code.d` is never used by this calculation.
+The calculation is independent of the stored `code.d` value.
 
 For CSS generators, pure X and pure Z supports suffice and their separate
 distances `dx` and `dz` are reported. For other stabilizer codes, all X/Y/Z
@@ -58,15 +58,15 @@ and `max_candidates`; each tested Pauli counts as one candidate.
 Return a named tuple with `distance`, `exact`, `lower_bound`, and `witness`
 (physical Pauli operations). A found minimum is exact. If no witness is found,
 `distance` and `witness` are `nothing`, and only the lower bound proved by fully
-completed weights is returned. `searched_through` records that completed
-frontier; `truncated` means the candidate budget interrupted the search.
+completed weights is returned. `searched_through` is the largest fully searched
+weight; `truncated` means the candidate budget interrupted the search.
 `stop_reason` is `:found`, `:max_weight`, or `:max_candidates`.
 
 For CSS codes, `dx`, `dz`, `dx_lower_bound`, `dz_lower_bound`, `x_witness`, and
 `z_witness` give the same information for each Pauli type; the two witnesses
 are one-indexed supports. These fields are `nothing` for non-CSS codes.
-The method is `:css_support` or `:pauli_support`. Searching larger codes can
-still be expensive: this bounded enumeration is not a polynomial-time solver.
+The method is `:css_support` or `:pauli_support`. The number of candidates can
+grow exponentially with code size.
 """
 function code_distance(code::StabilizerCode; max_weight::Int=4, max_candidates::Int=250_000)
     code.k > 0 || throw(ArgumentError("distance is undefined for a code encoding no logical qubits"))

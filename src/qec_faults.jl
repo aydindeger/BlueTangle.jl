@@ -100,8 +100,8 @@ logical qubit `j`, `(x[j], z[j])` denotes `I=(0,0)`, `X=(1,0)`, `Z=(0,1)`, or
 
 This uses the logical representatives derived from the encoder, even when
 `code.logicals` contains user-supplied gate mappings. A zero result means the
-residual acts trivially within this code space. It does not certify an entire
-noisy error-correction protocol.
+residual acts trivially within this code space. Validating a noisy correction
+protocol also requires checking faults in its preparation, gates, and readout.
 """
 function logical_pauli(code::StabilizerCode, residual::Union{Op,AbstractVector})
     v = _qec_pauli_vector(residual, code.n)

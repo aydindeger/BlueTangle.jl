@@ -368,8 +368,8 @@ Construct the operation list once and precompute fixed feature states, as the
 classifier does. Use `history=false` when loss traces are unnecessary. Local
 statevector gates act on amplitudes directly, avoiding full-register matrices,
 but the state itself still grows as `2^N`; density-matrix memory grows as `4^N`.
-MPS can reduce that cost when modest bond dimensions suffice, but verify
-`cutoff`/`maxdim` convergence rather than assuming it. The repository's
+MPS can reduce that cost when modest bond dimensions suffice. Check convergence
+with respect to `cutoff` and `maxdim` for the circuit being studied. The repository's
 [benchmark/qml.jl](https://github.com/aydindeger/BlueTangle.jl/blob/main/benchmark/qml.jl)
 compares the training paths on a specified workload; timings depend on the
 circuit, hardware, and compilation state.

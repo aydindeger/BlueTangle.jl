@@ -78,8 +78,8 @@ source. Register sizes and indexed bounds are checked.
 
 ## Measurement records and reset
 
-An imported `measure` becomes an explicit mid-circuit `MZ`. `run` returns those
-outcomes in operation order:
+An imported `measure` becomes an explicit mid-circuit `MZ`.
+`run(state, ops)` returns the final state and those outcomes in operation order:
 
 ```@example qasm_measurements
 using BlueTangle
@@ -91,6 +91,12 @@ x q[1];
 measure q -> c;
 reset q;
 """
+ops = from_qasm(source)
+result = run(zero_state(2), ops)
+@assert result.record == [0, 1]
+@assert result.state ≈ zero_state(2)
+
+# The batch form returns one record per shot, starting from the zero state.
 records = run(source, 3)
 @assert records == [[0,1],[0,1],[0,1]]
 records
@@ -102,10 +108,10 @@ arbitrary classical-register assignments. Classical `if` statements are rejected
 express feed-forward directly with BlueTangle's conditional `Op` or `ifOp` when
 constructing a circuit in Julia.
 
-For final sampling, call `measure(from_qasm(source), shots;
-backend=:density_matrix)` or choose `:statevector` or `:tensor`. In the example
-above the explicit reset leaves the final state in `|00⟩`, although the earlier
-record is `[0,1]`.
+Use `sample(ops, shots)` for raw final outcomes or `measure(ops, shots)` for their
+statistics. Both accept `backend=:statevector`, `:density_matrix`, or `:tensor`.
+In the example above, `sample(ops, 3)` returns `[0, 0, 0]`: reset leaves the final
+state in `|00⟩`, although the earlier record is `[0,1]`.
 
 ## Numeric parameters and diagnostics
 

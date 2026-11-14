@@ -5,8 +5,8 @@ Constructs a Hamiltonian matrix for a quantum system with `N` qubits. The Hamilt
 built based on the operators and their corresponding couplings specified in `string_of_ops`.
 
 The `string_of_ops` should be an alternating array of coupling constants and operator 
-strings. For example, `[.1, "Z,Z", .5, "X"]` implies a system with alternating couplings `.1` and `.5`, 
-and operators "Z,Z" and "X".
+strings. For example, `[.1, "Z,Z", .5, "X"]` sums nearest-neighbor `ZZ` terms
+with coupling `0.1` and single-site `X` terms with coupling `0.5`.
 
 The `boundary` parameter specifies the boundary conditions of the system. It can be either 
 "open" or "periodic". In the case of "open" boundary conditions, interactions are only included 
@@ -25,6 +25,7 @@ chain.
 # Example
 ```julia
 N = 6
+J, h = 1.0, 0.7
 string_of_ops = [-J, "Z,Z", -h, "X"]
 H = hamiltonian(N, string_of_ops, "open")
 ```

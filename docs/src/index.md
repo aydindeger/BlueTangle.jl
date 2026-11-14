@@ -16,13 +16,23 @@ state = apply(zero_state(get_N(ops)), ops)
 (state=state, ZZ=correlation(state, "Z,Z", [1, 2]))
 ```
 
-[`measure`](@ref) samples final outcomes; `run` returns the outcomes of explicit
-mid-circuit measurements. Qubit indices start at 1, and qubit 1 is the most
-significant bit in statevectors and integer measurement outcomes.
+Choose the output you need:
 
-Use `apply(state, ops)` to evolve an existing state, or `measure(ops, shots)` to
-prepare and sample repeated shots. Gate noise is passed to `apply` as
-`noise=...`, and to sampling functions as `options=Options(noise=...)`.
+| Call | Returns |
+|:--|:--|
+| `apply(state, ops)` | Evolved state |
+| `run(state, ops)` | Named tuple with `.state` and `.record` |
+| `sample(state_or_ops, shots)` | Raw final outcomes as integers |
+| `measure(state_or_ops, shots)` | Frequencies and expectation values |
+
+Omit the shot count in `measure(state)` for exact probabilities, including on
+MPS up to 16 qubits. Use `Measurement(draws, N)` to summarize existing raw draws.
+Qubit indices start at 1, and qubit 1 is the most significant bit in statevectors
+and integer measurement outcomes.
+
+Circuit sampling starts each shot in the zero state. Gate noise is passed to
+`apply` and `run(state, ops)` as `noise=...`, and to circuit sampling functions
+as `options=Options(noise=...)`.
 Operations run in their supplied order; no layout or SWAPs are added by default.
 Use `route(ops, layout)` when connectivity matters. See the
 [operation-list examples](examples.md#Operation-lists) for execution, sampling,
@@ -39,9 +49,9 @@ and saving results.
 - [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
   classification, gradient crosschecks, noisy training, MPS truncation, and the
   complete QML API.
-- [Quantum Error Correction](qec.md): encode an arbitrary logical qubit in the
-  five-qubit code, inspect a syndrome, correct a physical error, and decode;
-  repeat with density matrices or an MPS.
+- [Quantum Error Correction](qec.md): stabilizer codes, logical gates, code
+  distances, noisy syndrome extraction, and magic-state distillation. Worked
+  examples progress from ideal correction to a complete noisy encoded algorithm.
 - [OpenQASM import and export](qasm.md): read strings or files, use whole-register
   operations, preserve idle qubits, and diagnose unsupported input.
 - [Function reference](functions.md): signatures and detailed API documentation.

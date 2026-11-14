@@ -1,7 +1,7 @@
 # Compare three codes, verify their distances, and correct a physical error.
-# The code's stored d is a declaration. code_distance searches actual Pauli
-# supports and supplies a witness or a proven lower bound. The correction
-# below is ideal qec_round; the noisy Shor circuit currently targets Steane.
+# code_distance searches Pauli supports to find a minimum-weight logical
+# operator or establish a lower bound on distance. The correction below uses
+# ideal qec_round; the noisy Shor circuit currently targets Steane blocks.
 # Run from the repository root:
 #   julia --project=. examples/qec/04_codes_and_distance.jl
 
@@ -12,7 +12,7 @@ codes = [("Shor [[9,1,3]]", shor_code()),
          ("Reed–Muller [[15,1,3]]", reed_muller_code())]
 
 # 1. A nontrivial logical Pauli commutes with every stabilizer, yet acts on
-# the encoded qubit. Searching all smaller weights certifies its minimality.
+# the encoded qubit. Searching all smaller weights establishes its minimality.
 for (name, code) in codes
     distance = code_distance(code; max_weight=7)
     @assert distance.exact && distance.distance == 3
@@ -25,7 +25,7 @@ for (name, code) in codes
             [(op.name, op.qubit) for op in distance.witness])
 end
 
-# 2. Stopping before finding a witness proves a bound, not the true distance.
+# 2. A search through weight two establishes the lower bound d >= 3.
 limited = code_distance(reed_muller_code(); max_weight=2)
 @assert limited.distance === nothing
 @assert limited.lower_bound == 3
@@ -33,8 +33,8 @@ println("Search through weight two: d >= ", limited.lower_bound,
         ", exact distance known? ", limited.exact)
 
 # 3. Preserve an arbitrary complex logical qubit through one physical error.
-# This calculation uses ideal stabilizer projections, so it establishes code
-# correction behavior rather than fault tolerance of an extraction circuit.
+# This calculation checks error correction with ideal stabilizer projections.
+# Faults in the extraction circuit are studied separately in example 05.
 logical_input = normalize(ComplexF64[1, 0.3+0.6im])
 for (name, code) in codes
     encoded = code.encode(logical_input)
@@ -56,7 +56,7 @@ T_fidelity = abs2(dot(normalize(target_T), normalize(decoded_T)))
 @assert isapprox(T_fidelity, 1; atol=1e-10)
 println("Reed–Muller logical T fidelity: ", T_fidelity)
 
-# Shor's nine-qubit code is a code. Shor's verified-cat extraction is a method.
-# shor_qec_round(steane_code(), ...) uses that method on Steane data; it does
-# not turn the data into the nine-qubit Shor code. For a noisy encoded algorithm
-# and logical readout with a noisy magic-state factory, run 03_noisy_phase_estimation.jl.
+# Shor's verified-cat method measures stabilizers using entangled ancillas.
+# shor_qec_round(steane_code(), ...) applies it to Steane data; the data remains
+# encoded in the seven-qubit Steane code. For a noisy encoded algorithm with a
+# magic-state factory, run 03_noisy_phase_estimation.jl.

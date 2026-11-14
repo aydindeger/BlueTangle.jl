@@ -16,7 +16,7 @@ such errors, its resource costs, and the assumptions behind its protection.
 For the runnable sequence from ideal code behavior to the complete noisy
 algorithm, follow the [QEC learning path](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/qec/README.md).
 
-## Why the syndrome circuit is different
+## Verified cat states for syndrome extraction
 
 A single ancilla controlling four data interactions can spread one X fault to
 several data qubits. The Shor construction distributes those interactions over
@@ -49,7 +49,7 @@ result = shor_qec_round(code, damaged)
 (syndromes=result.history, cat_attempts=result.attempts)
 ```
 
-This zero-noise check uses the actual ancilla circuit. With noise enabled, a
+This zero-noise check simulates the ancilla circuit. With noise enabled, a
 fault-tolerant correction round may leave one correctable physical error.
 That is consistent with the distance-three requirement; exact return to the
 code space is not guaranteed after a fault near the end of the round.
@@ -106,8 +106,8 @@ checked.attempts[1]
 `steane_prepare(:zero)` starts with seven physical zero states and uses the
 verified Shor circuit to project onto the code space. Logical Z is initially
 positive; random X-check sectors are corrected with Z operations. `:plus`
-adds physical H gates before extraction. This path includes preparation faults
-and avoids the general synthesized encoder.
+adds physical H gates before extraction. Preparation faults and noisy syndrome
+extraction are included throughout this circuit.
 
 ```@example noisy_qec
 prepared = steane_prepare(:plus)
@@ -132,7 +132,7 @@ still grow with entanglement; these examples do not establish scalability.
 factory sets it explicitly. This numerical truncation is separate from the
 physical noise model and should be varied when checking simulation convergence.
 
-## Worked cycle: correction, disagreement, and readout
+## Worked example: noisy syndrome extraction
 
 Before running the resource factory, follow one small syndrome cycle:
 
@@ -141,7 +141,7 @@ julia --project=. examples/qec/05_noisy_syndrome_cycle.jl
 ```
 
 The script first prepares logical plus through the physical preparation
-circuit, inserts Y on data wire 3, and corrects it with actual Shor extraction.
+circuit, inserts Y on data wire 3, and corrects it with Shor extraction.
 The syndrome histories identify the physical defect, while the decoded
 fidelity checks preservation of the logical state. Decoding here diagnoses a
 simulation; it is not a step in the noisy operational circuit.
@@ -180,12 +180,13 @@ Z readout of the resource, and transversal conditional S. With `dagger=true`,
 supply `|A†⟩` and the conditional correction is S†. This is the resource-state
 approach to non-Clifford computation; resource purification is a separate task
 from consumption, as in [Bravyi and Kitaev](https://arxiv.org/abs/quant-ph/0403025).
-The following zero-noise check isolates consumption; `code.encode(target)`
-here is a diagnostic input, not the preparation used by the full algorithm.
+The following zero-noise check isolates consumption by supplying an ideal
+encoded input through `code.encode(target)`. The full algorithm prepares its
+resource with the noisy factory.
 
 ```@example noisy_qec
 target = apply(plus_state(1), Op("T", 1))
-magic = code.encode(target)  # supplied ideal resource; NOT a physical factory
+magic = code.encode(target)  # ideal resource for this consumption check
 prepared = steane_prepare(:plus)
 injected = steane_t(code, prepared.state, magic)
 corrected = shor_qec_round(code, injected.state)
@@ -193,10 +194,9 @@ corrected = shor_qec_round(code, injected.state)
 (injection_outcome=injected.outcome, remaining_data_qubits=get_N(corrected.state))
 ```
 
-The resource is a required argument. There is no default that silently prepares
-it using the unverified encoder. `steane_t` accepts physical gate noise,
-measurement noise, and deterministic fault callbacks; no ideal correction is
-hidden inside it. Separate gadgets with `shor_qec_round` to prevent physical
+The resource is a required argument. `steane_t` simulates the consumption
+circuit with physical gate noise, measurement noise, and deterministic fault
+callbacks. Separate gadgets with `shor_qec_round` to prevent physical
 errors from accumulating. A logical Z error on the resource remains a logical
 error after stabilizer correction, and is covered by a negative-control test.
 
@@ -220,13 +220,13 @@ P_Y(0)=\frac{1+\sin\phi}{2},\qquad \phi=\pi/4.
 
 The sample averages estimate the two quadratures, and `atan(sin_phi, cos_phi)`
 estimates the phase. The default two shots per basis demonstrate the complete
-workflow, including resource accounting, rather than providing precise phase
-statistics. The script reports completed and aborted shots, approximate 95%
+workflow, including resource accounting; more shots are needed for precise
+phase statistics. The script reports completed and aborted shots, approximate 95%
 Wilson intervals for the completed-shot zero probabilities, factory attempts,
 and raw-state consumption. Those intervals remain broad even if both default
-shots agree; they describe binomial sampling uncertainty, not physical-model
-or MPS truncation error. Factory
-counts include rejected attempts and work in aborted trials; probability and
+shots agree. They describe binomial sampling uncertainty; physical-model and
+MPS truncation errors require separate assessment. Factory counts include
+rejected attempts and work in aborted trials; probability and
 phase estimates are conditioned on completed shots. Edit `shots`, the physical
 error probabilities, `raw_error`, the retry bound, and `cutoff` at the top.
 
@@ -239,17 +239,18 @@ computation. The printed `distillation15_statistics` values assume perfect
 Clifford operations and serve only as a reference. The finite noisy run is not
 a threshold estimate or evidence of an advantage over an unencoded circuit.
 
-## What the tests establish
+## Validation
 
-An independent binary propagation test follows the actual Shor schedule and
+An independent binary propagation test follows the Shor schedule and
 adaptive stopping rule. It checks all 2,160 single-location Pauli faults on a
 clean encoded input, all 21 incoming single-qubit Paulis with perfect recovery,
 and all possible initial projection sectors of zero/plus preparation. It also
-compares representative histories with real statevector trajectories. The
+compares representative histories with statevector trajectories. The
 single-fault cases require at most four syndrome rounds.
 
 These recovery claims use the default Steane decoder. A custom decoder is
-checked for syndrome consistency, which alone cannot certify its logical action.
+checked for syndrome consistency. A recovery can match the syndrome and still
+leave a logical error, so custom decoders require separate validation.
 
 The injection tests compare T/T† with the intended logical action, including an
 entangled input, both feed-forward branches, physical CNOT/input/resource/
