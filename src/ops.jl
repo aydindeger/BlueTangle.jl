@@ -444,8 +444,9 @@ function _mitigate_probabilities(bitstr, probabilities, N, readout_noise)
             corrected[j] = inverse[2,1]*a + inverse[2,2]*b
         end
     end
-    # Preserve the existing nonnegative, normalized mitigation convention.
-    corrected = la.normalize(abs.(corrected), 1)
+    # Finite-shot inversion gives signed estimates. Taking absolute values
+    # biases observables and no longer inverts the classical response.
+    corrected ./= sum(corrected)
     return collect(0:length(corrected)-1), corrected
 end
 

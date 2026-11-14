@@ -8,6 +8,8 @@
     @test occursin("q1:", first(split(text, '\n')))
     @test occursin("●", text) && occursin("⊕", text)
     @test occursin("RY(0.123456)", text)
+    @test occursin("RZ(-0.08)", rendered(Op("RZ(-0.08000000000000002)",1)))
+    @test occursin("custom(0.123456789)", rendered(Op("custom(0.123456789)",gate.H,1)))
     @test occursin("empty circuit", rendered(QuantumOps[]))
     @test occursin("empty circuit", rendered([]))
     @test occursin("αβγδ", rendered(Op("αβγδ", gate.H, 1)))
@@ -32,6 +34,11 @@
     @test occursin("000", rendered(measure(zero_state(3))))
     @test occursin("Other", rendered(measure(plus_state(4)); max_outcomes=3))
     @test occursin("Uniform", rendered([measure(plus_state(2)), measure(zero_state(2))], ["Uniform", "Zero"]))
+    reference = measure(zero_state(1))
+    signed = Measurement([0,1], [1.1,-0.1], reference.expect, reference.mag_moments,
+                         reference.measurement_basis, reference.number_of_experiment,
+                         "Signed estimate", 1, reference.density_matrix)
+    @test occursin("Measurement estimates (quasiprobabilities)", rendered(signed))
 
     if isnothing(Base.get_extension(BlueTangle, :BlueTanglePyPlotExt))
         @test_throws ArgumentError plotq([Op("H",1)]; backend=:pyplot)
@@ -73,6 +80,9 @@ if !isnothing(Base.get_extension(BlueTangle, :BlueTanglePyPlotExt))
             figure = plotq(signed; backend=:pyplot, show=false)
             @test figure.axes[1].get_ylim()[1] < -0.1
             @test [bar.get_height() for bar in figure.axes[1].patches] ≈ [1.1,-0.1]
+            @test figure.axes[1].get_ylabel() == "Quasiprobability"
+            figure = plotq([measure(plus_state(3)),measure(zero_state(3))]; backend=:pyplot,show=false)
+            @test isempty(figure.axes[1].texts)
             # Loading PyPlot must not change the default backend.
             io = IOBuffer()
             @test isnothing(plotq([Op("H",1)]; io=io))

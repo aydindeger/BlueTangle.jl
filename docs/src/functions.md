@@ -1,6 +1,6 @@
 # Functions
 
-Detailed explanations or additional notes about all functions.
+Reference documentation for the main public APIs.
 
 ## Measurement functions
 
@@ -16,7 +16,6 @@ correlation
 ```@docs
 compile
 measure
-measure_ZNE
 to_state
 to_rho
 to_MPS
@@ -28,6 +27,15 @@ to_MPS
 entanglement_entropy
 shadow
 mag_moments
+```
+
+## Plotting and optional backends
+
+```@docs
+plotq
+plotqt
+savefigure
+phasepoly
 ```
 
 ## Other
@@ -91,6 +99,7 @@ error_mitigate_data
 ```@docs
 hamiltonian
 hamiltonian_exp
+evolve
 VQE
 variational_apply
 ```

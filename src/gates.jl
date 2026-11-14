@@ -131,29 +131,23 @@ Returns an `Op` object representing the randomly generated quantum gate.
 random_gate(N)=(N == 1 || rand(Bool)) ? random_gate_1(N) : random_gate_2(N)
 
 """
-`random_ops_2(N::Int, len::Int; measure_prob::Float64=0.0, measure_basis::Vector{String}=["MX", "MY", "MZ"]) -> Vector{QuantumOps}`
+    random_ops(N, depth; measure_prob=0.0, measure_basis=["MX", "MY", "MZ"])
 
-Create a sequence of random quantum gate operations, with optional mid-circuit measurements.
+Generate `depth` layers of random single-qubit and nearest-neighbor two-qubit
+gates on an open chain. Each unitary layer covers the qubits with disjoint gates.
+After each layer, independently measure each qubit with probability
+`measure_prob`, choosing its basis uniformly from `measure_basis`.
 
-# Arguments
-- `N::Int`: The number of qubits in the system.
-- `len::Int`: The length of the sequence of operations to generate.
-
-# Keyword Arguments
-- `measure_prob::Float64`: The probability of adding a measurement operation after each gate.
-- `measure_basis::Vector{String}`: The basis in which measurements are performed.
-
-# Returns
-- `Vector{QuantumOps}`: A vector of randomly chosen quantum operations (`QuantumOps`), each representing a gate or a measurement operation.
-
-# Description
-This function creates a vector of quantum operations, where each operation is either a randomly chosen gate from the set {"X", "Y", "Z", "H", "S", "CX","CZ","CP","GIVENS","FSIM","SWAP","ISWAP","FSWAP","SYC","ECR"} or a measurement operation, based on `measure_prob`. 
+The returned vector contains both gates and measurements; `depth` counts unitary
+layers, not individual operations. This uses the package's discrete gate family
+and random rotation parameters, rather than Haar-random two-qubit unitaries.
 
 # Example
 ```julia
 ops = random_ops(5, 10; measure_prob=0.2, measure_basis=["MX","MZ"])
 ```
-This example generates a sequence of 10 random gates and measurements (with a 20% chance of a measurement after each gate) for a 5-qubit system.
+This creates ten unitary layers on five qubits, each followed by independently
+chosen X- or Z-basis measurements with probability 0.2 per qubit.
 """
 function random_ops(N::Int,depth::Int;measure_prob::Float64=0.0,measure_basis::Vector{String}=["MX","MY","MZ"])
 opList=Vector{QuantumOps}()#[]#Vector{QuantumOps}(undef,len)

@@ -37,9 +37,22 @@ function _circuit_plot_data(input::AbstractVector; nqubits::Union{Nothing,Int}=n
     return columns, N
 end
 
+function _circuit_operation_name(op)
+    name = replace(op.name, '\n' => ' ')
+    op isa Op || return name
+    parsed = match(r"^([A-Za-z][A-Za-z0-9]*)\(([^()]*)\)$", name)
+    isnothing(parsed) && return name
+    uppercase(parsed.captures[1]) in gates_with_phase || return name
+    # Shorten literal roundoff in standard gate parameters without evaluating
+    # expressions or modifying arbitrary custom labels.
+    parameters = tryparse.(Float64, strip.(split(parsed.captures[2], ',')))
+    all(p -> !isnothing(p) && isfinite(p), parameters) || return name
+    return "$(parsed.captures[1])($(join(round.(parameters; sigdigits=6), ",")))"
+end
+
 function _circuit_branch_label(ops)
     isempty(ops) && return "I"
-    return join((uppercase(op.name) == "I" ? "I" : "$(op.name)@q$(op.qubit)" for op in ops), ", ")
+    return join((uppercase(op.name) == "I" ? "I" : "$(_circuit_operation_name(op))@q$(op.qubit)" for op in ops), ", ")
 end
 
 function _circuit_gate_label(op::QuantumOps)
@@ -49,7 +62,7 @@ function _circuit_gate_label(op::QuantumOps)
         name = uppercase(op.name) in ("RES", "RESET") ? "Reset" : replace(op.name, '_' => ' ')
         return isempty(op.type) ? name : "$name($(op.type))"
     end
-    return replace(op.name, '\n' => ' ')
+    return _circuit_operation_name(op)
 end
 
 function _circuit_qubit_labels(labels, N)
@@ -112,10 +125,11 @@ end
 """
     plotqt(ops_or_layers; fold=80, labels=[""], reverse_bits=false, nqubits=nothing, io=stdout)
 
-Print a compact circuit with q1 at the top, full gate labels, and conventional
+Print a compact circuit with q1 at the top, gate labels, and conventional
 controlled-X, controlled-Z and SWAP symbols. `fold` is the approximate line
 width in characters; use zero for a single line. For an opaque whole-register
 `OpF`, supply `nqubits` when its register size cannot be inferred.
+Literal numeric gate parameters are displayed with six significant digits.
 """
 function plotqt(input::AbstractVector; fold::Int=80, labels::Vector{String}=[""],
                 reverse_bits::Bool=false, nqubits::Union{Nothing,Int}=nothing, io::IO=stdout)
@@ -207,7 +221,8 @@ function _plotq_text(measurements::Vector{Measurement}, labels::Vector{String}=[
                      rep::Symbol=:bits, max_outcomes::Int=32, io::IO=stdout)
     ticks, values, names, _ = _measurement_plot_data(measurements, labels; rep=rep, max_outcomes=max_outcomes)
     basis = measurements[1].measurement_basis == "0" ? "Z" : measurements[1].measurement_basis
-    println(io, "Measurement probabilities ($basis basis", rep == :int ? ")" : "; q1 at left)")
+    title = any(<(0), values) ? "Measurement estimates (quasiprobabilities)" : "Measurement probabilities"
+    println(io, "$title ($basis basis", rep == :int ? ")" : "; q1 at left)")
     outcome_width = max(7, maximum(length, ticks; init=0))
     if length(measurements) == 1
         scale = maximum(abs, values; init=0.0)

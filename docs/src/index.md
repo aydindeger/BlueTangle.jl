@@ -1,74 +1,85 @@
-# BlueTangle.jl Documentation
+# BlueTangle.jl
 
-## Introduction
+BlueTangle simulates quantum circuits with gates, noise, mid-circuit measurements,
+and classical feed-forward. Statevectors, density matrices, and matrix product
+states share the same circuit description. Stabilizer-code tools add encoding,
+logical operations, syndrome extraction, and recovery.
 
-Welcome to BlueTangle.jl, a noisy quantum circuit simulator in Julia. This package is made for today's quantum computing needs and challenges. BlueTangle.jl is more than just a simulator. It's a complete toolkit for working with Noisy Intermediate-Scale Quantum (NISQ) devices.
+## Start with a Bell pair
 
-**Key Features of BlueTangle.jl:**
-- **User-Friendly and Clean Code Structure:** Thanks to Julia's multiple dispatch, BlueTangle.jl provides a straightforward and clean function namespace that's easy to use and understand.
-- **Mid-Circuit Measurements:** Incorporates crucial conditional mid-circuit measurements. This feature is valuable for studying measured-based phenomena like entanglement phase transitions. It also allows for probing exotic phenomena such as the Quantum Zeno effect, where frequent measurements can effectively slow down the evolution of a quantum system.
-- **Quantum Noise Channels:** Offers predefined and customizable noise channels using Kraus operators, enhancing the simulation's resemblance to real quantum environments.
-- **Error Mitigation Techniques:** Features error mitigation methods, including Pauli twirling, zero-noise extrapolation and measurement error mitigation, which are crucial for reducing noise in quantum computations. These techniques can be easily applied using a single function.
-- **Flexible Quantum State Representations:** Offers the flexibility to perform quantum simulations using various mathematical representations. You can seamlessly switch between state vector, density matrix, and Matrix Product State (powered by ITensor) backgrounds while using the same high-level functions for circuit creation, measurement, and analysis. This feature allows you to choose the most suitable representation for your specific problem, considering factors such as system size, entanglement, and computational resources.
-- **Automated Trotterized Hamiltonians:** Simplifies the creation of trotterized Hamiltonians by allowing users to input a string of operators, streamlining the process of simulating quantum systems.
-- **Automated Variational Algorithms:** Offers a streamlined and user-friendly implementation of the Variational Quantum Eigensolver (VQE) algorithm. With just a few lines of code, users can easily set up and run VQE simulations to find the ground state energy of a given Hamiltonian. The package takes care of constructing the variational quantum circuit, optimizing the parameters, and returning the final results, making it a convenient tool for exploring quantum chemistry and optimization problems.
-- **Stabilizer Codes:** Supports the creation and manipulation of quantum stabilizer error-correcting codes. This feature allows users to define stabilizer codes using a set of stabilizers and logical operators. The package provides functions for encoding, decoding, applying logical operations, making it a powerful tool for practical aspects of fault-tolerant quantum computing research.
-- **Quantum Information Toolkit:** This toolkit enables measuring quantum entanglement, calculating partial traces, and assessing the gaussianity of states. Additionally, it features a function for calculating high-order moments, providing a unique perspective on phase transitions. It also includes simple implementation of phase estimation and the ability to conduct classical shadow experiments, making it a versatile resource for quantum computing research.
-- **Speed and Efficiency:** Optimized for high performance, harnessing Julia's advanced JIT compilation capabilities. This ensures fast and efficient simulations, despite being packed with a multitude of features. Its design is ideal for the iterative testing and development of complex quantum circuits, providing a balance between comprehensive functionality and swift execution.
+```@example home
+using BlueTangle
+ops = [Op("H", 1), Op("CX", 1, 2)]
+circuit = compile(ops)
+state = to_state(circuit)
+@assert correlation(state, "Z,Z", [1, 2]) ≈ 1
+@assert correlation(state, "X,X", [1, 2]) ≈ 1
+(state=state, ZZ=correlation(state, "Z,Z", [1, 2]))
+```
 
-**Future Developments:**
-This package has plans to:
-- Develop the circuit optimization feature using ZX calculus, aiming to reduce resource requirements.
-- Integrate quantum error correction codes (including stabilizer formalism), leveraging the package's flexible design for mid-circuit measurements. This enhancement will enable improved testing and development of error correction codes within the platform.
+[`measure`](@ref) samples final outcomes; `run` returns the outcomes of explicit
+mid-circuit measurements. Qubit indices start at 1, and qubit 1 is the most
+significant bit in statevectors and integer measurement outcomes.
 
-BlueTangle.jl is designed for a diverse audience, from researchers to quantum computing enthusiasts. It stands as a robust platform for experimentation in the quantum computing landscape.
+## Choose a workflow
 
-### Notice: Package Under Development
-
-Please be aware that this package is currently under active development and is in its alpha version. This means that the features are still being finalised, and the functionality is subject to change. Users may encounter bugs or incomplete features.
-
-## About the Developer
-
-Aydin Deger, a Research Fellow in Quantum Computing Theory at University College London, is the sole developer of the BlueTangle.jl. With a deep interest in theoretical physics and quantum computing, Aydin aims to bridge complex quantum concepts with practical computing applications through this package. BlueTangle.jl embodies his vision of making quantum computing more accessible and comprehensible to a diverse audience, from researchers to enthusiasts.
-
-For further information or to explore more about Aydin's work, please visit [deger.xyz](http://deger.xyz).
+- [Circuit examples](examples.md): gates, noise channels, measurements, plotting,
+  and the distinction between an ensemble and a single trajectory.
+- [Quantum error correction](qec.md): encode an arbitrary logical qubit in the
+  five-qubit code, inspect a syndrome, correct a physical error, and decode;
+  repeat with density matrices or an MPS.
+- [OpenQASM import and export](qasm.md): read strings or files, use whole-register
+  operations, preserve idle qubits, and diagnose unsupported input.
+- [Advanced examples](advanced.md): Hamiltonian evolution, variational circuits,
+  entanglement, Pauli twirling, and explicit noise-amplification experiments.
+- [Function reference](functions.md): signatures and detailed API documentation.
 
 ## Installation
-Installing BlueTangle is straightforward. You can install it through the Julia REPL using the following command:
+
+Julia 1.10 or later is required. Install from the repository:
 
 ```julia
 using Pkg
 Pkg.add(url="https://github.com/aydindeger/BlueTangle.jl")
-```
-
-Alternatively, type `] add https://github.com/aydindeger/BlueTangle.jl` directly in the Julia REPL.
-
-To load the package in your Julia environment, use:
-
-```julia
 using BlueTangle
 ```
 
-For direct installation from the source, such as in a Jupyter notebook located at the root folder of the package, use:
+The current PRIMA_jll 0.7.1 dependency can fail to load on Linux with glibc 2.41+
+with `cannot enable executable stack`. See the
+[upstream issue](https://github.com/libprima/PRIMA.jl/issues/46). Linux CI uses
+Ubuntu 24.04 pending an upstream binary rebuild.
+
+For a local checkout, start Julia in its root with `julia --project=.` and run
+`using Pkg; Pkg.instantiate(); using BlueTangle`. Run the tests with
+`julia --project=. -e 'using Pkg; Pkg.test()'`.
+
+`plotq(circuit)` prints a boxed text circuit without extra dependencies. For
+graphical output, install and load `PyPlot`, then call
+`plotq(circuit; backend=:pyplot)` and `savefigure`. `plotqt` is also available for text. Loading `PhasePoly`
+enables `phasepoly` for its supported structured noiseless circuits; see the
+[optional backend example](examples.md#Optional-PhasePoly-backend).
+
+Install optional packages in the environment where you use them:
 
 ```julia
-cd(@__DIR__)
-push!(LOAD_PATH, "src")
-using BlueTangle
+using Pkg
+Pkg.add("PyPlot")
+Pkg.add(url="https://github.com/aydindeger/PhasePoly.jl")
 ```
 
-## FAQ
+## Scope
 
-**Q:** What's the inspiration behind the name 'BlueTangle'?
+The package is experimental. Density-matrix evolution sums noise and unobserved
+measurement branches, whereas vectors and MPS states represent individual
+trajectories. MPS truncation, finite-shot sampling, and Trotter discretization
+introduce different approximations; choose and check their settings separately.
 
-**A:** The name 'BlueTangle' merges quantum computing ideas with cultural elements. The 'tangle' part reflects the complex correlations in quantum systems, while 'Blue' is inspired by a Bob Dylan song, ['Tangled Up in Blue'](https://www.youtube.com/watch?v=QKcNyMBw818), representing complex narratives similar to those in quantum computing.
+The QEC decoder searches single-Pauli errors. The QASM importer supports an
+explicit OpenQASM 2 subset. PhasePoly supports a restricted gate family, and its
+cost can grow exponentially with interior Hadamards or level-4 phase terms.
+The relevant examples state these limits where they affect the calculation.
 
-**Q:** Who designed the logo for this package?
+## Citation
 
-**A:** The logo was created using DALL-E.
-
-**Q:** How can I cite BlueTangle.jl in my research work?
-
-**A:** For citation in research work, please use the following reference:
-
-`Aydin Deger, "BlueTangle.jl: A Noisy and Dynamic Quantum Circuit Simulator", https://github.com/aydindeger/BlueTangle/ (2024).`
+Aydin Deger, “BlueTangle.jl: A Noisy and Dynamic Quantum Circuit Simulator”,
+[repository](https://github.com/aydindeger/BlueTangle.jl/) (2024).

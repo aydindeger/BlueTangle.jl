@@ -2,387 +2,312 @@
 
 ## 1) GHZ Circuit
 
-### Overview
-This example demonstrates the use of the package for creating a Greenberger–Horne–Zeilinger (GHZ) state circuit.
+A Hadamard followed by two CNOTs prepares
+`(|000⟩ + |111⟩)/sqrt(2)`. Collect operations, then compile them into a circuit:
 
-### Example
-#### Step 1: Collect Quantum Operations
-Define quantum operations to prepare the GHZ state.
-
-```julia
+```@example ghz
 using BlueTangle
-
-# Quantum gates
-hadamard = Op("H", 1) # Hadamard gate on the first qubit
-cnot1 = Op("CNOT", 1, 2) # CNOT gate between first and second qubits
-cnot2 = Op("CNOT", 2, 3) # CNOT gate between second and third qubits
-
-ops = [hadamard, cnot1, cnot2] # Collect operators
-```
-
-#### Step 2: Create Quantum Circuit
-Next, we [`compile`](@ref) these operations into a quantum circuit and check its properties.
-
-```julia
-circuit = compile(ops) # Create a quantum circuit
-println("Circuit stats:", circuit.stats)
+ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
+circuit = compile(ops)
+state = to_state(circuit)
+@assert correlation(state, "Z,Z", [1, 2]) ≈ 1
+@assert correlation(state, "X,X,X", [1, 2, 3]) ≈ 1
+circuit.stats
 ```
 
 ## 2) Measurement and Correlations
 
-### Overview
+A finite-shot measurement estimates computational-basis probabilities. An exact
+state or density matrix can evaluate other observables directly. These examples
+continue from the GHZ circuit above.
 
-This section explores two methods for obtaining measurement data and correlations from a quantum circuit, showcasing two distinct approaches:
-
-1. **Sampling Measurement**: This approach involves approximating values by taking multiple samples from the quantum circuit.
-2. **Exact Calculation using Density Matrix**: This method uses the density matrix of the circuit for precise calculations.
-
-### Measurement - Sampling Approach
-Perform measurements through sampling and analyse the results. For more details on this function, see [`measure`](@ref).
-
-```julia
-shots = 1000
-measurement1 = measure(circuit, shots) # Sample the circuit
-
-println("Attributes of the measurement object",fields(measurement1))
-
-# Output measurement details
-println("Expectation values:", measurement1.expect)
-println("Total magnetization moments:", measurement1.mag_moments)
-
-# Calculate correlations: ⟨Z₁Z₂⟩
-correlations1 = correlation(measurement1, [1, 2])
-println("Correlations:", correlations1)
+```@example ghz
+measurement = measure(circuit, 1000)
+rho = to_rho(circuit)
+exact_measurement = measure(rho) # exact basis probabilities, no shots
+@assert correlation(measurement, [1, 2]) ≈ 1
+@assert correlation(rho, "X,X,X", [1, 2, 3]) ≈ 1
+(sampled_Z=measurement.expect, exact_Z=expect(rho, "Z"),
+ exact_ZZ=correlation(rho, "Z,Z", [1, 2]))
 ```
 
-### Measurement - Exact Approach using Density Matrix
-Alternatively, we can use the density matrix for exact calculations. Similar one can use state vectors as well, see [`to_state`](@ref).
+`measurement.bitstr` contains integer basis labels and `measurement.sample`
+their estimated probabilities. Qubit 1 is the most significant bit. A single Z
+measurement distribution cannot determine arbitrary X/Y correlations; change the
+measurement basis or use the simulated state when it is available.
 
-```julia
-density_matrix = to_rho(circuit)
+## 3) Plot circuits and measurement results
 
-# Calculate exact expectation values and correlations
-expect2 = expect(density_matrix, "Z")
-correlations2 = correlation(density_matrix, "Z,Z", [1, 2]) # Calculate correlations: ⟨Z₁Z₂⟩
+`plotq` prints a boxed text diagram by default, without a plotting package.
+Qubit 1 is at the top; controls, targets, and measurements share the wires.
 
-println("Exact expectation values:", expect2)
-println("Exact correlations:", correlations2)
-```
-
-**Calculations in Different Bases**
-
-With the exact density matrix, we can explore correlations in different bases, unlike the sampling measurement.
-
-```julia
-expect3 = expect(density_matrix, "Y")
-correlations3 = correlation(density_matrix, "Z,X", [1, 3])
-
-println("Expectation values <Y>:", expect3)
-println("Correlations <Z₁X₃>:", correlations3)
-```
-
-This example highlights the flexibility and power of the package in quantum circuit analysis and simulation.
-
-## 3) Plot Circuits and Measurements
-
-### Overview
-
-The `plotq` function is designed to create visual representations of quantum circuits, while the `plotq` function displays the results of quantum measurements. Both of these functions are dependent on the `PyPlot` package.
-
-### Example
-
-#### Step 1: Define and Compile a Quantum Circuit
-Create a simple quantum circuit for demonstration.
-
-```julia
+```@example plotting_text
 using BlueTangle
-include(pathof(BlueTangle) * "../../extra/pyplot.jl")
+feedback_ops = QuantumOps[
+    Op("H", 1), Op("CX", 1, 2), Op("RY(0.37)", 3),
+    Op("SWAP", 2, 3), Op("MZ", 2; if1="X")
+]
+plotq(feedback_ops)
+nothing # hide
+```
+
+`plotqt` is also available as a direct text renderer. For graphics, install
+PyPlot once (`using Pkg; Pkg.add("PyPlot")`), load it, and select it explicitly:
+
+```julia
+using PyPlot
+fig = plotq(feedback_ops; backend=:pyplot)
+savefigure(fig, "circuit_feedback.png")
+```
+
+![Circuit with a measurement and conditional correction](assets/figs/circuit_feedback.png)
+
+Measurement plots also default to text. The following comparison uses exact
+probabilities of density matrices, so it isolates gate noise from sampling error.
+
+```@example plotting_text
+bell_ops = [Op("H", 1), Op("CX", 1, 2)]
+rho0 = zero_state(2) * zero_state(2)'
+ideal = measure(apply(bell_ops, rho0); label="Ideal")
+noisy = measure(apply(bell_ops, rho0; noise=NoiseModel("depolarizing", 0.08));
+                label="With gate noise")
+plotq([ideal, noisy], ["Ideal", "With gate noise"])
+nothing # hide
 ```
 
 ```julia
-# Quantum gates for a basic circuit
-hadamard = Op("H", 1)
-cnot12 = Op("CNOT", 1, 2)
-cnot23 = Op("CNOT", 2, 3)
-
-# Compile the circuit
-circuit = compile([hadamard, cnot12, cnot23])
+fig = plotq([ideal, noisy], ["Ideal", "With gate noise"]; backend=:pyplot)
+savefigure(fig, "measurement_comparison.png")
 ```
 
-#### Step 2: Visualize the Circuit
-Use `plotq` to visualize the circuit structure.
+![Exact Bell-state probabilities with and without gate noise](assets/figs/measurement_comparison.png)
 
-```julia
-plotq(circuit)
-```
-
-![](assets/figs/circuit.png)
-
-#### Step 3: Perform Measurements and Analyze Results
-Conduct measurements on the circuit and examine the outcomes.
-
-```julia
-measurement = measure(circuit, 1000) # Sample the circuit 1000 times
-```
-
-#### Step 4: Plot Measurement Results
-Visualize the measurement data using `plotq`.
-
-```julia
-plotq(measurement)
-```
-
-![](assets/figs/measure.png)
-
-### Troubleshooting Plotting Issues
-
-If you encounter problems with plotting, please follow these steps:
-
-**Install PyPlot in Julia**: Add the `PyPlot` package to your Julia environment. This package provides an interface to the `matplotlib` library in Python. You can install it using the Julia package manager:
-
-```julia
-import Pkg
-Pkg.add("PyPlot")
-```
-
-**Install Python Matplotlib**: Ensure that `matplotlib` is installed in your Python environment. This is a prerequisite for `PyPlot` as it relies on Python's `matplotlib` for plotting. You can install `matplotlib` using `pip`:
-
-```bash
-pip3 install matplotlib
-```
-
-For detailed documentation and additional information, refer to the [`PyPlot` GitHub page](https://github.com/JuliaPy/PyPlot.jl).
+Bitstring labels put qubit 1 on the left. Use `rep=:int` for integer labels.
+Large outcome sets show the largest `max_outcomes=32` entries and group the rest
+as `Other`. `fold` wraps circuit diagrams: it measures characters for text and
+columns for graphics. `savefigure(path)` saves the current graphical figure.
 
 ## 4) Noise Models and Circuits
 
-### Overview
-This example shows how to create noisy quantum circuits using predefined quantum noise models. The package offers precise control over each quantum operation, allowing for different noise models for individual operations or overall models for single and two-qubit operations.
+Gate noise is specified separately for one-qubit and two-qubit gates:
 
-### Predefined Noise Models
-- `amplitude_damping`: Simulates energy loss in a quantum system. Parameter `γ` (given by `p`) indicates the excitation loss probability.
-- `phase_damping`: Loss of quantum information without energy loss. Parameter `γ` quantifies the likelihood of a phase shift.
-- `phase_flip`: Introduces phase errors (Z error) with probability `p`.
-- `bit_flip`: Causes state flips (X error) with probability `p`.
-- `bit_phase_flip`: Combines bit and phase flips, applying Y error with probability `p`.
-- `depolarizing`: General error model where any Pauli operation (X, Y, Z) can occur with equal probability. Parameter `p` is the overall error probability.
-- `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Coherent errors (incorrect rotations) around respective axes. Parameter `p` specifies rotation error magnitude.
-
-### Implementing Noise in Circuits
-
-The code below demonstrates how to create a noise model for single qubit gates. The second parameter defines either the amplitude or the probability of the noise model, depending on the selected model. For example:
-
-```julia
-noise_model1 = Noise1("bit_flip", 0.001)
+```@example noise_models
+using BlueTangle, LinearAlgebra
+n1 = Noise1("bit_flip", 0.001)
+n2 = Noise2("depolarizing", 0.01)
+noise = NoiseModel(n1, n2)
+ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
+noisy_circuit = compile(ops, Options(noise=noise))
+rho = to_rho(noisy_circuit)
+@assert isapprox(real(tr(rho)), 1; atol=1e-12)
+@assert eigmin(Hermitian(Matrix(rho))) >= -1e-12
+correlation(rho, "Z,Z", [1, 2])
 ```
 
-In this instance, [`Noise1`](@ref) constructs a noise model for single qubit operations, specifically a bit flip error, with a probability of 0.001 (or 0.1%).
+`NoiseModel("bit_flip", 0.001, "depolarizing", 0.01)` is equivalent.
+`Noise2(model, p)` is the tensor product of the corresponding one-qubit channels:
+for depolarizing noise with `p=0.01`, each operand has a 1% nonidentity Pauli error,
+so the probability of at least one operand error is `1-(1-p)^2`.
 
-Similarly, a noise model for two-qubit operations can be created:
+| Model | Parameter meaning |
+|:--|:--|
+| `amplitude_damping` | Excited-state decay probability `p` |
+| `phase_damping` | Off-diagonal entries acquire a factor `sqrt(1-p)` |
+| `phase_flip`, `bit_flip`, `bit_phase_flip` | Apply Z, X, or Y with probability `p` |
+| `depolarizing` | Apply X, Y, or Z with total probability `p`, each equally likely |
+| `rot_X`, `rot_Y`, `rot_Z`, `rot_P` | Coherent rotation/phase angle in radians |
 
-```julia
-noise_model2 = Noise2("depolarizing", 0.01)
+Statevectors and MPS sample one Kraus branch; density matrices sum all branches.
+A channel applied before final readout has a separate `readout_noise` option.
+
+## 5) Custom noise models and gates
+
+Built-in matrices are available as `gate.X`, `gate.CNOT`, or `gate.T`.
+Parameterized matrices use `gates("RX(0.3)")`, `_RX(0.3)`, or the public functions
+`U1`, `U2`, and `U3`. A custom local matrix uses `Op("my gate", matrix, qubit)`.
+
+For a custom channel provide Kraus operators satisfying
+`sum(K' * K for K in kraus) ≈ I`:
+
+```@example custom_channel
+using BlueTangle
+p = 0.3
+kraus = [sqrt(1-p)*gate.I, sqrt(p)*gate.Z]
+@assert is_valid_quantum_channel(kraus)
+channel = custom_noise(1, "my phase flip", kraus)
+state = plus_state(1)
+rho = state * state'
+noisy_rho = apply(rho, Op(channel, 1))
+@assert noisy_rho ≈ (1-p)*rho + p*gate.Z*rho*gate.Z
 ```
 
-Here, [`Noise2`](@ref) is applied to create a depolarizing channel noise model for two-qubit gates, with an error probability of 0.01 (or 1%).
-
-We can now create the `NoiseModel` as following
-
-```julia
-nm=NoiseModel(n1,n2)
-
-#Alternatively following constructions give the same result
-
-nm=NoiseModel("bit_flip", 0.001,"depolarizing", 0.01)
-nm=NoiseModel(["bit_flip", 0.001],["depolarizing", 0.01])
-```
-
-Next, we will illustrate incorporating these noise models into a quantum circuit.
-
-```julia
-ops = [Op("H", 1), Op("CNOT", 1, 2), Op("CNOT", 2, 3)]
-noisy_circuit = compile(ops, Options(noise=nm))
-```
-
-## 5) Custom Noise Models and Gates
-
-### Overview and Examples
-
-- Predefined constant gates, such as `gate[:X]`, `gate[:CNOT]` or `gate.T`, can be easily accessed. For more details, see [`gate`](@ref).
-
-- Phase (`P`) and rotation gates (`RX`, `RY`, `RZ`) can be accessed through `gates1("RX(.3)")`, or the controlled phase gate via `gates("CP(.3)")`. Refer to `gates` and `gates` for more information. Additionally, all single qubit rotations can be created using `U` gates with Euler angles, as detailed in `_P`, `_U2`, and `_U3`.
-
-- For custom defined gates, you can construct your own unitary matrix and create an `Op` object using the following constructor: `Op("name_of_my_gate", matrix, qubit)`.
-
-- To create a custom noise model, define your own Kraus operators for a single qubit model using `QuantumChannel(1, "name_of_model", 0, vector_of_kraus_matrices)` or for a two-qubit model with `QuantumChannel(2, "name_of_model", 0, vector_of_kraus_matrices)`. It's important to first check if your Kraus operators satisfy the trace-preserving condition using the [`is_valid_quantum_channel`](@ref) function. Alternatively, you can use the simpler constructor `custom_noise(q, name_of_model, vector_of_kraus_matrices)`, where `q` is either 1 or 2 for single and two qubit gates, respectively.
+The constructor validates dimensions and the trace-preserving condition. Use
+`custom_noise(2, name, kraus)` for two-qubit Kraus matrices.
 
 ## 6) Conditional Mid-Measurements
 
-### Overview
+A conditional measurement applies a branch chosen by its recorded bit. In this
+example, measure qubit 1 in X: outcome 0 applies Z, and outcome 1 applies H.
+Both `Op("MX", 1; if0="Z", if1="H")` and `ifOp("MX", 1, "Z", "H")` express this.
 
-This section introduces the concept and implementation of conditional mid-measurements in quantum circuits. Mid-measurements are powerful tools that allow for conditional execution of quantum operations based on the results of measurements made during the circuit's execution. The application of the Born rule in these measurements adds a probabilistic dimension to the circuit's behaviour.
-
-### Conditional Mid-Measurements with `ifOp`
-
-The [`ifOp`](@ref) function enables conditional mid-measurements. For instance, consider a mid-measurement in the X basis for the first qubit, followed by conditional operations:
-
-```julia
-mid_measurement = ifOp("MX", 1, "Z", "H")
-ops = [Op("X", 1), mid_measurement, Op("CNOT", 1, 2), Op("CNOT", 2, 3)]
+```@example conditional
+using BlueTangle
+mid_ops = QuantumOps[Op("X", 1), Op("MX", 1; if0="Z", if1="H"),
+                     Op("CX", 1, 2), Op("CX", 2, 3)]
+mid_circuit = compile(mid_ops)
+mid_rho = to_rho(mid_circuit)
+mid_measurement = measure(mid_rho; label="Conditional circuit")
+@assert real(mid_rho[1,1]) ≈ 0.25
+@assert real(mid_rho[8,8]) ≈ 0.75
+mid_measurement.sample
 ```
 
-Let's break down the example to understand it better:
+The first X gate prepares `|100⟩`. Measuring qubit 1 in X gives `|+⟩` or `|−⟩`
+with equal probability. For outcome 0, Z maps `|+⟩` to `|−⟩`, and the CNOTs make
+`(|000⟩-|111⟩)/sqrt(2)`. For outcome 1, H maps `|−⟩` to `|1⟩`, and the CNOTs
+make `|111⟩`, up to an irrelevant global phase. The final unconditioned Z
+probabilities are therefore 25% `000` and 75% `111`.
 
-**Function Overview: `ifOp`**
-   - The `ifOp` function is used to apply different quantum operations conditionally, depending on the outcome of a mid-circuit measurement.
+![Exact outcome probabilities for the conditional circuit](assets/figs/measure_mid.png)
 
-**Setting Up a Conditional Operation:**
-   - In the example, `mid_measurement = ifOp("MX", 1, "Z", "H")` defines a conditional operation.
-   - `"MX"` specifies the measurement basis (here, the X basis).
-   - The number `1` indicates that the measurement is performed on the first qubit.
-   - `Z` (Z gate) and `H` (Hadamard gate) are the conditional operations.
-   - The function is set up so that if the measurement result of the first qubit in the X basis is `0`, the Z gate (`Z`) is applied. If the result is `1`, the Hadamard gate (`H`) is applied.
+Track a particular trajectory and its record explicitly:
 
-**Sequence of Operations:**
-   - The operations sequence is given by `ops = [Op("X", 1), mid_measurement, Op("CNOT", 1, 2), Op("CNOT", 2, 3)]`.
-   - `Op("X", 1)` applies an X gate to the first qubit.
-   - `mid_measurement` is then executed, which is the conditional operation defined above.
-   - Following the conditional operation, two CNOT gates are applied: `Op("CNOT", 1, 2)` entangles the first and second qubits, and `Op("CNOT", 2, 3)` entangles the second and third qubits.
-
-**Outcome:**
-   - The outcome of `mid_measurement` directly influences the state of the circuit after the measurement.
-   - Depending on the measurement result, the circuit will have either undergone a Hadamard transformation (if the result was `0`) or a Z transformation (if the result was `1`) on the first qubit before proceeding to the subsequent CNOT gates.
-
-### Workout Example
-
-1. **Starting State**: The initial state is |000⟩.
-2. **Application of X Gate**: Applying the X gate to the first qubit changes the state to |100⟩.
-3. **Conditional Mid-Measurement**: When the first qubit is measured in the X basis, the outcome is determined by the Born rule from a superposition state of |000⟩ and -|100⟩. Based on the measurement:
-   - If the result is 0, apply a Z gate. The state becomes superposition state of |000⟩ and -|100⟩.
-   - If the result is 1, apply a H gate. The state becomes -|100⟩.
-4. **Subsequent CNOT Operations**: Applying the first CNOT gate entangles the first and second qubits, and the second CNOT gate entangles the second and third qubits. This results in either the state |111⟩ or (|000⟩ - |111⟩)/√2, each with a 50% probability due to the superposition created by the mid-measurement.
-
-Let's test this using two different methods.
-
-### Method 1 - Simulation with a Circuit
-
-To test the operations, we first compile the circuit and then sample it to obtain a measurement object. The [`compile`](@ref) function is used to assemble the circuit, and [`measure`](@ref) is employed to simulate the circuit's execution and generate a [`Measurement`](@ref) object.
-
-```julia
-circuit = compile(ops)
-measurement = measure(circuit,1000)
+```@example conditional
+trajectory, record = apply(mid_ops, zero_state(3); track_measurements=true)
+@assert length(record) == 1
+@assert only(record) in (0, 1)
+record
 ```
-
-After obtaining the measurement object, we can visualise the results:
-
-```julia
-plotq(measurement)
-```
-
-![](assets/figs/measure_mid.png)
-
-The measurement results show that half of the time, the state is on `7=|111⟩`, and the other half, it is on the GHZ state (`7=|111⟩` and `0=|000⟩`).
-
-### Method 2 - Manual Simulation with a Quantum Simulator
-
-Alternatively, we can manually simulate the same process using a quantum simulator. This approach provides a more hands-on understanding of how each operation affects the state of the quantum system:
-
-```julia
-state = zero_state(3) # Initial state for N=3
-state=apply(state, Op("X", 1)) # Apply X on qubit 1
-state=apply(state, ifOp("MX", 1, "Z", "H")) # Measure qubit 1 in X basis. Apply Z if result is 0, H if 1.
-state=apply(state, Op("CNOT", 1, 2)) # Apply CNOT on qubit 1 and 2
-state=apply(state, Op("CNOT", 2, 3)) # Apply CNOT on qubit 2 and 3
-state # Final result: either GHZ state or |111> state.
-```
-
-This manual simulation helps illustrate the probabilistic nature of quantum circuits involving mid-measurements and demonstrates the creation of complex quantum states, such as the GHZ state.
 
 ## 7) Reset Operation on a Qubit
 
-### Overview
+Reset measures a qubit in Z and applies X when necessary to return it to zero.
+It removes the qubit's entanglement; it cannot reset half of a Bell pair while
+preserving the original pure two-qubit state.
 
-In this example, we demonstrate how to implement a reset operation on a qubit. This operation involves measuring a qubit and, depending on the outcome, applying a corrective operation. Specifically, if the qubit is measured and found to be in the |1⟩ state, an X gate is applied to bring it back to the |0⟩ state. We'll illustrate this concept by creating a Bell state and then resetting the first qubit.
-
-### Example 1: Reset via measurement
-
-First, we start by preparing a Bell state. A Bell state is a maximally entangled quantum state of two qubits. It represents a perfect example of quantum entanglement and is foundational in quantum computing and quantum information theory.
-
-```julia
-# Number of qubits
-N = 2
-
-# Initialising the state vector
-state = zero_state(N)
-
-# Applying Hadamard gate to the first qubit
-state=apply(state, Op("H", 1))
-
-# Applying CNOT gate with the first qubit as control and the second as target
-state=apply(state, Op("CX", 1, 2))
-
-# Show the state of the qubits
-display(state)
+```@example reset
+using BlueTangle, LinearAlgebra
+bell = apply([Op("H", 1), Op("CX", 1, 2)], zero_state(2))
+reset_rho = apply(bell*bell', Op("RES", 1))
+@assert reset_rho ≈ Diagonal([0.5, 0.5, 0, 0])
+trajectory = apply(bell, Op("RES", 1))
+@assert expect(trajectory, "Z")[1] ≈ 1
+reset_rho
 ```
 
-At this point, the system is in a Bell state, which is an equal superposition of |00⟩ and |11⟩ states. You can see this with the following code
-
-```julia
-fock_basis_create(N)
-```
-
-Now, we'll implement the reset operation on the first qubit. This operation involves measuring the first qubit. If the measurement result is |1⟩, we apply the X gate to flip it back to |0⟩. 
-
-```julia
-# Reset operation on the first qubit
-op = Op("RES", 1)
-apply(state, op)
-```
-
-### Understanding the Outcome
-
-After the reset operation, the state of the qubits can be either |00⟩ or |01⟩. The outcome depends on the state of the first qubit at the time of measurement. If the first qubit was in the |0⟩ state (which happens with a 50% probability due to the Bell state's nature), the reset operation does nothing. However, if the first qubit was in the |1⟩ state (again, a 50% chance), the X gate flips it to |0⟩. 
+The density matrix is the equal mixture of `|00⟩` and `|01⟩`. One pure-state
+trajectory selects one of those two states.
 
 ## 8) Random Quantum Circuits
 
-### Overview
-In this section, we explore the generation of random quantum circuits, a powerful tool for various quantum computing simulations. The circuits can consist of Clifford gates, a mix of Clifford and non-Clifford gates, and optional mid-circuit measurements in specified bases.
+`random_clifford(N, len)` generates `len` Clifford gates; a measurement can be
+inserted after each gate with the chosen probability. Two-qubit gates use
+adjacent sites. Here is one realization with X/Z measurements:
 
-### Generating Random Clifford Operations
-Define the number of qubits (N) and the length of the quantum circuit (len), then generate a random sequence of Clifford operations:
-
-```julia
-N = 3 # Number of qubits
-len = 5 # Length of the quantum circuit
-random_operations = random_clifford(N, len)
-```
-
-### Generating Mixed Random Operations
-For a more diverse circuit, generate a random sequence including both Clifford and non-Clifford operations. Note that following code will generate depth=len circuit.
-
-```julia
-random_operations = random_ops(N, len)
-```
-
-### Including Mid-Circuit Measurements
-
-The `random_clifford` function can also incorporate mid-circuit measurements. This is controlled by the `measure_prob` parameter, which dictates the probability of a measurement occurring after each gate, and the `measure_basis` parameter, specifying the measurement bases (e.g., "MX", "MY", "MZ").
-
-For instance, to create a random sequence of Clifford gates with a 20% chance of measurement in either the "MX" or "MZ" basis after each gate in a 5-qubit system:
-
-```julia
-ops = random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX","MZ"])
-random_circuit = compile(ops)
-```
-
-This function will randomly select operations from a set of Clifford gates or measurements, applying them to either single or adjacent qubits. 
-
-### Visualizing the Random Circuit
-
-After generating the random operations, you can visualize the circuit to better understand its structure:
-```julia
+```@example random_circuits
+using BlueTangle
+random_ops_example = random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX", "MZ"])
+random_circuit = compile(random_ops_example)
 plotq(random_circuit)
+nothing # hide
 ```
 
-![](assets/figs/random_circuit.png)
+![One random Clifford circuit with measurements](assets/figs/random_circuit.png)
 
-This approach to creating and visualizing random quantum circuits showcases the versatility and capabilities of the package in simulating various quantum computing scenarios.
+`random_ops(N, depth)` instead builds `depth` disjoint unitary layers, choosing
+from its mixed gate family and then independently measuring each site with
+probability `measure_prob` after each layer. It is not a Haar-random circuit
+ensemble, and its generation depth need not equal the rescheduled circuit depth.
+For a small ensemble experiment see [example 19](advanced.md#19%29-Measurement-induced-entanglement-transition-using-MPS).
+
+## Operations through one entry point
+
+Use `Op` to construct each kind of operation:
+
+| Construction | Meaning |
+|:--|:--|
+| `Op("H", 1)` | Local gate |
+| `Op("MZ", 1; if0="I", if1="X")` | Measurement with a branch chosen by the recorded bit |
+| `Op(Noise1("bit_flip", 0.1), 1)` | Kraus noise channel |
+| `Op("block", [Op("H", 1), Op("CX", 1, 2)])` | Named operation sequence on the whole register |
+| `Op("full", matrix)` | Matrix acting on the whole register |
+| `Op("transform", f)` | Function taking and returning the whole state |
+
+The objects remain distinct internally (`Op`, `ifOp`, `OpQC`, and `OpF`) because
+unitary gates, selective measurements, noise channels, and complete-register
+transformations have different semantics. Their existing constructors remain
+available. A parameterized **local** gate includes its qubit index, such as
+`Op("rotation", theta -> _RX(theta), 1)`; this is different from a function of the
+whole state.
+
+Circuit simplification cancels matching ideal gate identities. Applying a noise
+model to the shorter circuit then changes its noise exposure; simplification is
+not an equivalence of noisy channels.
+
+```@example operation_entry
+using BlueTangle
+block = Op("bell block", [Op("H", 1), Op("CX", 1, 2)])
+state = apply(zero_state(2), block)
+@assert correlation(state, "Z,Z", [1, 2]) ≈ 1
+conditional_reset = Op("MZ", 1; if0="I", if1="X")
+reset_state, record = apply(one_state(1), conditional_reset; track_measurements=true)
+@assert record == [1]
+@assert reset_state ≈ zero_state(1)
+```
+
+## Ensemble evolution and a measurement trajectory
+
+Discarding a measurement outcome destroys coherence between its outcome sectors.
+Conditioning on one observed outcome instead gives a normalized conditional
+state. These are different density matrices:
+
+```@example ensemble_trajectory
+using BlueTangle, LinearAlgebra
+state = plus_state(1)
+rho = state * state'
+ensemble = apply(rho, Op("MZ", 1))
+conditional, record = apply(rho, Op("MZ", 1); track_measurements=true)
+
+@assert ensemble ≈ [0.5 0; 0 0.5]
+@assert only(record) in (0, 1)
+@assert isapprox(real(tr(conditional^2)), 1; atol=1e-12)
+(ensemble_purity=real(tr(ensemble^2)), conditional_purity=real(tr(conditional^2)))
+```
+
+`to_rho(circuit)` and density-matrix `apply` sum unobserved noise and measurement
+branches. With `track_measurements=true`, measurement outcomes are sampled and
+returned alongside the conditional state. Statevectors and MPS states follow a
+single trajectory through stochastic operations.
+
+Use `measure(circuit, shots; backend=:statevector)`, `:density_matrix`, or
+`:tensor` to sample final outcomes. `run(circuit, shots; backend=...)` returns
+explicit mid-circuit records. On MPS, `measure(psi)` uses 1000 shots by default;
+exact probability enumeration with `measure(psi, -1)` is limited to 16 qubits
+unless the lower-level `sample_exact` limit is explicitly changed.
+
+## Optional PhasePoly backend
+
+After installing PhasePoly separately, load it to activate the adapter:
+
+```julia
+using Pkg
+Pkg.add(url="https://github.com/aydindeger/PhasePoly.jl") # optional, once
+using BlueTangle
+import PhasePoly
+
+ops = [Op("H", 1), Op("H", 2), Op("CZ", 1, 2), Op("T", 1)]
+compact = phasepoly(ops)
+expect(compact, "X")                     # one expectation per physical qubit
+correlation(compact, "X,Z", [1, 2])      # native compact Pauli calculation
+amplitude(compact, [0, 1])               # amplitude of |01⟩
+state = to_state(compact)                # explicitly materialize the sparse state
+@assert state ≈ apply(ops, zero_state(2))
+```
+
+The adapter preserves BlueTangle's physical qubit labels, statevector ordering,
+and global phase. It supports a restricted noiseless gate family: affine
+permutations, supported diagonal phases, and Hadamards. Unsupported gates and
+noise raise errors. Leading and trailing Hadamard layers use efficient native
+paths; interior Hadamards require branching, and level-4 phases can also have
+exponential cost. Native Pauli queries avoid statevector materialization in the
+single-branch case. See `?phasepoly` for phase-angle grids and cost guards.

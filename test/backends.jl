@@ -49,6 +49,16 @@
     mitigated = measure(compile([Op("I",1)],options),1)
     @test length(mitigated.sample) == 2
     @test sum(mitigated.sample) ≈ 1
+    @test minimum(mitigated.sample) < 0
+    @test abs(only(mitigated.expect)) ≈ 1.25
+    # A finite-shot histogram need not lie in the image of physical input
+    # probabilities. Inversion must retain signed weights to undo the response.
+    _, signed = BlueTangle._mitigate_probabilities([0],[1.0],1,options.readout_noise)
+    response = [0.9 0.1; 0.1 0.9]
+    @test signed ≈ [1.125,-0.125]
+    @test response * signed ≈ [1.0,0.0] atol=1e-14
+    _, signed_pair = BlueTangle._mitigate_probabilities([0],[1.0],2,options.readout_noise)
+    @test kron(response,response) * signed_pair ≈ [1.0,0.0,0.0,0.0] atol=1e-14
     bits, corrected = BlueTangle._mitigate_probabilities([0,1,2,3],[0.81,0.09,0.09,0.01],2,options.readout_noise)
     @test bits == 0:3
     @test corrected ≈ [1,0,0,0] atol=1e-14

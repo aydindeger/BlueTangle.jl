@@ -36,7 +36,8 @@ function _plotq_pyplot(measurements::Vector{Measurement}, labels::Vector{String}
         offset = (i - (length(measurements) + 1) / 2) * width
         bars = ax.bar(positions .+ offset, probabilities, width=width,
                       color=_plot_colors[mod1(i, length(_plot_colors))], label=label, zorder=3)
-        if length(tick_labels) <= 16 && length(measurements) <= 3
+        if (length(measurements) == 1 && length(tick_labels) <= 16) ||
+           (length(measurements) == 2 && length(tick_labels) <= 4)
             for (bar, probability) in zip(bars, probabilities)
                 abs(probability) < 1e-12 && continue
                 ax.annotate("$(round(100probability; digits=1))%",
@@ -52,10 +53,11 @@ function _plotq_pyplot(measurements::Vector{Measurement}, labels::Vector{String}
     ax.set_xticklabels(tick_labels, rotation=(length(tick_labels) > 12 || N > 6) ? 45 : 0,
                        ha=(length(tick_labels) > 12 || N > 6) ? "right" : "center")
     ax.yaxis.set_major_formatter(PyPlot.matplotlib.ticker.PercentFormatter(xmax=1))
-    ax.set_ylabel("Probability", fontsize=10, labelpad=10)
+    signed = any(<(0), values)
+    ax.set_ylabel(signed ? "Quasiprobability" : "Probability", fontsize=10, labelpad=10)
     basis = measurements[1].measurement_basis == "0" ? "Z" : measurements[1].measurement_basis
     ax.set_xlabel(rep == :int ? "Outcome ($basis basis)" : "Outcome ($basis basis; q1 at left)", fontsize=10, labelpad=11)
-    ax.set_title("Measurement probabilities", loc="left", fontsize=12, fontweight="medium", pad=length(measurements) > 1 ? 36 : 15)
+    ax.set_title(signed ? "Measurement estimates" : "Measurement probabilities", loc="left", fontsize=12, fontweight="medium", pad=length(measurements) > 1 ? 36 : 15)
     if length(measurements) > 1
         ax.legend(frameon=false, ncol=min(length(measurements), 3), loc="lower left",
                   bbox_to_anchor=(0, 1.01), borderaxespad=0, fontsize=9)
@@ -86,6 +88,10 @@ function _gate_box(ax, x, ys, width, label; face="#eef3fa", edge="#3267a8")
         end
     end
 end
+
+_circuit_gate_width(op) = op isa ifOp ?
+    max(1.6, 0.085maximum(length, split(BlueTangle._circuit_gate_label(op), ';'))) :
+    max(0.65, 0.085length(BlueTangle._circuit_gate_label(op)) + 0.22)
 
 function _draw_circuit_gate(ax, op, x, width, N, yoffset, reverse_bits)
     y(q) = (reverse_bits ? q-1 : N-q) + yoffset
@@ -164,9 +170,10 @@ function _plotq_pyplot(input::AbstractVector;
         show && display(fig)
         return fig
     end
-    widths = [maximum(op isa ifOp ? max(1.6, 0.085maximum(length, split(BlueTangle._circuit_gate_label(op), ';'))) :
-                      max(0.65, 0.085length(BlueTangle._circuit_gate_label(op)) + 0.22) for op in column) for column in columns]
-    step = fold == 0 ? length(columns) : fold
+    widths = [maximum(_circuit_gate_width, column) for column in columns]
+    # Balance folded rows instead of leaving a nearly empty final row.
+    row_count = fold == 0 ? 1 : cld(length(columns), fold)
+    step = cld(length(columns), row_count)
     ranges = [first:min(first+step-1, length(columns)) for first in 1:step:length(columns)]
     row_widths = [sum(widths[range]) + 0.36length(range) for range in ranges]
     row_height = max(N, 1) + 0.85
@@ -186,7 +193,7 @@ function _plotq_pyplot(input::AbstractVector;
             width = widths[index]
             center = x + width/2 + 0.12
             for op in columns[index]
-                _draw_circuit_gate(ax, op, center, width, N, offset, reverse_bits)
+                _draw_circuit_gate(ax, op, center, _circuit_gate_width(op), N, offset, reverse_bits)
             end
             x += width + 0.36
         end

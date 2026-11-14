@@ -24,29 +24,29 @@ Generates a quantum noise model based on the specified type and parameters.
 # Arguments
 - `model`: Name of the noise model. Available models:
   - `amplitude_damping`: Simulates the loss of energy from a quantum system. The parameter `γ` (given by `p`) represents the probability of the qubit losing its excitation.
-  - `phase_damping`: Represents the loss of quantum information without loss of energy. The parameter `γ` quantifies the likelihood of a phase shift occurring.
+  - `phase_damping`: Leaves populations unchanged and multiplies coherences by `sqrt(1-p)`.
   - `phase_flip`: Introduces a phase error (Z error). The qubit's phase is flipped with probability `p`.
   - `bit_flip`: Causes a flip in the qubit's state (X error) with probability `p`.
   - `bit_phase_flip`: Combines bit flip and phase flip errors, effectively applying a Y error with probability `p`.
   - `depolarizing`: A general error model where any of the Pauli operations (X, Y, Z) can be applied with equal probability. The parameter `p` represents the overall error probability.
-  - `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Represent coherent errors (incorrect rotations) around the X, Y, Z, and phase axes, respectively. The parameter `p` specifies the rotation error magnitude. Note that `p` is multiplied by π.
+  - `rot_X`, `rot_Y`, `rot_Z`, `rot_P`: Coherent rotation or phase errors, with angle `p` in radians.
   - `rot_xyz`: Rotation error in X,Y,Z with equal probability.
 - `p`: Parameter for the noise model, representing probabilities or magnitudes of errors.
-- `two_qubit`: Boolean flag to indicate if the noise model is for two qubits. When set to `true`, the model is extended to two-qubit operations.
+- `two_qubit`: When `true`, returns tensor products of the one-qubit Kraus operators, applying the same channel independently to each operand. The parameter `p` retains its per-operand meaning.
 
 # Returns
 An array of operations representing the noise model.
 
 # Examples
-To create a single-qubit phase damping noise model with a damping parameter of 0.05:
+To create a single-qubit phase damping noise model with damping parameter 0.01:
 ```julia
 noise = Noise1("phase_damping", 0.01)
 ```
 
-For a two-qubit depolarizing error model with an error probability of 0.1:
+For independent depolarizing errors of probability 0.1 on each of two operands:
 
 ```julia
-noise = Noise2("phase_damping", 0.1)
+noise = Noise2("depolarizing", 0.1)
 ```
 """
 function noise_model(model::String, p::Union{Float64,ComplexF64}; two_qubit=false)

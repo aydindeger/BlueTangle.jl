@@ -817,8 +817,10 @@ end
 
 Configure circuit execution and final measurement. `noise` accepts a `NoiseModel`;
 `readout_noise` accepts a single-qubit channel applied before final readout.
-`measurement_mitigate` corrects the sampled probabilities using that channel's
-classical readout response. `density_matrix` requests storage of the final
+`measurement_mitigate` inverts that channel's classical readout response, retaining
+signed estimates at finite shot counts. These weights sum to one but need not be
+probabilities; observable estimates can exceed their physical range due to
+sampling error. `density_matrix` requests storage of the final
 density matrix in measurement results; select the simulation backend separately
 with `measure(circuit, shots; backend=:density_matrix)`.
 
@@ -888,7 +890,7 @@ hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ
 Represents the result of quantum measurements.
 
 - `bitstr`: Basis of measurement represented as integers or a range.
-- `sample`: Vector of probabilities.
+- `sample`: Outcome probabilities, or signed weights after readout-response inversion.
 - `expect`: Expectation values of the measurement.
 - `mag_moments`: Magnetic moments obtained from the measurement.
 - `measurement_basis`: Measurement basis used.
@@ -901,7 +903,7 @@ Constructs a Measurement object to store the results of quantum measurements.
 """
 struct Measurement
     bitstr::Union{Vector, UnitRange}
-    sample::Vector #probability
+    sample::Vector # probabilities or readout-corrected signed estimates
     expect::Vector
     mag_moments::Vector
     measurement_basis::String

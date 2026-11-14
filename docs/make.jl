@@ -1,9 +1,8 @@
-push!(LOAD_PATH,"../src/")
-import Pkg; Pkg.add("Documenter")
 using Documenter
 using BlueTangle
 
 makedocs(
+    root = @__DIR__,
     sitename = "BlueTangle.jl",
     authors="Aydin Deger",
     format = Documenter.HTML(
@@ -12,6 +11,8 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Examples" => "examples.md",
+        "Quantum error correction" => "qec.md",
+        "OpenQASM" => "qasm.md",
         "Advanced Examples" => "advanced.md",
         "Functions" => "functions.md"
     ]
