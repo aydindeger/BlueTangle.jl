@@ -371,18 +371,18 @@ Noise2(model::String,p::Float64)=QuantumChannel(2,model,p)
 ##
 
 """
-`Op(q::Int, name::String, mat::AbstractMatrix, qubit::Int, target_qubit::Int, noise::QuantumChannel) <: QuantumOps`
+    Op(name, qubit[, target_qubit]; noisy=true, control=-2)
+    Op(name, matrix_or_function, qubit[, target_qubit]; noisy=true, control=-2)
 
-Represents a quantum operation.
+Construct a built-in gate, custom matrix gate, or parameterized gate function.
+Qubits are numbered from 1; qubit 1 is the most significant bit. `noisy` controls
+whether the circuit's noise model is applied after this gate, and `control`
+optionally adds a control qubit.
 
-- `q`: Number of qubits involved in the operation.
-- `name`: Name of the operation.
-- `mat`: Matrix representation of the quantum operation.
-- `qubit`: index of the target qubit.
-- `target_qubit`: index of the target qubit for two-qubit operations.
-- `noise`: Noise model associated with the operation.
-
-Constructs an Op object representing a quantum operation with optional noise.
+The common `Op` entry point also accepts a channel (`Op(channel, qubit)`), a
+measurement with conditional branches (`Op("MZ", qubit; if0="I", if1="X")`),
+or a named whole-register block (`Op(name, operations_or_matrix_or_callback)`).
+These constructors return `OpQC`, `ifOp`, or `OpF` as appropriate.
 """
 struct Op <: QuantumOps
     q::Int
@@ -643,25 +643,18 @@ function __ifOp_apply(rho::AbstractMatrixS, name::String, qubit::Int,
 end
 
 """
-`ifOp(q::Int, name::String, mat::AbstractMatrix, qubit::Int, if01::Tuple{Matrix,Matrix}, noise::QuantumChannel) <: QuantumOps`
+    ifOp(name, qubit, if0, if1)
 
-Represents a conditional quantum operation used for mid-circuit born measurements. It is specifically designed for mid-circuit measurements in the X, Y, Z, or a random basis (R). Depending on the measurement outcomes (0 or 1), different gates specified in `if01` can be applied.
+Measure a qubit in the X, Y, Z, or uniformly random Pauli basis (`"MX"`, `"MY"`,
+`"MZ"`, or `"MR"`), then apply the branch for outcome 0 or 1. Each branch is an
+`Op` or a vector of `Op`s. Two gate-name strings instead act on the measured qubit.
 
-# Fields
-- `q`: Integer representing the number of qubits involved in the operation.
-- `name`: String indicating the name of the operation. Valid names are "MX", "MY", "MZ", or "MR", corresponding to operations in the X, Y, Z basis, or a random basis (R), respectively.
-- `mat`: Matrix representing the quantum operation.
-- `qubit`: Integer specifying the index of the target qubit.
-- `if01`: Tuple of two matrices. The first matrix is applied if the measured state of the qubit is 0, and the second matrix is applied if the measured state is 1.
-- `noise`: Represents a 'born measurement quantum channel', indicating the noise model associated with the operation.
+For example, `ifOp("MZ", 1, Op("I", 1), Op("X", 2))` flips qubit 2 only when
+qubit 1 is measured as 1. Equivalently, use the common constructor
+`Op("MZ", 1; if0=Op("I", 1), if1=Op("X", 2))`.
 
-# Usage
-`ifOp` is constructed to represent quantum operations that are conditional on the measurement outcome of a qubit. This operator is particularly useful in quantum circuits for implementing dynamic responses based on mid-circuit measurement results.
-
-# Examples
-
-# Example of creating an ifOp for a conditional operation based on the X-basis measurement (MX)
-conditional_op = ifOp("MX", qubit, (operation_if_0, operation_if_1))
+Vector and MPS evolution sample the measurement. Density-matrix evolution sums
+both branches unless `track_measurements=true` requests a conditional state.
 """
 struct ifOp <: QuantumOps
     q::Int
@@ -818,19 +811,19 @@ end
 ##========== Circuit ==========
 
 """
-`Options(circuit_name::String, measurement_basis::String, final_measurement_noise::QuantumChannel, Noise1::QuantumChannel, Noise2::QuantumChannel, twirl::Bool, noisy_swap::Bool, density_matrix::Bool)`
+    Options(; circuit_name="circuit", measurement_basis="Z", noise=false,
+              twirl=false, readout_noise=false, measurement_mitigate=false,
+              density_matrix=false)
 
-Represents configuration options for a quantum circuit.
+Configure circuit execution and final measurement. `noise` accepts a `NoiseModel`;
+`readout_noise` accepts a single-qubit channel applied before final readout.
+`measurement_mitigate` corrects the sampled probabilities using that channel's
+classical readout response. `density_matrix` requests storage of the final
+density matrix in measurement results; select the simulation backend separately
+with `measure(circuit, shots; backend=:density_matrix)`.
 
-- `circuit_name`: Name of the circuit.
-- `measurement_basis`: Measurement basis used in the circuit.
-- `final_measurement_noise`: Noise model for final measurement error.
-- `noise`: Noise model for single-qubit and two-qubit operations.
-- `twirl`: Boolean flag for twirling operations.
-- `noisy_swap`: Boolean flag for swap errors.
-- `density_matrix`: Boolean flag to indicate if density matrix should be calculated.
-
-Constructs an Options object with specified settings for a quantum circuit.
+`twirl=true` enables Pauli twirling of supported two-qubit gates. Routing swap
+noise is configured separately through `Layout(...; noisy_swap=true)`.
 """
 mutable struct Options
     circuit_name::String
@@ -860,7 +853,9 @@ Represents a quantum circuit.
 
 - `stats`: NamedTuple containing statistics about the circuit.
 - `options`: Options object with circuit configurations.
-- `ops`: Vector of QuantumOps representing the operations in the circuit.
+- `layers`: Scheduled vectors of quantum operations.
+- `layout`: Qubit connectivity used when routing operations.
+- `stats_init`: Circuit statistics before routing and optimization.
 
 Constructs a Circuit object representing a quantum circuit.
 """

@@ -1,347 +1,223 @@
+# Loaded by the PyPlot package extension. The core text renderer supplies the
+# circuit layout, so drawing never evaluates gates or changes the random stream.
 using PyPlot
-import BlueTangle: plotq, savefigure
+import BlueTangle: _plotq_pyplot, savefigure
 
-const AbstractVectorS = Union{AbstractVector,sa.SparseVector}
-const AbstractMatrixS = Union{AbstractMatrix,sa.SparseMatrixCSC}
+const _plot_colors = ["#3267a8", "#d18032", "#448b78", "#9b669b", "#b85e60", "#768947"]
 
 """
-`plot(sample_probs::Vector; rep::Symbol=:int, basis::String="Z")`
+    plotq(measurements, labels=[""]; backend=:pyplot, rep=:bits, max_outcomes=32, show=true)
 
-Plots the outcome probabilities for quantum measurements.
-
-- `sample_probs`: Vector of tuples, each containing outcome probabilities and number of qubits.
-
-Creates a bar plot showing the probabilities of the most likely outcomes in the specified measurement basis.
+Draw grouped measurement probabilities. Binary labels put q1 on the left;
+`rep=:int` uses integer outcomes. When there are more than `max_outcomes`, retain
+the most probable outcomes and combine the remainder in an explicit Other bar.
+Signed estimates from measurement mitigation remain visible below zero.
 """
-function plotq(mVector::Vector{Measurement}, labels::Vector{String}=[""])
-
-    if length(mVector) > 5
-        throw("You can only plot five measurements.")
+function _plotq_pyplot(measurements::Vector{Measurement}, labels::Vector{String}=[""];
+               rep::Symbol=:bits, max_outcomes::Int=32, show::Bool=true)
+    tick_labels, values, series_labels, N = BlueTangle._measurement_plot_data(measurements, labels; rep=rep, max_outcomes=max_outcomes)
+    positions = collect(0:length(tick_labels)-1)
+    fig, ax = subplots(figsize=(clamp(0.55length(tick_labels) + 1.8, 5.4, 16), 3.8), dpi=120)
+    fig.set_facecolor("white")
+    ax.set_axisbelow(true)
+    ax.grid(axis="y", color="#e5e9ef", linewidth=0.8)
+    for side in ("top", "right", "left")
+        ax.spines[side].set_visible(false)
     end
-
-    base_fig_width, base_fig_height = (7, 5)
-    x_range = maximum([length(m.bitstr) for m = mVector])
-    scale_factor = 0.5
-    fig_width = base_fig_width + (x_range * scale_factor)
-    fig_width = max(min(fig_width, 16), 5)
-
-    fig, ax = subplots(figsize=(fig_width, base_fig_height), dpi=100)
-
-    colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown"]
-
-    for (i, r) = enumerate(mVector)
-
-        x_outcome = r.bitstr
-        y_sample = r.sample
-
-        wid = 0.8 / i
-
-        lab = labels == [""] ? "($(i-1)) $(r.circuit_name)" : labels[i]
-        bars = ax.bar(x_outcome, y_sample, wid, alpha=0.7, color=colors[i], label=lab)
-
-        # Add the probabilities on top of each bar
-        for bar in bars
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2., height + 0.005, string(round(height, digits=3)),
-                ha="center", va="bottom", color=colors[i])
-        end
-
-        # ax.set_xticks(0:x_range)
-    end
-
-    # if rep==:bstr
-    # ax.set_xlabel("Binary outcomes = left to right (first to last qubit)")
-    # else
-    ax.set_xlabel("Outcomes")
-    # end
-
-    ax.set_xticks(sort(unique(vcat([m.bitstr for m in mVector]...))))
-    ax.set_ylim(0, 1.15 * maximum(maximum(m.sample) for m in mVector))
-    ax.set_ylabel("Probabilities")
-    ax.set_title("Outcome Probabilities")
-    ax.grid(true)
-    ax.legend()
-    display(fig)
-    return fig
-
-end
-
-
-
-"""
-`plot(m::Measurement; rep::Symbol=:int)`
-
-Plots the outcome probabilities for a single quantum measurement.
-
-- `m`: A Measurement object.
-
-Creates a bar plot showing the probabilities of the most likely outcomes from the measurement.
-"""
-plotq(m::Measurement) = plotq([m])
-
-plotq(state::AbstractVectorS) = plotq([measure(state)])
-plotq(states::Vector{<:sa.SparseVector}) = plotq(measure.([states...]))
-
-## circuit drawing
-
-"""
-`_draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)`
-
-Internal function to draw a quantum gate on a circuit diagram.
-
-- `ax`: The plot axis.
-- `op`: The QuantumOps object representing the quantum operation.
-- `pos`: Position on the circuit diagram.
-- `gate_width`: Width of the gate drawing.
-
-Draws the specified quantum gate on the given plot axis.
-"""
-function _draw_gate(ax, op::QuantumOps, pos, gate_width, qubit_lines)
-
-    if isa(op, OpQC)
-        c = "tab:red"
-        c_t = "tab:red"
-    else
-        c = "black"
-        c_t = "black"
-    end
-
-    if isa(op, OpF)
-        # Draw a full vertical line for OpF operations
-        ax.plot([pos, pos], [-0.2, qubit_lines - 0.8], "black", linewidth=2, markersize=gate_width)
-        ax.text(pos, qubit_lines - 0.6, op.name, color="black", ha="center", va="center")
-        return
-    end
-
-    qubit = op.qubit
-    target_qubit = BlueTangle._target_find(op)
-    control = BlueTangle._control_find(op)
-
-    if target_qubit > 0
-        marker2 = isa(op, OpQC) ? "o" : (BlueTangle._check_swap_invariant(op.mat) ? "o" : "x")
-    end
-
-    if control != -2
-        # Draw a line for the control-target connection
-        ax.plot([pos, pos], [qubit - 1, control - 1], c, markersize=gate_width)
-        ax.plot(pos, control - 1, "o", color=c, markersize=gate_width)
-
-        # Draw the control dot
-        if op.q == 1
-            ax.plot(pos, qubit - 1, "x", color=c, markersize=gate_width)
-            if control > qubit
-                ax.text(pos, qubit - 1.4, "c-" * op.name, color=c_t, ha="center")
-            else
-                ax.text(pos, qubit - 0.7, "c-" * op.name, color=c_t, ha="center")
-            end
-        elseif op.q == 2
-            ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
-            ax.plot(pos, target_qubit - 1, "x", color=c, markersize=gate_width)
-            ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width)
-            ax.text(pos, target_qubit - 0.8, "c-" * op.name, color=c_t, ha="center")
-        end
-
-        # Single qubit gate
-    elseif op.q == 1
-        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
-        ax.text(pos, qubit - 0.7, op.name, color=c_t, ha="center", va="center")
-
-    elseif op.q == 2
-        ax.plot([pos, pos], [qubit - 1, target_qubit - 1], c, markersize=gate_width)
-        ax.plot(pos, qubit - 1, "o", color=c, markersize=gate_width)
-        ax.plot(pos, target_qubit - 1, marker2, color=c, markersize=gate_width)
-        if target_qubit < qubit
-            ax.text(pos, target_qubit - 1.4, op.name, color=c_t, ha="center")
-        else
-            ax.text(pos, target_qubit - 0.7, op.name, color=c_t, ha="center")
-        end
-    end
-end
-
-
-
-"""
-    plotq(ops::Vector{QuantumOps}; labels::Vector{String} = [""], fold::Int = 25, reverse_bits::Bool = false)
-
-Plots a quantum circuit diagram from a vector of quantum operations.
-
-# Arguments
-- `layers`: Vector of quantum operations or layers of operations
-- `labels`: Custom labels for qubits (default: "Qubit (i)")
-- `fold`: Number of layers/ops per row before folding to a new row (default: 25, set to 0 to disable folding)
-- `reverse_bits`: If true, reverse qubit ordering so last qubit is at top (default: false)
-
-Creates a visual representation of the quantum circuit based on the specified operations and initial qubit states.
-When the circuit is longer than `fold` layers, it wraps to multiple rows like Qiskit's matplotlib drawer.
-"""
-function plotq(layers::Union{Vector{<:QuantumOps},Vector{<:AbstractVector{<:QuantumOps}}}; labels::Vector{String}=[""], fold::Int=25, reverse_bits::Bool=false)
-
-    ops = QuantumOps[op for group in layers for op in (group isa QuantumOps ? (group,) : group)]
-
-    qubit_lines = get_N(ops)
-
-    num_ops = length(ops)
-    num_layers = length(layers)
-
-    num = isa(layers, Vector{<:QuantumOps}) ? num_ops : num_layers
-
-    # Calculate folding parameters
-    if fold > 0 && num > fold
-        num_folds = ceil(Int, num / fold)
-        ops_per_fold = fold
-    else
-        num_folds = 1
-        ops_per_fold = num
-        fold = num  # No folding needed
-    end
-
-    # Drawing constants
-    gate_width = 8
-
-    # Calculate figure size with folding
-    # Each fold gets its own row of qubit lines - need extra spacing to avoid overlap
-    xsize = min(ops_per_fold * 0.6 + 2, 20)  # Width based on ops per fold, max 20
-    row_height = qubit_lines * 1.0 + 1.5  # Height per fold row with extra padding
-    ysize = num_folds * row_height + 1.0  # Total height
-
-    fig, ax = subplots(figsize=(xsize, ysize), dpi=100)
-    ax.axis("off")  # Turn off the axis
-
-    # Draw each fold (row)
-    for fold_idx in 1:num_folds
-        # Calculate y offset for this fold (rows go from top to bottom)
-        y_offset = -(fold_idx - 1) * row_height
-
-        # Calculate the range of operations for this fold
-        start_idx = (fold_idx - 1) * fold + 1
-        end_idx = min(fold_idx * fold, num)
-        ops_in_fold = end_idx - start_idx + 1
-
-        # Draw horizontal lines for qubits in this fold
-        for i in 1:qubit_lines
-            # Reverse qubit display order if requested
-            display_q = reverse_bits ? (qubit_lines - i + 1) : i
-            y_pos = (i - 1) + y_offset
-            ax.hlines(y_pos, -0.5, ops_in_fold - 0.5, colors="black", linewidth=1)
-
-            # Only show labels on first fold, or on all folds if circuit is long
-            label_text = labels == [""] ? "q$display_q" : "$(labels[display_q])"
-            ax.text(-0.7, y_pos, label_text, ha="right", va="center", fontsize=9)
-        end
-
-        # Add fold indicator on the right if not the last fold
-        if fold_idx < num_folds
-            x_end = ops_in_fold - 0.3
-            for i in 1:qubit_lines
-                y_pos = (i - 1) + y_offset
-                ax.plot(x_end + 0.1, y_pos, ">", color="gray", markersize=6)
-            end
-            ax.text(x_end + 0.3, y_offset + qubit_lines / 2 - 0.5, "↓", fontsize=12, color="gray", ha="center", va="center")
-        end
-
-        # Draw gates for this fold
-        if isa(layers, Vector{<:QuantumOps})
-            for global_pos in start_idx:end_idx
-                local_pos = global_pos - start_idx  # Position within this fold
-                op = ops[global_pos]
-                _draw_gate_folded(ax, op, local_pos, gate_width, qubit_lines, y_offset, reverse_bits)
-            end
-        else
-            for global_layer_idx in start_idx:end_idx
-                local_pos = global_layer_idx - start_idx  # Position within this fold
-                layer = layers[global_layer_idx]
-                for op in layer
-                    _draw_gate_folded(ax, op, local_pos, gate_width, qubit_lines, y_offset, reverse_bits)
-                end
+    ax.spines["bottom"].set_color("#b9c3ce")
+    ax.tick_params(axis="both", length=0, labelsize=9, pad=7)
+    width = 0.78 / length(measurements)
+    lower, upper = 0.0, 0.0
+    for (i, measurement) in enumerate(measurements)
+        probabilities = values[:, i]
+        lower = min(lower, minimum(probabilities; init=0.0))
+        upper = max(upper, maximum(probabilities; init=0.0))
+        label = series_labels[i]
+        offset = (i - (length(measurements) + 1) / 2) * width
+        bars = ax.bar(positions .+ offset, probabilities, width=width,
+                      color=_plot_colors[mod1(i, length(_plot_colors))], label=label, zorder=3)
+        if length(tick_labels) <= 16 && length(measurements) <= 3
+            for (bar, probability) in zip(bars, probabilities)
+                abs(probability) < 1e-12 && continue
+                ax.annotate("$(round(100probability; digits=1))%",
+                            (bar.get_x() + bar.get_width()/2, probability),
+                            xytext=(0, probability >= 0 ? 4 : -4), textcoords="offset points",
+                            ha="center", va=probability >= 0 ? "bottom" : "top", fontsize=8, color="#384657")
             end
         end
     end
-
-    # Set overall plot limits
-    ax.set_xlim(-1.5, ops_per_fold + 0.5)
-    ax.set_ylim(-(num_folds - 1) * row_height - 0.5, qubit_lines - 0.5)
-
-    tight_layout()
-    display(fig)
+    span = max(upper - lower, 0.1)
+    ax.set_ylim(lower < 0 ? lower - 0.16span : 0, upper + 0.18span)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(tick_labels, rotation=(length(tick_labels) > 12 || N > 6) ? 45 : 0,
+                       ha=(length(tick_labels) > 12 || N > 6) ? "right" : "center")
+    ax.yaxis.set_major_formatter(PyPlot.matplotlib.ticker.PercentFormatter(xmax=1))
+    ax.set_ylabel("Probability", fontsize=10, labelpad=10)
+    basis = measurements[1].measurement_basis == "0" ? "Z" : measurements[1].measurement_basis
+    ax.set_xlabel(rep == :int ? "Outcome ($basis basis)" : "Outcome ($basis basis; q1 at left)", fontsize=10, labelpad=11)
+    ax.set_title("Measurement probabilities", loc="left", fontsize=12, fontweight="medium", pad=length(measurements) > 1 ? 36 : 15)
+    if length(measurements) > 1
+        ax.legend(frameon=false, ncol=min(length(measurements), 3), loc="lower left",
+                  bbox_to_anchor=(0, 1.01), borderaxespad=0, fontsize=9)
+    end
+    fig.tight_layout(pad=1.2)
+    show && display(fig)
     return fig
 end
 
-"""
-Internal function to draw a gate with y_offset for folded circuits.
-"""
-function _draw_gate_folded(ax, op::QuantumOps, pos, gate_width, qubit_lines, y_offset, reverse_bits::Bool=false)
+_plotq_pyplot(measurement::Measurement; kwargs...) = _plotq_pyplot([measurement]; kwargs...)
+_plotq_pyplot(state::Union{AbstractVector{<:Number},AbstractMatrix}; kwargs...) = _plotq_pyplot(measure(state); kwargs...)
+_plotq_pyplot(states::Vector{<:AbstractVector{<:Number}}; kwargs...) = _plotq_pyplot(measure.(states); kwargs...)
 
-    # Helper to map qubit index for display
-    map_q(q) = reverse_bits ? (qubit_lines - q + 1) : q
-
-    if isa(op, OpQC)
-        c = "tab:red"
-        c_t = "tab:red"
-    else
-        c = "black"
-        c_t = "black"
-    end
-
-    if isa(op, OpF)
-        # Draw a full vertical line for OpF operations
-        ax.plot([pos, pos], [y_offset - 0.2, y_offset + qubit_lines - 0.8], "black", linewidth=2, markersize=gate_width)
-        ax.text(pos, y_offset + qubit_lines - 0.6, op.name, color="black", ha="center", va="center", fontsize=8)
-        return
-    end
-
-    qubit = map_q(op.qubit)
-    target_qubit_raw = BlueTangle._target_find(op)
-    control_raw = BlueTangle._control_find(op)
-    target_qubit = target_qubit_raw > 0 ? map_q(target_qubit_raw) : target_qubit_raw
-    control = control_raw > 0 ? map_q(control_raw) : control_raw
-
-    if target_qubit_raw > 0
-        marker2 = isa(op, OpQC) ? "o" : (BlueTangle._check_swap_invariant(op.mat) ? "o" : "x")
-    end
-
-    if control != -2
-        # Draw a line for the control-target connection
-        ax.plot([pos, pos], [qubit - 1 + y_offset, control - 1 + y_offset], c, markersize=gate_width)
-        ax.plot(pos, control - 1 + y_offset, "o", color=c, markersize=gate_width)
-
-        # Draw the control dot
-        if op.q == 1
-            ax.plot(pos, qubit - 1 + y_offset, "x", color=c, markersize=gate_width)
-            label_y = control > qubit ? qubit - 1.3 + y_offset : qubit - 0.6 + y_offset
-            ax.text(pos, label_y, "c" * op.name, color=c_t, ha="center", fontsize=7)
-        elseif op.q == 2
-            ax.plot(pos, qubit - 1 + y_offset, "o", color=c, markersize=gate_width)
-            ax.plot(pos, target_qubit - 1 + y_offset, "x", color=c, markersize=gate_width)
-            ax.plot([pos, pos], [qubit - 1 + y_offset, target_qubit - 1 + y_offset], c, markersize=gate_width)
-            ax.text(pos, target_qubit - 0.7 + y_offset, "c" * op.name, color=c_t, ha="center", fontsize=7)
+function _gate_box(ax, x, ys, width, label; face="#eef3fa", edge="#3267a8")
+    bottom, top = extrema(ys)
+    padding = occursin('\n', label) ? 0.40 : 0.28
+    rectangle = PyPlot.matplotlib.patches.FancyBboxPatch(
+        (x-width/2, bottom-padding), width, top-bottom+2padding,
+        boxstyle="round,pad=0.025,rounding_size=0.06", facecolor=face,
+        edgecolor=edge, linewidth=1.15, zorder=3)
+    ax.add_patch(rectangle)
+    ax.text(x, (bottom+top)/2, label, ha="center", va="center", fontsize=9,
+            color="#243347", zorder=4, parse_math=false)
+    if length(ys) > 1
+        for (port, y) in enumerate(ys)
+            ax.text(x-width/2+0.07, y, string(port), ha="left", va="center",
+                    fontsize=7, color=edge, zorder=4)
         end
-
-        # Single qubit gate
-    elseif op.q == 1
-        ax.plot(pos, qubit - 1 + y_offset, "o", color=c, markersize=gate_width)
-        ax.text(pos, qubit - 0.6 + y_offset, op.name, color=c_t, ha="center", va="center", fontsize=8)
-
-    elseif op.q == 2
-        ax.plot([pos, pos], [qubit - 1 + y_offset, target_qubit - 1 + y_offset], c, markersize=gate_width)
-        ax.plot(pos, qubit - 1 + y_offset, "o", color=c, markersize=gate_width)
-        ax.plot(pos, target_qubit - 1 + y_offset, marker2, color=c, markersize=gate_width)
-        label_y = target_qubit < qubit ? target_qubit - 1.3 + y_offset : target_qubit - 0.6 + y_offset
-        ax.text(pos, label_y, op.name, color=c_t, ha="center", fontsize=8)
     end
 end
 
+function _draw_circuit_gate(ax, op, x, width, N, yoffset, reverse_bits)
+    y(q) = (reverse_bits ? q-1 : N-q) + yoffset
+    ink = "#33465a"
+    function connect(qubits; xpos=x)
+        ys = y.(qubits)
+        ax.plot([xpos, xpos], [minimum(ys), maximum(ys)], color=ink, linewidth=1.15, zorder=2)
+    end
+    dot(q; xpos=x) = ax.plot(xpos, y(q), "o", color=ink, markersize=5, zorder=5)
+    function target(q)
+        # Marker sizes use points, keeping ⊕ circular at any figure aspect ratio.
+        ax.plot(x, y(q), marker="o", markersize=13, markerfacecolor="white",
+                markeredgecolor=ink, markeredgewidth=1.3, linestyle="none", zorder=3)
+        ax.plot(x, y(q), marker="+", markersize=11, color=ink,
+                markeredgewidth=1.1, linestyle="none", zorder=4)
+    end
+    symbol = BlueTangle._circuit_symbol(op)
+    if symbol in (:cx, :cz, :swap)
+        qubits = [op.qubit, op.target_qubit]
+        op.control > 0 && push!(qubits, op.control)
+        connect(qubits)
+        if symbol == :swap
+            for q in (op.qubit, op.target_qubit)
+                ax.plot(x, y(q), "x", color=ink, markersize=8, markeredgewidth=1.5, zorder=4)
+            end
+        else
+            dot(op.qubit)
+            symbol == :cx ? target(op.target_qubit) : dot(op.target_qubit)
+        end
+        op.control > 0 && dot(op.control)
+        return
+    end
+    if op isa Op && op.q == 1 && op.control > 0 && uppercase(op.name) == "X" && op.mat == gate.X
+        connect([op.qubit, op.control]); dot(op.control); target(op.qubit)
+        return
+    end
 
-plotq(circuit::Circuit; kwargs...) = plotq(circuit.layers; kwargs...)
-
-plotq(ansatz::AnsatzOptions; kwargs...) = plotq(ansatz.ops; kwargs...)
-
+    qubits = if op isa Op
+        op.q == 1 ? [op.qubit] : [op.qubit, op.target_qubit]
+    else
+        collect(BlueTangle._operated_qubits(op))
+    end
+    isempty(qubits) && (qubits = collect(1:N))
+    label = BlueTangle._circuit_gate_label(op)
+    if op isa ifOp
+        label = "$(op.name) on q$(op.qubit)\n0: $(BlueTangle._circuit_branch_label(op.if01[1]))\n1: $(BlueTangle._circuit_branch_label(op.if01[2]))"
+    end
+    face, edge = op isa OpQC ? ("#fcf0e2", "#b77b37") :
+                 op isa ifOp ? ("#e9f4ef", "#438b74") :
+                 op isa OpF ? ("#f1edf7", "#8a6ca6") : ("#eef3fa", "#3267a8")
+    _gate_box(ax, x, y.(qubits), width, label; face=face, edge=edge)
+    if op isa Op && op.control > 0
+        connector = length(qubits) == 1 ? x : x-width/2-0.14
+        connect([qubits; op.control]; xpos=connector)
+        dot(op.control; xpos=connector)
+    end
+end
 
 """
-`savefigure(name::String)`
-saves figure
+    plotq(ops_or_layers; backend=:pyplot, labels=[""], fold=25, reverse_bits=false, nqubits=nothing, show=true)
+
+Draw a circuit using gate boxes and conventional controlled-X, controlled-Z and
+SWAP symbols. Qubit 1 is at the top. `fold` counts visual columns; zero disables
+folding. Returns the figure for further customization or explicit saving.
 """
-savefigure(name::String) = savefig(name)
+function _plotq_pyplot(input::AbstractVector;
+               labels::Vector{String}=[""], fold::Int=25, reverse_bits::Bool=false,
+               nqubits::Union{Nothing,Int}=nothing, show::Bool=true)
+    fold >= 0 || throw(ArgumentError("fold must be nonnegative"))
+    columns, N = BlueTangle._circuit_plot_data(input; nqubits=nqubits)
+    names = BlueTangle._circuit_qubit_labels(labels, N)
+    if isempty(columns)
+        fig, ax = subplots(figsize=(4, 1.3), dpi=120)
+        ax.axis("off")
+        ax.text(0.5, 0.5, "Empty circuit", ha="center", va="center", color="#657487")
+        show && display(fig)
+        return fig
+    end
+    widths = [maximum(op isa ifOp ? max(1.6, 0.085maximum(length, split(BlueTangle._circuit_gate_label(op), ';'))) :
+                      max(0.65, 0.085length(BlueTangle._circuit_gate_label(op)) + 0.22) for op in column) for column in columns]
+    step = fold == 0 ? length(columns) : fold
+    ranges = [first:min(first+step-1, length(columns)) for first in 1:step:length(columns)]
+    row_widths = [sum(widths[range]) + 0.36length(range) for range in ranges]
+    row_height = max(N, 1) + 0.85
+    fig, ax = subplots(figsize=(max(4, 0.75maximum(row_widths) + 1.0), max(1.7, 0.52row_height * length(ranges))), dpi=120)
+    fig.set_facecolor("white")
+    ax.axis("off")
+    for (row, range) in enumerate(ranges)
+        offset = -(row-1)*row_height
+        ending = row_widths[row]
+        for q in 1:N
+            ypos = (reverse_bits ? q-1 : N-q) + offset
+            ax.plot([-0.23, ending], [ypos, ypos], color="#aab7c5", linewidth=0.9, zorder=1)
+            ax.text(-0.42, ypos, names[q], ha="right", va="center", fontsize=10, color="#344459", parse_math=false)
+        end
+        x = 0.0
+        for index in range
+            width = widths[index]
+            center = x + width/2 + 0.12
+            for op in columns[index]
+                _draw_circuit_gate(ax, op, center, width, N, offset, reverse_bits)
+            end
+            x += width + 0.36
+        end
+        if row < length(ranges)
+            ax.text(ending+0.04, offset+(N-1)/2, "›", ha="left", va="center", fontsize=16, color="#7e8c9c")
+        end
+    end
+    ax.set_xlim(-0.85 - 0.04maximum(length, names), maximum(row_widths)+0.25)
+    ax.set_ylim(-(length(ranges)-1)*row_height-0.55, N-0.45)
+    fig.tight_layout(pad=0.5)
+    show && display(fig)
+    return fig
+end
 
+_plotq_pyplot(op::QuantumOps; kwargs...) = _plotq_pyplot([op]; kwargs...)
+_plotq_pyplot(circuit::Circuit; nqubits::Int=circuit.stats.N, kwargs...) = _plotq_pyplot(circuit.layers; nqubits=nqubits, kwargs...)
+_plotq_pyplot(ansatz::AnsatzOptions; kwargs...) = _plotq_pyplot(ansatz.ops; kwargs...)
 
-# Keep the historical helper name while sharing the package's text renderer.
+"""
+    savefigure(path; kwargs...)
+    savefigure(figure, path; kwargs...)
+
+Save the current or specified figure, trimming unused outer margins by default.
+"""
+function savefigure(path::AbstractString; bbox_inches="tight", kwargs...)
+    PyPlot.savefig(path; bbox_inches=bbox_inches, kwargs...)
+    return path
+end
+function savefigure(figure::PyPlot.Figure, path::AbstractString; bbox_inches="tight", kwargs...)
+    figure.savefig(path; bbox_inches=bbox_inches, kwargs...)
+    return path
+end
+
 plotq_text(args...; kwargs...) = plotqt(args...; kwargs...)

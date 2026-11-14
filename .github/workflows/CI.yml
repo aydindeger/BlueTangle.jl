@@ -27,7 +27,9 @@ jobs:
           - '1.12'
           - 'nightly'
         os:
-          - ubuntu-latest
+          # PRIMA's current binary cannot load with glibc >= 2.41.
+          # https://github.com/libprima/PRIMA.jl/issues/46
+          - ubuntu-24.04
         arch:
           - x64
     steps:

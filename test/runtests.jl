@@ -302,3 +302,4 @@ include("trotter.jl")
 
 include("numerical.jl")
 include("optimization.jl")
+include("plotting.jl")

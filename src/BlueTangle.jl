@@ -25,10 +25,10 @@ export phasepoly
 """Simulate supported circuits with the optional PhasePoly backend. Load `PhasePoly` first."""
 function phasepoly end
 
-"""Plot circuits or measurement probabilities. Load `PyPlot` to enable graphical plotting."""
+"""Show circuits or measurements as dependency-free text. For graphical figures, load `PyPlot` and request `plotq(input; backend=:pyplot)`."""
 function plotq end
 
-"""Save the current graphical plot. Load `PyPlot` first."""
+"""Save a graphical figure with `savefigure(fig, path)`, or the current figure with `savefigure(path)`. Requires `PyPlot`."""
 function savefigure end
 
 end
