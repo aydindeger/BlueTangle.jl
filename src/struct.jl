@@ -936,8 +936,6 @@ Functions to save and load quantum computational data.
 
 Pass the same operations and options used for measurement. If routing was used,
 save the routed operations; the register size is stored in `measurement`.
-Files serialized with the former circuit wrapper must first be loaded with
-the version that wrote them and exported as operations, settings, and results.
 """
 function save_data(ops::Vector{<:QuantumOps}, measurement::Measurement, other::Vector=[];
                    options::Options=Options(),

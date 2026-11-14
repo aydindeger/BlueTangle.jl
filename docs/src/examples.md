@@ -1174,39 +1174,24 @@ paths; interior Hadamards require branching, and level-4 phases can also have
 exponential cost. Native Pauli queries avoid statevector materialization in the
 single-branch case. See `?phasepoly` for phase-angle grids and cost guards.
 
-## Operation lists and migration
+## Operation lists
 
-A circuit is represented by its operations. The `compile`, `quantum_circuit`,
-and `Circuit` APIs have been removed. For an existing state, write
-`apply(state, ops)`; the earlier `apply(ops, state)` spelling still works.
+`apply(state, ops)` executes operations in list order. The state type selects
+statevector, density-matrix, or MPS evolution. Use `get_stats(ops)` and
+`get_layers(ops)` to inspect the operations, `plotq(ops)` to draw them, and
+`to_qasm(ops)` to export them.
 
-| Earlier expression | Operation-list expression |
-|:--|:--|
-| `to_state(compile(ops))` | `apply(zero_state(get_N(ops)), ops)` |
-| `to_rho(compile(ops))` | `apply(to_rho(zero_state(get_N(ops))), ops)` |
-| `measure(compile(ops, options), shots)` | `measure(ops, shots; options=options)` |
-| `run(compile(ops), shots)` | `run(ops, shots)` |
-| `shadow(compile(ops), shots)` | `shadow(ops, shots)` |
-| `compile(ops; layout=layout)` | `route(ops, layout)` |
-| `circuit.stats` / `circuit.layers` | `get_stats(ops)` / `get_layers(ops)` |
-| `plotq(circuit)` / `to_qasm(circuit)` | `plotq(ops)` / `to_qasm(ops)` |
-
-No routing or rescheduling happens during ordinary execution. `route` returns
-operations with explicit SWAPs for the chosen layout; `get_layers` remains
-available for inspection and plotting. Sampling functions also accept an
-optional `layout` keyword. Use `N=...` with `measure`, `run`, or `shadow` to retain
-idle qubits beyond those mentioned by the operation list.
+Use `route(ops, layout)` to insert SWAPs for a chosen connectivity layout.
+Sampling functions also accept a `layout` keyword. Use `N=...` with `measure`,
+`run`, or `shadow` to include idle qubits beyond those mentioned by the operations.
 
 Use `measure(ops, shots; options=Options(noise=noise))` for independent noisy
 preparations. `measure(apply(state, ops; noise=noise), shots)` instead samples
 the one resulting state: for a vector or MPS, this represents one noise
 trajectory and generally gives a different experiment. Density-matrix
 execution sums noise branches before sampling. Twirling, basis choices, readout
-noise, and readout mitigation continue to use `Options`.
+noise, and readout mitigation use `Options`.
 
 `save_data(ops, measurement, other; options=options, path="results.ser")` stores
 the operations, execution options, measurement, and optional additional data.
 Retrieve them from `load_data(path).ops`, `.options`, `.measurement`, and `.other`.
-To migrate an existing serialized object containing the old `Circuit` type,
-load it with the earlier package version and export its operations and settings
-before upgrading; Julia cannot deserialize that removed type in this version.

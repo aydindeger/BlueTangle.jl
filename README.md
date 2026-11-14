@@ -121,8 +121,8 @@ reset is ideal. See [reduced states and partial trace](docs/src/examples.md) for
 the distinction between keeping qubits in the vector API and discarding
 subsystems in the density-matrix API.
 
-Readout mitigation now preserves signed inverse-response weights; replacing
-them with absolute values biased the previous estimates.
+Readout mitigation uses signed inverse-response weights, which can be negative
+at finite shot counts.
 
 MPS `measure(psi)` defaults to 1000 shots. Use `measure(psi, shots)` to set the
 sample count, or `measure(psi, -1)` for exact probabilities on up to 16 qubits.
@@ -152,33 +152,27 @@ _RX(theta), 1)`.
 
 `apply(state, ops)` evolves the supplied state in list order. The state type
 selects the backend; pass `noise=...` for gate noise and
-`track_measurements=true` to return `(state, record)`. `apply(ops, state)` remains
-available for older code, but new examples use the state-first spelling.
+`track_measurements=true` to return `(state, record)`.
 
 `measure(ops, shots; options=Options(noise=noise))` prepares independent noisy
 shots. Sampling one noisy state repeatedly would instead sample one realized
 trajectory. Density-matrix evolution sums noise branches and can reuse the
 resulting ensemble. Readout noise, mitigation, measurement bases, and per-shot
-Pauli twirling remain settings in `Options`.
+Pauli twirling are configured through `Options`.
 
 Routing is explicit: `routed = route(ops, layout)` inserts the needed SWAPs and
 returns another operation list. `measure`, `run`, and `shadow` also accept an
 optional `layout` keyword. Without one, the given gates are applied directly.
 Use `get_stats(ops)`, `get_layers(ops)`, and `plotq(ops)` for inspection.
 
-The former `compile`, `quantum_circuit`, and `Circuit` APIs have been removed.
-Replace `to_state(compile(ops))` with `apply(zero_state(get_N(ops)), ops)` and
-`to_rho(compile(ops))` with `apply(to_rho(zero_state(get_N(ops))), ops)`.
 Save operations and settings with
 `save_data(ops, measurement; options=options, path="results.ser")`;
 `load_data` returns their `ops`, `options`, `measurement`, and `other` fields.
-Existing serialized objects containing the old `Circuit` type must first be
-loaded and exported using the earlier package version.
 
 ## Optional packages
 
 `plotq(ops)` prints a boxed circuit diagram without a plotting dependency.
-`plotqt` remains available as a direct text renderer. For graphical output,
+`plotqt` provides direct text rendering. For graphical output,
 install and load PyPlot, then select it explicitly:
 
 ```julia

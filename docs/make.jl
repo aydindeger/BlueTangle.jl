@@ -12,7 +12,7 @@ makedocs(
         "Home" => "index.md",
         "Examples" => "examples.md",
         "Quantum Machine Learning" => "qml.md",
-        "Quantum error correction" => "qec.md",
+        "Quantum Error Correction" => "qec.md",
         "OpenQASM" => "qasm.md",
         "Functions" => "functions.md"
     ]

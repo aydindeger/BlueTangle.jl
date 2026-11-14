@@ -1,4 +1,4 @@
-# Quantum error correction
+# Quantum Error Correction
 
 A stabilizer code stores logical information in the simultaneous +1 eigenspace
 of commuting Pauli operators. An error can change their measurement outcomes
@@ -81,8 +81,8 @@ a logical error after recovery.
 For statevectors and MPS, `qec_round` samples the ideal syndrome and returns
 `(state=corrected_data, syndrome=bits)`. For density matrices it sums the
 recovered sectors and returns `syndrome=nothing`; an ensemble has no single
-record. It supports the same decoder callbacks as `code.correct`. By contrast,
-the older `code.syndrome` and `code.correct(state)` paths retain their appended
+record. It supports the same decoder callbacks as `code.correct`.
+The `code.syndrome` and `code.correct(state)` paths retain their appended
 syndrome ancillas, as explained below.
 
 `qec_round` is an **ideal reference operation**: its stabilizer projectors and

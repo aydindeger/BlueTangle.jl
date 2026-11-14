@@ -25,8 +25,8 @@ prepare and sample repeated shots. Gate noise is passed to `apply` as
 `noise=...`, and to sampling functions as `options=Options(noise=...)`.
 Operations run in their supplied order; no layout or SWAPs are added by default.
 Use `route(ops, layout)` when connectivity matters. See the
-[operation-list migration notes](examples.md#Operation-lists-and-migration) for
-replacements for the removed wrapper API.
+[operation-list examples](examples.md#Operation-lists) for execution, sampling,
+and saving results.
 
 ## Choose a workflow
 
@@ -39,7 +39,7 @@ replacements for the removed wrapper API.
 - [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
   classification, gradient crosschecks, noisy training, MPS truncation, and the
   complete QML API.
-- [Quantum error correction](qec.md): encode an arbitrary logical qubit in the
+- [Quantum Error Correction](qec.md): encode an arbitrary logical qubit in the
   five-qubit code, inspect a syndrome, correct a physical error, and decode;
   repeat with density matrices or an MPS.
 - [OpenQASM import and export](qasm.md): read strings or files, use whole-register

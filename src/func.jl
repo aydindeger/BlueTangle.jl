@@ -303,13 +303,13 @@ end
 ##========== Entanglement entropy ==========
 
 """
-    entanglement_entropy(psi::AbstractVectorS) -> Float64
+    entanglement_entropy(psi::AbstractVectorS; spectrum_bool=nothing)
 
 Calculates the entanglement entropy of a quantum state.
 
 - `psi`: The quantum state vector (sa.SparseVector) for which to calculate the entropy.
 
-Returns `(entropy, spectrum)` by default for compatibility. Set
+Returns `(entropy, spectrum)` by default. Set
 `spectrum_bool=false` to return only the entropy, or `true` for the tuple.
 The spectrum contains `-log(p)` for nonzero Schmidt probabilities `p`.
 """
@@ -320,7 +320,6 @@ function entanglement_entropy(psi::AbstractVectorS; spectrum_bool::Union{Nothing
     probabilities = la.svdvals(Matrix(amplitudes)).^2
     probabilities = probabilities[probabilities .> 0]
     entropy = -sum(probabilities .* log.(probabilities))
-    # Retain the historical tuple default; callers can explicitly request a scalar.
     return spectrum_bool === false ? entropy : (entropy, -log.(probabilities))
 end
 
@@ -329,8 +328,7 @@ end
 
 Return `(entropy, spectrum)` for the reduced density matrix of the last
 `floor(N/2)` qubits, using natural logarithms. Set `spectrum_bool=false` for
-just the entropy, or `true` for the tuple. The no-keyword tuple return is
-retained for compatibility. For a mixed global state, reduced entropy includes
+just the entropy, or `true` for the tuple. For a mixed global state, reduced entropy includes
 both quantum correlations and statistical mixing; it is not an entanglement
 measure on its own.
 """
