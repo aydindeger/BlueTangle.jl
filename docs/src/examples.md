@@ -1034,7 +1034,7 @@ a transition would require larger sizes, checks of depth/steady-state convergenc
 many more trajectories, and convergence with MPS truncation settings before any
 finite-size scaling analysis.
 
-## Operations through one entry point
+## [20) Operations through one entry point](@id Operations-through-one-entry-point)
 
 Use `Op` to construct each kind of operation:
 
@@ -1069,7 +1069,7 @@ reset_state, record = apply(one_state(1), conditional_reset; track_measurements=
 @assert reset_state ≈ zero_state(1)
 ```
 
-## [Ensemble evolution and a measurement trajectory](@id measurement-backends)
+## [21) Ensemble evolution and a measurement trajectory](@id measurement-backends)
 
 Discarding a measurement outcome destroys coherence between its outcome sectors.
 Conditioning on one observed outcome instead gives a normalized conditional
@@ -1147,7 +1147,7 @@ On MPS, `measure(psi)` uses 1000 shots by default;
 exact probability enumeration with `measure(psi, -1)` is limited to 16 qubits
 unless the lower-level `sample_exact` limit is explicitly changed.
 
-## Optional PhasePoly backend
+## [22) Optional PhasePoly backend](@id Optional-PhasePoly-backend)
 
 After installing PhasePoly separately, load it to activate the adapter:
 
@@ -1174,7 +1174,7 @@ paths; interior Hadamards require branching, and level-4 phases can also have
 exponential cost. Native Pauli queries avoid statevector materialization in the
 single-branch case. See `?phasepoly` for phase-angle grids and cost guards.
 
-## Operation lists
+## [23) Operation lists](@id Operation-lists)
 
 `apply(state, ops)` executes operations in list order. The state type selects
 statevector, density-matrix, or MPS evolution. Use `get_stats(ops)` and
