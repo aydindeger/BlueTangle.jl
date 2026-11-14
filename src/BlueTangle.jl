@@ -21,6 +21,7 @@ export it, its, sa, la, sb, pr #Packages
 export hamiltonian, evolve, hamiltonian_exp, AnsatzOptions, VQE, VQA, variational_apply, EfficientSU2, generate_ansatz_circuit, get_stats, get_layers, fidelity, get_optimized_layers, optimize_simple
 export to_qasm, from_qasm, @docVSC, plotqt
 export phasepoly
+export train, nparameters
 
 """Simulate supported circuits with the optional PhasePoly backend. Load `PhasePoly` first."""
 function phasepoly end

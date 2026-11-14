@@ -356,7 +356,15 @@ function apply(
     # end
 
     if isa(op,OpF)
-        state=op.apply(state)
+        if op.data isa Vector{<:QuantumOps}
+            if track_measurements
+                state, mid_measurements = apply(op.data, state; noise=noise, track_measurements=true, kwargs...)
+            else
+                state = apply(op.data, state; noise=noise, kwargs...)
+            end
+        else
+            state = op.apply(state)
+        end
     elseif isa(op,OpQC)
         if uppercase(op.name)=="RES" || uppercase(op.name)=="RESET"
             state,_=_reset_Z(state,op.qubit)
@@ -462,7 +470,15 @@ function apply(
     # end
 
     if isa(op,OpF)
-        psi = op.apply(psi; dim_kw...)
+        if op.data isa Vector{<:QuantumOps}
+            if track_measurements
+                psi, mid_measurements = apply(op.data, psi; noise=noise, track_measurements=true, dim_kw...)
+            else
+                psi = apply(op.data, psi; noise=noise, dim_kw...)
+            end
+        else
+            psi = op.apply(psi; dim_kw...)
+        end
     elseif isa(op,OpQC)
         if uppercase(op.name)=="RES" || uppercase(op.name)=="RESET"
             psi,_ = _reset_Z(psi,op.qubit)

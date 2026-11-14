@@ -65,7 +65,6 @@ ifOp
 Measurement
 QuantumChannel
 NoiseModel
-AnsatzOptions
 Circuit
 Options
 Layout
@@ -100,9 +99,13 @@ error_mitigate_data
 hamiltonian
 hamiltonian_exp
 evolve
-VQE
-variational_apply
 ```
+
+## QML
+
+The [QML API reference](qml.md#API-reference) documents trainable circuit
+construction, ansatz generators, `train`, and the legacy `AnsatzOptions`, `VQA`,
+and `VQE` interfaces alongside executable examples.
 
 ## Index
 

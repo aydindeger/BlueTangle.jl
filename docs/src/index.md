@@ -25,12 +25,14 @@ significant bit in statevectors and integer measurement outcomes.
 
 - [Circuit examples](examples.md): gates, noise channels, measurements, plotting,
   and the distinction between an ensemble and a single trajectory.
+- [QML](qml.md): VQE, held-out regression and XOR classification, gradient
+  crosschecks, noisy training, MPS truncation, and the complete QML API.
 - [Quantum error correction](qec.md): encode an arbitrary logical qubit in the
   five-qubit code, inspect a syndrome, correct a physical error, and decode;
   repeat with density matrices or an MPS.
 - [OpenQASM import and export](qasm.md): read strings or files, use whole-register
   operations, preserve idle qubits, and diagnose unsupported input.
-- [Advanced examples](advanced.md): Hamiltonian evolution, variational circuits,
+- [Advanced examples](advanced.md): Hamiltonian evolution,
   entanglement, Pauli twirling, and explicit noise-amplification experiments.
 - [Function reference](functions.md): signatures and detailed API documentation.
 

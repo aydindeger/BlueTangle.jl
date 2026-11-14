@@ -11,6 +11,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Examples" => "examples.md",
+        "QML" => "qml.md",
         "Quantum error correction" => "qec.md",
         "OpenQASM" => "qasm.md",
         "Advanced Examples" => "advanced.md",

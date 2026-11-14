@@ -304,55 +304,8 @@ reveals the squared magnitude of the overlap, not its complex phase.
 
 ## 18) Variational Quantum Eigensolver
 
-VQE minimizes the energy within a chosen parameterized circuit. A converged
-optimizer need not reach the true ground state: the ansatz may be too restricted,
-or the optimization may find a local minimum. A small exact diagonalization
-provides a useful reference.
-
-```@example vqe
-using BlueTangle, LinearAlgebra
-N = 3
-H = hamiltonian(N, [-1.0, "Z,Z", -0.9, "X"])
-exact_energy = eigmin(Hermitian(Matrix(H)))
-ansatz = AnsatzOptions(N=N, ops=["RY", "CX"], loss=H,
-    deep_circuit=true, model="lbfgs", paramshift=true,
-    pars_initial=fill(0.3, 100), number_of_iterations=40)
-initial_energy = ansatz.loss(variational_apply(ansatz.pars_initial, ansatz))
-energies, parameters = VQE(ansatz)
-variational_state = variational_apply(parameters, ansatz)
-final_energy = real(expect(variational_state, H))
-@assert final_energy >= exact_energy - 1e-10
-@assert final_energy <= initial_energy + 1e-10
-(exact=exact_energy, variational=final_energy, parameters=ansatz.dim)
-```
-
-![Variational circuit for the three-site Ising model](assets/figs/vqe_c.png)
-
-![Energy evaluations compared with the exact ground-state energy](assets/figs/vqe_ising.png)
-
-The recorded history contains objective evaluations, including trial points;
-it is not necessarily one point per accepted optimizer iteration.
-
-Custom local functions can also define variational gates. Their arguments are
-assigned consecutively from the parameter vector:
-
-```@example vqe_custom
-using BlueTangle
-custom_ops = QuantumOps[Op("local RY", theta -> _RY(theta), 1),
-                       Op("CX", 1, 2), Op("local RZ", theta -> _RZ(theta), 2)]
-custom_ansatz = AnsatzOptions(N=2, ops=custom_ops,
-    loss=hamiltonian(2, [-1.0, "Z,Z", -0.7, "X"]), pars_initial=[0.2, 0.4])
-@assert custom_ansatz.dim == 2
-@assert get_N(variational_apply([0.2, 0.4], custom_ansatz)) == 2
-plotq(custom_ansatz)
-nothing # hide
-```
-
-![Custom local parameterized gates in an ansatz](assets/figs/vqe_c2.png)
-
-Use analytic parameter-shift rules only for the supported named gates. For a
-custom function, the default differentiation path must be compatible with that
-function; an arbitrary custom gate does not automatically inherit a shift rule.
+VQE, trainable and custom gates, ansatz generators, and their API reference now
+live in the dedicated [QML section](qml.md).
 
 ## 19) Measurement-induced entanglement transition using MPS
 
