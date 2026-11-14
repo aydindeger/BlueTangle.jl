@@ -10,6 +10,15 @@ generators. Its built-in decoder searches for a matching **single-qubit Pauli**
 error. This is sufficient for the example below; it is not a decoder for arbitrary
 multi-qubit errors, and setting `d=3` does not independently certify a code's distance.
 
+This section develops the workflow in three parts:
+
+- **Overview and encoded algorithms** (this page): stabilizer codes, logical
+  gates, and ideal correction rounds.
+- [Noisy fault-tolerant gadgets](fault_tolerance.md): physical preparation,
+  verified syndrome extraction, logical T consumption, and readout.
+- [Codes, distances, and magic-state factories](magic_factory.md): code
+  comparisons, distance searches, noisy raw resources, and encoded distillation.
+
 The [QEC example learning path](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/qec/README.md)
 provides runnable steps in the order Bell pair → fault propagation → code
 distance → noisy syndrome cycle → distillation → full noisy algorithm. Its

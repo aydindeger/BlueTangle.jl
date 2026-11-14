@@ -12,9 +12,11 @@ makedocs(
         "Home" => "index.md",
         "Examples" => "examples.md",
         "Quantum Machine Learning" => "qml.md",
-        "Quantum Error Correction" => "qec.md",
-        "Noisy fault-tolerant gadgets" => "fault_tolerance.md",
-        "Codes and magic-state factories" => "magic_factory.md",
+        "Quantum Error Correction" => [
+            "Overview and encoded algorithms" => "qec.md",
+            "Noisy fault-tolerant gadgets" => "fault_tolerance.md",
+            "Codes, distances, and magic-state factories" => "magic_factory.md"
+        ],
         "OpenQASM" => "qasm.md",
         "Functions" => "functions.md"
     ]
