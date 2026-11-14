@@ -154,6 +154,11 @@ end
     @test to_state(apply(zero_state(N_MPS(1)), [Op("X", 1)]; noise=damping)) ≈ zero_state(1)
     @test apply(to_rho(one_state(1)), [Op("I", 1)];
                 noise=NoiseModel(Noise1("amplitude_damping", 0.3), false)) ≈ ComplexF64[0.3 0; 0 0.7]
+
+    # The existing full-state shadow estimator also accepts operations directly.
+    snapshot = shadow([Op("I", 1)], 1)
+    @test snapshot isa sa.SparseMatrixCSC
+    @test eigvals(Hermitian(Matrix(snapshot))) ≈ [-1, 2]
 end
 
 @testset "Common operation constructors" begin

@@ -181,7 +181,7 @@ end
 Compatibility configuration for `VQA`/`VQE`. New workflows can use an operation
 list, `variational_apply(parameters, ops)`, and `train(loss, parameters)` directly.
 `ops` accepts explicit operations or gate-name layers. Initial states can be
-vectors, density matrices, MPS states, or circuits. A matrix/MPO `loss` denotes
+vectors, density matrices, or MPS states. A matrix/MPO `loss` denotes
 an expectation value; a function receives the final state.
 
 `number_of_iterations=1000` sets the iteration limit (evaluation budget for
