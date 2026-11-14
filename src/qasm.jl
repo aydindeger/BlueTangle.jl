@@ -207,17 +207,6 @@ function to_qasm(ops::Vector{<:QuantumOps}, filename::AbstractString; kwargs...)
 end
 
 """
-    to_qasm(circuit::Circuit; kwargs...) -> String
-    to_qasm(circuit::Circuit, filename::AbstractString; kwargs...) -> String
-
-Convenience overloads that export a compiled `Circuit` by flattening `circuit.layers`.
-"""
-to_qasm(circuit::Circuit; kwargs...)::String = to_qasm(vcat(circuit.layers...); kwargs...)
-to_qasm(circuit::Circuit, filename::AbstractString; kwargs...)::String =
-    to_qasm(vcat(circuit.layers...), filename; kwargs...)
-
-
-"""
     from_qasm(qasm_or_path::AbstractString; is_file=nothing) -> Vector{QuantumOps}
 
 Read the supported OpenQASM 2 gate subset from text or a file. Quantum registers
@@ -363,7 +352,7 @@ function from_qasm(qasm_or_path::AbstractString; is_file::Union{Nothing,Bool}=no
     end
 
     # The vector API carries its register size through the highest used index.
-    # Retain a declared idle tail so later compile/run calls allocate every qubit.
+    # Retain a declared idle tail so later simulation calls allocate every qubit.
     nqubits > get_N(ops) && push!(ops, Op("I", nqubits))
     return ops
 end

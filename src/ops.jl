@@ -146,23 +146,27 @@ end
 
 
 """
-`shadow(circuit::Circuit, number_of_experiment::Int) -> sa.SparseMatrixCSC`
+    shadow(ops, shots; options=Options(), N=get_N(ops), layout=nothing)
 
-Construct a density matrix (rho) from classical shadow representation.
-
-- `circuit`: A `Circuit` object.
-- `number_of_experiment`: Number of experiments to run.
-
-Returns a sparse density matrix representing the classical shadow.
+Estimate the full density matrix from random local X, Y, and Z measurements.
+Each shot prepares a fresh statevector, including gate noise and twirling from
+`options`. Final-readout settings are not used. `N` can include idle qubits;
+routing is performed only when `layout` is supplied and can enlarge the register.
+The estimator has trace one but need not be positive at finite shot counts.
 """
-function shadow(circuit::Circuit,number_of_experiment::Int)
-
-    N=circuit.stats.N
+function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
+                options::Options=Options(), N::Int=get_N(ops),
+                layout::Union{Nothing,Layout}=nothing)
+    number_of_experiment > 0 || throw(ArgumentError("shots must be positive"))
+    N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
+    N >= get_N(ops) || throw(ArgumentError("N must include every operated qubit"))
+    ops = isnothing(layout) ? ops : route(ops, layout)
+    N = max(N, get_N(ops))
     rho_construct=sa.spzeros(ComplexF64,2^N,2^N)
     m_list=[gate.H,gate.HSP,gate.I]
     
     for _ =1:number_of_experiment
-        state=to_state(circuit)
+        state=apply(zero_state(N), _execution_ops(ops, options); noise=options.noise)
 
         ## final random measurement
         measurement_basis=Vector{Int}(undef,N)
@@ -385,42 +389,6 @@ end
 """
 get_optimized_layers(ops::Vector{<:QuantumOps})=optimize_simple(get_layers(ops))
 
-"""
-    compile(ops::Vector{<: QuantumOps}, options::Options=Options()) -> Circuit
-
-Compile a set of quantum operations into a circuit.
-
-- `ops`: A vector of `QuantumOps` objects.
-- `options`: Optional compilation options.
-
-Returns a compiled `Circuit` object.
-"""
-function compile(ops::Vector{<:QuantumOps}, options::Options=Options(); layout::Union{Layout,Int}=-1)
-#implement layers
-
-    stats_init=get_stats(ops)
-    
-    N=stats_init.N
-
-    #init layout
-    if layout==-1
-        layout=Layout(sa.sparse(ones(Int,1, N)))
-    elseif N > layout.N #!= N
-        throw("The number of physical qubits in the layout does not match the requirements of the operations.")
-    end
-
-    #add swaps
-    local_ops=Vector{QuantumOps}()
-    for op in ops
-        append!(local_ops,layout.swap(op))#check locality and add swap if necessary
-    end
-
-    stats=get_stats(local_ops)
-    layers=get_layers(local_ops)
-
-    return Circuit(stats,stats_init,options,layout,layers)
-end
-
 # Independent readout channels have a tensor-product classical response matrix.
 function _measurement_mitigate_inv_matrix(N::Int, readout_noise::QuantumChannel)
     readout_noise.q == 1 || throw(ArgumentError("readout noise must be a single-qubit channel"))
@@ -488,20 +456,20 @@ end
 _is_cnot_like(op::QuantumOps) = op isa Op && op.q == 2 && op.control == -2 &&
     uppercase(op.name) in ("CNOT", "CX") && op.mat isa AbstractMatrix && op.mat == gate.CX
 
-function _samples_to_measurement(samples::Vector{<:Integer}, circuit::Circuit; rho=_measurement_rho_placeholder(circuit.stats.N))
-    N = circuit.stats.N
+function _samples_to_measurement(samples::Vector{<:Integer}, N::Int, options::Options;
+                                 rho=_measurement_rho_placeholder(N))
     bitstr, probabilities = get_probs_from_sample(samples, N)
-    options = circuit.options
     if options.measurement_mitigate && options.readout_noise isa QuantumChannel
         bitstr, probabilities = _mitigate_probabilities(bitstr, probabilities, N, options.readout_noise)
     end
     return _measurement_from_probs(bitstr, probabilities, N, length(samples), options.measurement_basis, options.circuit_name, rho)
 end
 
-function _circuit_ops(circuit::Circuit)
+function _execution_ops(ops::Vector{<:QuantumOps}, options::Options)
+    options.twirl || return ops
     operations = QuantumOps[]
-    for layer in circuit.layers, op in layer
-        if circuit.options.twirl && _is_cnot_like(op)
+    for op in ops
+        if _is_cnot_like(op)
             append!(operations, apply_twirl(op))
         else
             push!(operations, op)
@@ -530,27 +498,32 @@ _has_state_callback(op::OpF) = op.data isa Function ||
     (op.data isa Vector{<:QuantumOps} && any(_has_state_callback, op.data))
 
 """
-    measure(circuit, shots; backend=:statevector, kwargs...)
+    measure(ops, shots; options=Options(), N=get_N(ops), layout=nothing,
+            backend=:statevector, kwargs...)
 
 Sample final outcomes with statevector, MPS (`:tensor`), or density-matrix
 (`:density_matrix`) evolution. MPS accepts `cutoff` and `maxdim`. `run` instead
-returns the mid-circuit measurement records.
+returns the mid-circuit measurement records. `N` can include idle qubits.
+Operations run in their listed order, with routing only when `layout` is supplied.
 """
-function measure(circuit::Circuit, number_of_experiment::Int;
+function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
+                 options::Options=Options(), N::Int=get_N(ops),
+                 layout::Union{Nothing,Layout}=nothing,
                  backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("shots must be positive"))
-    N = circuit.stats.N
+    N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
+    N >= get_N(ops) || throw(ArgumentError("N must include every operated qubit"))
+    ops = isnothing(layout) ? ops : route(ops, layout)
+    N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
     _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
     T = N < 8sizeof(Int) ? Int : BigInt
     all_sample = T[]
-    options = circuit.options
     rho = _measurement_rho_placeholder(N)
     if options.density_matrix
         N <= 16 || throw(ArgumentError("density_matrix=true explicitly materializes 4^N entries; disable it for large MPS circuits"))
     end
 
-    ops = [op for layer in circuit.layers for op in layer]
     stochastic = options.noise != false || options.readout_noise != false ||
                  any(op -> op isa OpQC || op isa ifOp || op isa OpF || op.type == "🔬", ops)
     # Density evolution already sums noise and measurement branches exactly.
@@ -558,13 +531,9 @@ function measure(circuit::Circuit, number_of_experiment::Int;
                   !any(_has_state_callback, ops) && !options.twirl && options.measurement_basis != "R"
     repetitions = reuse_state ? 1 : number_of_experiment
     for _ in 1:repetitions
-        state = if backend_name == "tensor"
-            apply(_circuit_ops(circuit), zero_state(N_MPS(N)); noise=options.noise, kwargs...)
-        elseif backend_name == "density_matrix"
-            to_rho(circuit)
-        else
-            to_state(circuit)
-        end
+        initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
+        backend_name == "density_matrix" && (initial = initial * initial')
+        state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
         state = _final_measurement(state, options; kwargs...)
         append!(all_sample, sample(state, reuse_state ? number_of_experiment : 1))
         if options.density_matrix
@@ -572,7 +541,7 @@ function measure(circuit::Circuit, number_of_experiment::Int;
             rho += (vector isa AbstractMatrix ? vector : vector * vector') / repetitions
         end
     end
-    return _samples_to_measurement(all_sample, circuit; rho=sa.sparse(rho))
+    return _samples_to_measurement(all_sample, N, options; rho=sa.sparse(rho))
 end
 
 function _resolve_backend(backend::Union{Symbol,AbstractString})
@@ -588,34 +557,31 @@ function _resolve_backend(backend::Union{Symbol,AbstractString})
     end
 end
 
-function run(circuit::Circuit,number_of_experiment::Int=1;
+"""
+    run(ops, shots=1; options=Options(), N=get_N(ops), layout=nothing,
+        backend=:statevector, kwargs...)
+
+Prepare a fresh state for each shot and return its mid-circuit measurement
+records in operation-list order. Use `measure(ops, shots)` for final outcomes.
+`N` can include idle qubits. Routing is performed only when `layout` is supplied.
+"""
+function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
+             options::Options=Options(), N::Int=get_N(ops),
+             layout::Union{Nothing,Layout}=nothing,
              backend::Union{Symbol,AbstractString}=:statevector,kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("`number_of_experiment` must be positive."))
-
-    N=circuit.stats.N
+    N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
+    N >= get_N(ops) || throw(ArgumentError("N must include every operated qubit"))
+    ops = isnothing(layout) ? ops : route(ops, layout)
+    N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
+    _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
     measurements = Vector{Vector{Int}}(undef,number_of_experiment)
-
-    if backend_name in ("statevector", "density_matrix")
-        _unsupported_keyword_check(kwargs,[])
-        nm=circuit.options.noise
-
-        for shot=1:number_of_experiment
-            state=zero_state(N)
-            backend_name == "density_matrix" && (state = state * state')
-            ops_shot=_circuit_ops(circuit)
-            _,mid_values = apply(ops_shot,state;noise=nm,track_measurements=true)
-            measurements[shot] = mid_values
-        end
-    else
-        _unsupported_keyword_check(kwargs,[:cutoff,:maxdim])
-
-        for shot=1:number_of_experiment
-            psi=zero_state(N_MPS(N))
-            ops_shot=_circuit_ops(circuit)
-            _,mid_values = apply(ops_shot,psi;noise=circuit.options.noise,track_measurements=true,kwargs...)
-            measurements[shot] = mid_values
-        end
+    for shot=1:number_of_experiment
+        initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
+        backend_name == "density_matrix" && (initial = initial * initial')
+        _, measurements[shot] = apply(initial, _execution_ops(ops, options);
+                                     noise=options.noise, track_measurements=true, kwargs...)
     end
 
     return measurements
@@ -640,15 +606,8 @@ function _qasm_to_source(qasm_or_path::AbstractString; is_file::Union{Nothing,Bo
     throw(ArgumentError("Input is neither an existing file nor recognizable OpenQASM text: `$qasm_or_path`"))
 end
 
-function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
-             options::Options=Options(),layout::Union{Layout,Int}=-1,
-             backend::Union{Symbol,AbstractString}=:statevector,kwargs...)
-    circuit = compile(ops, options; layout=layout)
-    return run(circuit,number_of_experiment;backend=backend,kwargs...)
-end
-
 function run(qasm_or_path::AbstractString,number_of_experiment::Int=1;
-             options::Options=Options(),layout::Union{Layout,Int}=-1,
+             options::Options=Options(),layout::Union{Nothing,Layout}=nothing,
              backend::Union{Symbol,AbstractString}=:statevector,
              is_file::Union{Nothing,Bool}=nothing,kwargs...)
     qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
@@ -708,42 +667,16 @@ end
 
 
 """
-`to_state(circuit::Circuit; init_state::AbstractVectorS=sa.sparse([])) -> sa.SparseVector`
+    to_rho(state::AbstractVector)
 
-Convert a quantum circuit to a state vector.
-
-- `circuit`: A `Circuit` object.
-- `init_state`: (Optional) Initial state vector.
-
-Returns a state vector representing the circuit.
+Form the pure-state density matrix `state * state'`. To simulate the complete
+noisy ensemble, apply operations to this density matrix:
+`apply(to_rho(initial), ops; noise=noise)`.
 """
-function to_state(circuit::Circuit; init_state::AbstractVectorS=zero_state(circuit.stats.N))
-    get_N(init_state) == circuit.stats.N || throw(DimensionMismatch("initial state must match the circuit qubit count"))
-    state=init_state
-    ops_shot=_circuit_ops(circuit)
-    return apply(ops_shot,state;noise=circuit.options.noise)
-
-end
-
-"""
-    to_rho(circuit::Circuit) -> sa.SparseMatrixCSC
-
-Convert a quantum circuit to a density matrix (rho).
-
-- `circuit`: A `Circuit` object.
-
-Returns a density matrix representing the circuit.
-"""
-function to_rho(circuit::Circuit)
-    state = zero_state(circuit.stats.N)
-    return apply(_circuit_ops(circuit), state * state'; noise=circuit.options.noise)
-end
+to_rho(state::AbstractVectorS) = state * state'
 
 """Expand an operation on an N-qubit Hilbert space (legacy alias)."""
 hilbert_op(op::QuantumOps, N::Int) = op.expand(N)
-
-"""Compile operations into a circuit (alias for `compile`)."""
-quantum_circuit(args...; kwargs...) = compile(args...; kwargs...)
 
 
 """

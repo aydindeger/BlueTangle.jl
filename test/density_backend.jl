@@ -144,15 +144,17 @@ end
 end
 
 @testset "Data persistence" begin
-    circuit = compile([Op("H", 1)])
+    operations = [Op("H", 1)]
+    options = Options(circuit_name="saved operations")
     measurement = measure(plus_state(1))
     mktempdir() do directory
         path = joinpath(directory, "result.ser")
-        @test BlueTangle.save_data(circuit, measurement, ["note"]; path=path) == path
+        @test BlueTangle.save_data(operations, measurement, ["note"]; options=options, path=path) == path
         loaded = BlueTangle.load_data(path)
         @test loaded.other == ["note"]
         @test loaded.measurement.sample ≈ measurement.sample
-        @test to_state(loaded.circuit) ≈ to_state(circuit)
+        @test apply(zero_state(1), loaded.ops) ≈ plus_state(1)
+        @test loaded.options.circuit_name == options.circuit_name
         @test BlueTangle.load_data(path[1:end-4]).other == ["note"]
     end
 end

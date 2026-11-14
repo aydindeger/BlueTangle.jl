@@ -394,9 +394,16 @@ function apply(
 
 end
 
+"""
+    apply(state, ops; noise=false, track_measurements=false, kwargs...)
+
+Apply operations in their listed order to a statevector, density matrix, or MPS.
+No routing or scheduling is performed. With `track_measurements=true`, return
+the final state and the recorded mid-circuit outcomes.
+"""
 function apply(
-    vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},
-    psi::Union{AbstractVectorS,AbstractMatrixS,it.MPS};
+    psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},
+    vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}};
     noise::Union{NoiseModel,Bool}=false,
     track_measurements::Bool=false,
     kwargs...
@@ -431,6 +438,9 @@ function apply(
 
     return track_measurements ? (psi,mid_measurements) : psi
 end
+
+apply(ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}},
+      psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS}; kwargs...) = apply(psi, ops; kwargs...)
 
 apply(op::QuantumOps, psi::Union{it.MPS,AbstractVectorS,AbstractMatrixS}; noise::Union{NoiseModel,Bool}=false, kwargs...) = apply(psi, op; noise=noise, kwargs...)
 

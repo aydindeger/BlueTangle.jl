@@ -28,10 +28,12 @@
     @test only(apply_twirl(custom)) === custom
     @test !BlueTangle._is_cnot_like(custom)
 
-    # The common circuit path must also leave Toffoli gates intact.
-    circuit = compile([Op("H", 1), Op("X", 2), controlled], Options(twirl=true))
-    expected = apply([Op("H", 1), Op("X", 2), controlled], zero_state(3))
-    @test to_state(circuit) ≈ expected
+    # The common sampling path must also leave Toffoli gates intact.
+    operations = [Op("H", 1), Op("X", 2), controlled]
+    expected = apply(zero_state(3), operations)
+    result = measure(operations, 1; options=Options(twirl=true, density_matrix=true),
+                     backend=:density_matrix)
+    @test result.density_matrix ≈ expected * expected'
 end
 
 @testset "Conservative ideal gate cancellation" begin

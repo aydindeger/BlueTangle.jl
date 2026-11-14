@@ -808,7 +808,7 @@ struct Layout
 end
 
 ##
-##========== Circuit ==========
+##========== Execution options ==========
 
 """
     Options(; circuit_name="circuit", measurement_basis="Z", noise=false,
@@ -822,7 +822,7 @@ signed estimates at finite shot counts. These weights sum to one but need not be
 probabilities; observable estimates can exceed their physical range due to
 sampling error. `density_matrix` requests storage of the final
 density matrix in measurement results; select the simulation backend separately
-with `measure(circuit, shots; backend=:density_matrix)`.
+with `measure(ops, shots; options, backend=:density_matrix)`.
 
 `twirl=true` enables Pauli twirling of supported two-qubit gates. Routing swap
 noise is configured separately through `Layout(...; noisy_swap=true)`.
@@ -848,41 +848,12 @@ mutable struct Options
     ) = new(circuit_name, uppercase(measurement_basis), noise, twirl, readout_noise, measurement_mitigate, density_matrix)
 end
 
-"""
-`Circuit`
-
-Represents a quantum circuit.
-
-- `stats`: NamedTuple containing statistics about the circuit.
-- `options`: Options object with circuit configurations.
-- `layers`: Scheduled vectors of quantum operations.
-- `layout`: Qubit connectivity used when routing operations.
-- `stats_init`: Circuit statistics before routing and optimization.
-
-Constructs a Circuit object representing a quantum circuit.
-"""
-struct Circuit
-    stats::NamedTuple
-    stats_init::NamedTuple
-    options::Options
-    layout::Layout
-    layers::Vector{Vector{<:QuantumOps}}
-end
-
-
-
-sa.sparse(circ) = sa.sparse(ComplexF64, circ)
-function sa.sparse(::Type{T}, circ::Circuit) where {T<:Number}
-    N = circ.stats.N
-    return prod(o.expand(N) for o=reverse(vcat(circ.layers...)))
-end
-
 function sa.sparse(ops::Vector{<:QuantumOps})
     N=get_stats(ops).N
     return prod(o.expand(N) for o=reverse(ops))
 end
 
-hilbert(circ::Circuit)=sa.sparse(ComplexF64, circ) #to_state(circ)==hilbert(circ)*state
+hilbert(ops::Vector{<:QuantumOps}) = sa.sparse(ops)
 
 """
 `Measurement(bitstr::Union{Vector, UnitRange}, sample::Vector, expect::Vector, mag_moments::Vector, measurement_basis::String, number_of_experiment::Int, circuit_name::String, number_of_qubits::Int, density_matrix::sa.SparseMatrixCSC)`
@@ -913,27 +884,29 @@ struct Measurement
     density_matrix::sa.SparseMatrixCSC
 end
 
-##========== Circuit ==========
+##========== Saved results ==========
 
 """
 `Data`
 
 Represents a collection of quantum computational data.
 
-- `circuit`: Circuit object representing the quantum circuit.
+- `ops`: Operations used for the experiment, including any explicit routing.
+- `options`: Execution and readout settings used for the experiment.
 - `measurement`: Measurement object containing results of the quantum measurements.
 - `other`: Vector for storing additional data.
 
 Constructs a Data object for storing and managing quantum computational data.
 """
 struct Data
-    circuit::Circuit
+    ops::Vector{<:QuantumOps}
+    options::Options
     measurement::Measurement
     other::Vector
 end
 
 """
-`save_data(circuit::Circuit, measurement::Measurement, other::Vector=[])`
+`save_data(ops, measurement::Measurement, other::Vector=[]; options=Options())`
 `load_data(name::String)`
 
 Functions to save and load quantum computational data.
@@ -942,11 +915,15 @@ Functions to save and load quantum computational data.
   to choose the destination; otherwise the circuit name and a random suffix are used.
 - `load_data`: Deserializes and loads a Data object from a file.
 
-Use these functions for data persistence in quantum computations.
+Pass the same operations and options used for measurement. If routing was used,
+save the routed operations; the register size is stored in `measurement`.
+Files serialized with the former circuit wrapper must first be loaded with
+the version that wrote them and exported as operations, settings, and results.
 """
-function save_data(circuit::Circuit, measurement::Measurement, other::Vector=[];
-                   path::AbstractString="$(circuit.options.circuit_name)$(rand(1:1000)).ser")
-    Serialization.serialize(path, Data(circuit, measurement, other))
+function save_data(ops::Vector{<:QuantumOps}, measurement::Measurement, other::Vector=[];
+                   options::Options=Options(),
+                   path::AbstractString="$(options.circuit_name)$(rand(1:1000)).ser")
+    Serialization.serialize(path, Data(ops, options, measurement, other))
     return path
 end
 

@@ -16,7 +16,7 @@ import PhasePoly
         compact = phasepoly(ops; nqubits=3)
         @test get_N(compact) == 3
         @test to_state(compact) ≈ expected atol=1e-9
-        @test to_state(phasepoly(compile(ops))) ≈ expected atol=1e-9
+        @test to_state(phasepoly(ops)) ≈ expected atol=1e-9
         for index in 0:7
             @test amplitude(compact,index) ≈ expected[index+1] atol=1e-9
             @test amplitude(compact,int2bin(index,3)) ≈ expected[index+1] atol=1e-9
@@ -40,5 +40,4 @@ import PhasePoly
     @test_throws ArgumentError phasepoly([Op("P(pi/16)",1)])
     @test_throws ArgumentError phasepoly([Op("X",gate.Z,1)])
     @test_throws ArgumentError phasepoly([Op("CCX",1,2,3)])
-    @test_throws ArgumentError phasepoly(compile([Op("H",1)],Options(noise=NoiseModel("depolarizing",0.1))))
 end

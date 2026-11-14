@@ -61,11 +61,11 @@ end
 
 @testset "Direct variational states and noise overrides" begin
     operations = QuantumOps[Op("RY", _RY, 1)]
-    prepared = compile([Op("X", 2)])
+    prepared = apply(zero_state(2), [Op("X", 2)])
     parameter = [0.43]
     result = variational_apply(parameter, operations; init=prepared)
     @test result ≈ kron(_RY(parameter[1])*ComplexF64[1, 0], ComplexF64[0, 1])
-    @test to_state(prepared) == product_state([0, 1])
+    @test prepared == product_state([0, 1])
     @test parameter == [0.43]
 
     damping = NoiseModel(Noise1("amplitude_damping", 1.0), false)

@@ -176,7 +176,6 @@ function plotqt(input::AbstractVector; fold::Int=80, labels::Vector{String}=[""]
 end
 
 plotqt(op::QuantumOps; kwargs...) = plotqt([op]; kwargs...)
-plotqt(circuit::Circuit; nqubits::Int=circuit.stats.N, kwargs...) = plotqt(circuit.layers; nqubits=nqubits, kwargs...)
 plotqt(ansatz::AnsatzOptions; kwargs...) = plotqt(ansatz.ops; kwargs...)
 
 # Optional graphics extend this function; the public default remains text even

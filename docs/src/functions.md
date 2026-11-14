@@ -11,11 +11,13 @@ expect
 correlation
 ```
 
-## Circuit functions
+## Operation execution and routing
 
 ```@docs
-compile
+apply
+route
 measure
+run(::Vector{<:QuantumOps}, ::Int)
 to_state
 to_rho
 to_MPS
@@ -51,7 +53,6 @@ one_state
 product_state
 neel_state01
 neel_state10
-apply
 linear_fit
 quadratic_fit
 ```
@@ -65,7 +66,6 @@ ifOp
 Measurement
 QuantumChannel
 NoiseModel
-Circuit
 Options
 Layout
 ```

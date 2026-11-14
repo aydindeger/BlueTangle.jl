@@ -25,18 +25,18 @@
     @test int2bin(bin2int(ones(Int,72)),72) == ones(Int,72)
 
     for backend in (:statevector, :tensor, :density_matrix)
-        circuit = compile([Op("I",1)],Options(readout_noise=Noise1("bit_flip",1.0)))
-        @test measure(circuit, 20; backend=backend).bitstr == [1]
+        @test measure([Op("I",1)], 20; backend=backend,
+                      options=Options(readout_noise=Noise1("bit_flip",1.0))).bitstr == [1]
         @test run([Op("X",1),Op("MZ",1),Op("RES",1),Op("MZ",1)],2;backend=backend) == [[1,0],[1,0]]
-        reset = compile([Op("H",1),Op("CX",1,2),Op("RES",1)], Options(density_matrix=true))
-        result = measure(reset, 1000;backend=backend)
+        reset = [Op("H",1),Op("CX",1,2),Op("RES",1)]
+        result = measure(reset, 1000; backend=backend, options=Options(density_matrix=true))
         @test result.expect[1] ≈ 1
         @test abs(result.expect[2]) < 0.15
         @test tr(result.density_matrix) ≈ 1
     end
     # A Kraus channel must be sampled afresh on each trajectory, even when no
     # NoiseModel option or measurement gate is present in the circuit.
-    noisy = compile([Op("I",1),OpQC("bit_flip",0.5,1)])
+    noisy = [Op("I",1),OpQC("bit_flip",0.5,1)]
     @test abs(measure(noisy,1000).expect[1]) < 0.15
     @test abs(measure(noisy,1000;backend=:density_matrix).expect[1]) < 0.15
 
@@ -46,7 +46,7 @@
     @test (Op("X",1) * mixed) ≈ gate.X * mixed * gate.X
 
     options = Options(readout_noise=Noise1("bit_flip",0.1),measurement_mitigate=true)
-    mitigated = measure(compile([Op("I",1)],options),1)
+    mitigated = measure([Op("I",1)], 1; options=options)
     @test length(mitigated.sample) == 2
     @test sum(mitigated.sample) ≈ 1
     @test minimum(mitigated.sample) < 0
@@ -64,12 +64,69 @@
     @test corrected ≈ [1,0,0,0] atol=1e-14
 
     for op in (Op("custom",gate.CX,1,3), Op("custom",gate.CY,3,1), Op("SWAP",1,3;control=2))
-        @test sa.sparse(compile([op])) ≈ op.expand(3)
+        @test sa.sparse([op]) ≈ op.expand(3)
     end
     conditional = ifOp("MZ",1,Op("custom",gate.CX,1,3),Op("I",1))
     ops = [Op("H",3),conditional]
-    @test to_state(compile(ops)) ≈ apply(ops,zero_state(3))
+    @test apply(zero_state(3), ops) ≈ apply(ops,zero_state(3))
     @test isempty([name for name in names(BlueTangle) if !isdefined(BlueTangle,name)])
+end
+
+@testset "Direct operation-list API" begin
+    for removed in (:compile, :Circuit, :quantum_circuit)
+        @test !isdefined(BlueTangle, removed)
+    end
+    @test isempty(filter(pair -> any(method -> method.name == :apply, pair),
+                         Test.detect_ambiguities(BlueTangle)))
+
+    # A nonlocal entangling gate acts directly on its named qubits. The same
+    # operation list works with a vector, a density matrix, or an MPS.
+    operations = [Op("H", 1), Op("CX", 1, 3)]
+    expected = ComplexF64[1, 0, 0, 0, 0, 1, 0, 0] / sqrt(2)
+    initial = zero_state(3)
+    @test apply(initial, operations) ≈ expected
+    @test apply(initial * initial', operations) ≈ expected * expected'
+    @test to_rho(expected) ≈ expected * expected'
+    @test to_state(apply(zero_state(N_MPS(3)), operations; cutoff=0.0)) ≈ expected
+    @test initial == zero_state(3)
+    @test get_N(operations) == 3
+    @test length(operations) == 2
+
+    # Routing is an explicit transformation; sampling accepts it as an option.
+    layout = Layout(ones(Int, 1, 3))
+    routed = route(operations, layout)
+    @test length(routed) > length(operations)
+    @test apply(initial, routed) ≈ expected
+    options = Options(density_matrix=true)
+    direct = measure(operations, 1; options=options, backend=:density_matrix)
+    routed_result = measure(operations, 1; options=options, layout=layout, backend=:density_matrix)
+    @test direct.density_matrix ≈ expected * expected'
+    @test routed_result.density_matrix ≈ direct.density_matrix
+    @test length(operations) == 2
+
+    # Literal list order matters: layer scheduling could move MZ(2) before
+    # MZ(1), reversing the recorded bits for this program.
+    measured = [Op("X", 1), Op("MZ", 1), Op("MZ", 2)]
+    for backend in (:statevector, :density_matrix, :mps)
+        @test run(measured, 3; backend=backend) == fill([1, 0], 3)
+        @test measure([Op("X", 1)], 2; N=3, backend=backend).bitstr == [4]
+        @test measure(Op[], 2; N=2, backend=backend).bitstr == [0]
+    end
+    for state in (zero_state(2), zero_state(2) * zero_state(2)', zero_state(N_MPS(2)))
+        _, bits = apply(state, measured; track_measurements=true)
+        @test bits == [1, 0]
+    end
+    damping = NoiseModel(Noise1("amplitude_damping", 1.0), false)
+    @test apply(zero_state(1), [Op("X", 1)]; noise=damping) ≈ zero_state(1)
+    @test apply(ComplexF64[1 0; 0 0], [Op("X", 1)]; noise=damping) ≈ ComplexF64[1 0; 0 0]
+    @test to_state(apply(zero_state(N_MPS(1)), [Op("X", 1)]; noise=damping)) ≈ zero_state(1)
+    @test apply(to_rho(one_state(1)), [Op("I", 1)];
+                noise=NoiseModel(Noise1("amplitude_damping", 0.3), false)) ≈ ComplexF64[0.3 0; 0 0.7]
+
+    # The existing full-state shadow estimator also accepts operations directly.
+    snapshot = shadow([Op("I", 1)], 1)
+    @test snapshot isa sa.SparseMatrixCSC
+    @test eigvals(Hermitian(Matrix(snapshot))) ≈ [-1, 2]
 end
 
 @testset "Common operation constructors" begin
@@ -81,7 +138,7 @@ end
     block = Op("prepare",[Op("X",3)])
     @test block isa OpF
     @test get_N([block]) == 3
-    @test to_state(compile([block])) ≈ apply(zero_state(3),Op("X",3))
+    @test apply(zero_state(3), [block]) ≈ apply(zero_state(3),Op("X",3))
     @test apply(zero_state(1),Op("full gate",gate.X)) ≈ one_state(1)
     @test apply(zero_state(1),Op("identity transform",identity)) ≈ zero_state(1)
     @test_throws ArgumentError Op("X",1;if1="X")
@@ -94,12 +151,12 @@ end
         calls[] += 1
         isodd(calls[]) ? apply(state, Op("X",1)) : state
     end)
-    circuit = compile([Op("I",1), callback])
-    result = measure(circuit,10;backend=:density_matrix)
+    operations = [Op("I",1), callback]
+    result = measure(operations,10;backend=:density_matrix)
     @test calls[] == 10
     @test result.expect == [0.0]
     op = Op("X",1;control=4)
-    routed = compile([op];layout=Layout(ones(Int,1,4)))
+    routed = route([op], Layout(ones(Int,1,4)))
     @test sa.sparse(routed) ≈ op.expand(4)
-    @test all(g -> g isa Op && (g.q == 1 ? abs(g.control-g.qubit)==1 : abs(g.qubit-g.target_qubit)==1), Iterators.flatten(routed.layers))
+    @test all(g -> g isa Op && (g.q == 1 ? abs(g.control-g.qubit)==1 : abs(g.qubit-g.target_qubit)==1), routed)
 end

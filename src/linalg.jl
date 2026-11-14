@@ -45,17 +45,6 @@ function Base.adjoint(ops::Vector{T}) where T<:QuantumOps
     return reverse(Base.adjoint.(ops))
 end
 
-function Base.adjoint(circ::Circuit)
-    circ2=deepcopy(circ)
-    for ops=circ2.layers
-        replace!(op -> la.ishermitian(op) ? op : adjoint(op), ops)
-    end
-
-    reverse!(circ2.layers)
-
-    return circ2
-end
-
 """
     isunitary(mat::AbstractMatrix) --> Bool
 """

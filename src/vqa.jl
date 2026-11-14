@@ -181,7 +181,7 @@ end
 Compatibility configuration for `VQA`/`VQE`. New workflows can use an operation
 list, `variational_apply(parameters, ops)`, and `train(loss, parameters)` directly.
 `ops` accepts explicit operations or gate-name layers. Initial states can be
-vectors, density matrices, MPS states, or circuits. A matrix/MPO `loss` denotes
+vectors, density matrices, or MPS states. A matrix/MPO `loss` denotes
 an expectation value; a function receives the final state.
 
 `number_of_iterations=1000` sets the iteration limit (evaluation budget for
@@ -229,8 +229,8 @@ function AnsatzOptions(; N::Int, ops::Union{Vector{String},Vector{<:QuantumOps}}
     name = _optimizer_name(model)
     name in (_prima_models..., _gradient_models...) || throw(ArgumentError("unknown optimizer: $model"))
     cutoff == -1 || (isfinite(cutoff) && cutoff >= 0) || throw(ArgumentError("cutoff must be -1 or nonnegative"))
-    state = init isa AbstractVector && isempty(init) ? zero_state(N) : init isa Circuit ? to_state(init) : copy(init)
-    state isa Union{AbstractVector,AbstractMatrix,it.MPS} || throw(ArgumentError("init must be a vector, density matrix, MPS, or circuit"))
+    state = init isa AbstractVector && isempty(init) ? zero_state(N) : copy(init)
+    state isa Union{AbstractVector,AbstractMatrix,it.MPS} || throw(ArgumentError("init must be a vector, density matrix, or MPS"))
     cutoff != -1 && !(state isa it.MPS) && throw(ArgumentError("cutoff applies only to MPS states"))
     loss isa it.MPO && !(state isa it.MPS) && throw(ArgumentError("an MPO loss requires an MPS initial state"))
     get_N(state) == N || throw(DimensionMismatch("initial state does not have N qubits"))
@@ -339,10 +339,10 @@ semantics. Differentiating sampled trajectories is rejected: use a density
 matrix for an exact noisy ensemble, or define an explicit sampling estimator.
 """
 function variational_apply(parameters::AbstractVector, ops::Vector{<:QuantumOps};
-                           init=nothing, N::Int=isnothing(init) ? get_N(ops) : init isa Circuit ? init.stats.N : get_N(init),
+                           init=nothing, N::Int=isnothing(init) ? get_N(ops) : get_N(init),
                            noise::Union{Bool,NoiseModel}=false, kwargs...)
     N > 0 || throw(ArgumentError("supply N or an initial state for an empty circuit"))
-    state = isnothing(init) ? zero_state(N) : init isa Circuit ? to_state(init) : init
+    state = isnothing(init) ? zero_state(N) : init
     state isa Union{AbstractVector,AbstractMatrix,it.MPS} || throw(ArgumentError("invalid initial state"))
     get_N(state) == N || throw(DimensionMismatch("initial state does not have N qubits"))
     get_N(ops) <= N || throw(DimensionMismatch("an operation exceeds N qubits"))

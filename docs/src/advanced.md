@@ -15,8 +15,7 @@ inverse-measurement estimators. This implementation constructs a full
 ```@example shadows
 using BlueTangle, LinearAlgebra
 ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
-circuit = compile(ops)
-rho_estimate = shadow(circuit, 1000)
+rho_estimate = shadow(ops, 1000)
 ZZ_estimate = correlation(rho_estimate, "Z,Z", [1, 2])
 @assert isapprox(real(tr(rho_estimate)), 1; atol=1e-10)
 (estimated_ZZ=ZZ_estimate, exact_ZZ=1.0)
@@ -37,11 +36,11 @@ a cut. A Bell pair gives a check with known answer: its reduced eigenvalues are
 ```@example entropy
 using BlueTangle
 ops = [Op("H", 1), Op("CX", 1, 2)]
-state = apply(ops, zero_state(2))
+state = apply(zero_state(2), ops)
 rho = state * state'
 S_vector, spectrum = entanglement_entropy(state)
 S_density = entanglement_entropy(rho; spectrum_bool=false)
-psi = apply(ops, zero_state(N_MPS(2)))
+psi = apply(zero_state(N_MPS(2)), ops)
 S_mps = entanglement_entropy(psi, 1)
 @assert isapprox(S_vector, log(2); atol=1e-12)
 @assert S_vector ≈ S_density ≈ S_mps
@@ -79,11 +78,10 @@ time = 0.6
 H = hamiltonian(N, terms)
 exact_state = evolve(zero_state(N), H, time)
 trotter_ops = hamiltonian_exp(N, time, terms; dt=0.05)
-trotter_circuit = compile(trotter_ops)
-trotter_state = to_state(trotter_circuit)
+trotter_state = apply(zero_state(N), trotter_ops)
 trotter_measurement = measure(trotter_state; label="Trotter dt=0.05")
 exact_measurement = measure(exact_state; label="Exact")
-finer_state = to_state(compile(hamiltonian_exp(N, time, terms; dt=0.025)))
+finer_state = apply(zero_state(N), hamiltonian_exp(N, time, terms; dt=0.025))
 @assert norm(finer_state-exact_state) < norm(trotter_state-exact_state)
 @assert isapprox(norm(trotter_state), 1; atol=1e-12)
 (fidelity=abs2(dot(exact_state, trotter_state)),
@@ -95,7 +93,7 @@ full evolution circuit.
 
 ```julia
 using PyPlot
-plotq(trotter_circuit.layers[1:16]; backend=:pyplot, fold=6)
+plotq(get_layers(trotter_ops)[1:16]; backend=:pyplot, fold=6)
 plotq([trotter_measurement, exact_measurement]; backend=:pyplot)
 ```
 
@@ -121,12 +119,13 @@ rotation_error = 0.2 # radians on each member of the two-qubit channel
 noise = NoiseModel(false, Noise2("rot_z", rotation_error))
 twirl_ops = [Op("H", 1), Op("H", 2), Op("CX", 1, 2),
              Op("CX", 2, 1), Op("H", 1), Op("H", 2)]
-ideal_circuit = compile(twirl_ops, Options(circuit_name="Ideal"))
-noisy_circuit = compile(twirl_ops, Options(circuit_name="Coherent noise", noise=noise))
-twirled_circuit = compile(twirl_ops,
-    Options(circuit_name="Randomized frames", noise=noise, twirl=true))
-twirl_measurements = [measure(circuit, 4000) for circuit in
-                      (ideal_circuit, noisy_circuit, twirled_circuit)]
+twirl_options = [
+    Options(circuit_name="Ideal"),
+    Options(circuit_name="Coherent noise", noise=noise),
+    Options(circuit_name="Randomized frames", noise=noise, twirl=true),
+]
+twirl_measurements = [measure(twirl_ops, 4000; options=options)
+                      for options in twirl_options]
 @assert all(m -> isapprox(sum(m.sample), 1; atol=1e-12), twirl_measurements)
 [m.expect for m in twirl_measurements]
 ```
@@ -136,7 +135,7 @@ frame gates are ideal because the model only adds two-qubit noise. Giving them
 single-qubit noise changes the comparison and can offset the benefit.
 
 ```julia
-plotq(noisy_circuit; backend=:pyplot)
+plotq(twirl_ops; backend=:pyplot)
 plotq(twirl_measurements; backend=:pyplot)
 ```
 
@@ -160,9 +159,9 @@ measurements = Measurement[]
 for pairs in 0:2
     folded = copy(base_ops)
     cnot_amplifier!(folded, pairs)
-    @assert to_state(compile(folded)) ≈ to_state(compile(base_ops))
-    circuit = compile(folded, Options(noise=noise))
-    push!(measurements, measure(circuit, 2000; backend=:density_matrix))
+    @assert apply(zero_state(2), folded) ≈ apply(zero_state(2), base_ops)
+    push!(measurements, measure(folded, 2000;
+        options=Options(noise=noise), backend=:density_matrix))
 end
 values = [correlation(m, [1, 2]) for m in measurements]
 intercept, slope, se_intercept, se_slope = linear_fit(scales, values)
@@ -190,14 +189,14 @@ readout; the response is assumed known, without calibration uncertainty.
 using BlueTangle
 readout_ops = [Op("H", 1), Op("CX", 1, 2)]
 readout_error = Noise1("bit_flip", 0.1)
-readout_circuits = [
-    compile(readout_ops, Options(circuit_name="Ideal")),
-    compile(readout_ops, Options(circuit_name="Readout error", readout_noise=readout_error)),
-    compile(readout_ops, Options(circuit_name="Inverse corrected",
-        readout_noise=readout_error, measurement_mitigate=true)),
+readout_options = [
+    Options(circuit_name="Ideal"),
+    Options(circuit_name="Readout error", readout_noise=readout_error),
+    Options(circuit_name="Inverse corrected",
+        readout_noise=readout_error, measurement_mitigate=true),
 ]
-readout_measurements = [measure(circuit, 4000; backend=:density_matrix)
-                       for circuit in readout_circuits]
+readout_measurements = [measure(readout_ops, 4000; options=options, backend=:density_matrix)
+                       for options in readout_options]
 @assert all(m -> isapprox(sum(m.sample), 1; atol=1e-12), readout_measurements)
 [correlation(m, [1, 2]) for m in readout_measurements]
 ```
@@ -213,7 +212,7 @@ and expectation values outside their physical bounds at finite shot counts.
 It does not undo gate errors or unknown/correlated readout errors. A singular
 response, such as a 50% bit flip, cannot be inverted.
 
-## 15) Layout and Nonlocal Swaps during Circuit Compilation
+## 15) Optional layout routing and nonlocal SWAPs
 
 `Layout` takes a **site-occupancy grid**, not an adjacency matrix. Positive cells
 are physical qubits; horizontally and vertically adjacent occupied cells are
@@ -226,22 +225,24 @@ layout = Layout(sparse([1 1 1; 1 0 1]))
 layout.geometry
 ```
 
-The compiler routes nonlocal two-qubit gates with swaps and restores the original
-wire ordering afterwards. A local gate needs no swaps:
+`route(ops, layout)` routes nonlocal two-qubit gates with SWAPs and restores the
+original wire ordering afterwards. It returns another operation list. A local
+gate needs no SWAPs. Ordinary `apply(state, ops)` uses the supplied gates directly;
+routing is only performed when requested:
 
 ```@example layout
 nonlocal_ops = [Op("H", 1), Op("CX", 1, 5)]
 local_ops = [Op("H", 1), Op("CX", 1, 3), Op("I", 5)]
 controlled_ops = [Op("H", 1), Op("X", 5; control=1)]
-nonlocal_circuit = compile(nonlocal_ops; layout=layout)
-local_circuit = compile(local_ops; layout=layout)
-controlled_circuit = compile(controlled_ops; layout=layout)
-@assert to_state(nonlocal_circuit) ≈ apply(nonlocal_ops, zero_state(5))
-@assert to_state(controlled_circuit) ≈ apply(controlled_ops, zero_state(5))
-@assert nonlocal_circuit.stats.swap_count > 0
-@assert local_circuit.stats.swap_count == 0
-@assert controlled_circuit.stats.swap_count > 0
-plotq(controlled_circuit)
+routed_nonlocal = route(nonlocal_ops, layout)
+routed_local = route(local_ops, layout)
+routed_controlled = route(controlled_ops, layout)
+@assert apply(zero_state(5), routed_nonlocal) ≈ apply(zero_state(5), nonlocal_ops)
+@assert apply(zero_state(5), routed_controlled) ≈ apply(zero_state(5), controlled_ops)
+@assert get_stats(routed_nonlocal).swap_count > 0
+@assert get_stats(routed_local).swap_count == 0
+@assert get_stats(routed_controlled).swap_count > 0
+plotq(routed_controlled)
 nothing # hide
 ```
 
@@ -270,7 +271,7 @@ qubit 2 is the system. There are exactly two ancilla Hadamards.
 ```@example hadamard
 using BlueTangle
 hadamard_ops = [Op("X", 2), Op("H", 1), Op("Z", 2; control=1), Op("H", 1)]
-state = apply(hadamard_ops, zero_state(2))
+state = apply(zero_state(2), hadamard_ops)
 ancilla_Z = expect(state, "Z")[1]
 @assert isapprox(ancilla_Z, -1; atol=1e-12)
 ancilla_Z
@@ -291,7 +292,7 @@ overlap is `1/2`.
 ```@example swap_test
 using BlueTangle
 swap_ops = [Op("H", 3), Op("H", 1), Op("SWAP", 2, 3; control=1), Op("H", 1)]
-state = apply(swap_ops, zero_state(3))
+state = apply(zero_state(3), swap_ops)
 overlap_squared = expect(state, "Z")[1]
 @assert isapprox(overlap_squared, 0.5; atol=1e-12)
 (p_ancilla_zero=(1+overlap_squared)/2, overlap_squared=overlap_squared)
@@ -321,8 +322,8 @@ different outcomes, so its two final pure states should not be compared directly
 ```@example monitored_mps
 using BlueTangle, LinearAlgebra, Statistics
 unitary_ops = random_ops(6, 4)
-dense = apply(unitary_ops, zero_state(6))
-psi = apply(unitary_ops, zero_state(N_MPS(6)); cutoff=0.0, maxdim=8)
+dense = apply(zero_state(6), unitary_ops)
+psi = apply(zero_state(N_MPS(6)), unitary_ops; cutoff=0.0, maxdim=8)
 @assert isapprox(abs2(dot(dense, to_state(psi))), 1; atol=1e-10)
 illustrative_ops = random_ops(6, 3; measure_prob=0.2, measure_basis=["MZ"])
 plotq(illustrative_ops)
@@ -351,7 +352,7 @@ for N in sizes, p in probabilities
     samples = Float64[]
     for repetition in 1:trajectories
         ops = random_ops(N, depth; measure_prob=p, measure_basis=["MZ"])
-        trajectory_state = apply(ops, zero_state(N_MPS(N)); cutoff=0.0, maxdim=2^(N÷2))
+        trajectory_state = apply(zero_state(N_MPS(N)), ops; cutoff=0.0, maxdim=2^(N÷2))
         push!(samples, entanglement_entropy(trajectory_state, N÷2))
     end
     @assert all(S -> -1e-10 <= S <= (N÷2)*log(2) + 1e-10, samples)

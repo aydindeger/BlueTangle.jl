@@ -25,7 +25,6 @@ end
 
 """
     phasepoly(ops; nqubits=get_N(ops), kwargs...)
-    phasepoly(circuit; kwargs...)
 
 Convert a noiseless supported circuit to PhasePoly's compact representation.
 Load `PhasePoly` first to enable this optional extension. Physical qubit labels
@@ -105,14 +104,6 @@ function BlueTangle.phasepoly(ops::Vector{<:QuantumOps}; nqubits::Int=get_N(ops)
     native = PhasePoly.simulate(program[1:leading],program[leading+1:trailing];
                                 n=nqubits, final_h=sort!(collect(final_h)), kwargs...)
     return PhasePolyState(native,global_phase)
-end
-
-function BlueTangle.phasepoly(circuit::Circuit; kwargs...)
-    options = circuit.options
-    options.noise == false && options.readout_noise == false && !options.twirl ||
-        throw(ArgumentError("PhasePoly requires a circuit without noise or twirling options."))
-    ops = QuantumOps[op for layer in circuit.layers for op in layer]
-    return BlueTangle.phasepoly(ops; nqubits=circuit.stats.N, kwargs...)
 end
 
 BlueTangle.get_N(state::PhasePolyState) = state.sim.n

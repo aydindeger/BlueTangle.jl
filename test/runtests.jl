@@ -53,12 +53,11 @@ Random.seed!(1234)
 
     end
 
-    @test begin #test sa.sparse of a circuit
+    @test begin #test sa.sparse of an operation list
 
         N=10
         depth=50
         ops=random_ops(N,depth)
-        c=compile(ops)
 
         #let's test this on a random state
         s=random_state(N)
@@ -68,7 +67,7 @@ Random.seed!(1234)
             s1=apply(s1,o)
         end
 
-        U=sa.sparse(c)
+        U=sa.sparse(ops)
         s2=U*s2
 
         isapprox(s1,s2,atol=1e-12)

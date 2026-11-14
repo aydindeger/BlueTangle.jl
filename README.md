@@ -82,12 +82,10 @@ cnot1 = Op("CNOT", 1, 2)
 cnot2 = Op("CNOT", 2, 3)
 ops = [hadamard, cnot1, cnot2]
 
-# Compile operations into a quantum circuit
-circuit = compile(ops)
-
-# Perform measurements on the circuit
+# Evolve a state directly, or prepare fresh shots from the operation list.
+state = apply(zero_state(3), ops)
 shots = 1000
-measurement = measure(circuit, shots)
+measurement = measure(ops, shots)
 
 # Output measurement details
 println("Expectation values:", measurement.expect)
@@ -100,18 +98,17 @@ println("Correlations:", correlations)
 
 ## Backends and measurement
 
-Julia 1.10 or later is required. Circuit construction is shared across backends:
+Julia 1.10 or later is required. The same operation list works across backends:
 
 ```julia
 ops = [Op("H", 1), Op("CX", 1, 2)]
-circuit = compile(ops)
-measure(circuit, 1000; backend=:statevector)
-measure(circuit, 1000; backend=:tensor, cutoff=1e-12)
-measure(circuit, 1000; backend=:density_matrix)
+measure(ops, 1000; backend=:statevector)
+measure(ops, 1000; backend=:tensor, cutoff=1e-12)
+measure(ops, 1000; backend=:density_matrix)
 ```
 
 `measure` samples final outcomes. `run` returns the explicit mid-circuit measurement
-records. Density-matrix `apply` and `to_rho` sum measurement and noise branches;
+records. Applying operations to a density matrix sums measurement and noise branches;
 `apply(...; track_measurements=true)` instead samples measurement outcomes and
 returns the conditional density matrix with its record.
 
@@ -130,9 +127,36 @@ Parameterized gates accept arithmetic and numeric functions, such as
 parameterized operations, pass a function directly: `Op("rotation", theta ->
 _RX(theta), 1)`.
 
+## Operation lists and optional routing
+
+`apply(state, ops)` evolves the supplied state in list order. The state type
+selects the backend; pass `noise=...` for gate noise and
+`track_measurements=true` to return `(state, record)`. `apply(ops, state)` remains
+available for older code, but new examples use the state-first spelling.
+
+`measure(ops, shots; options=Options(noise=noise))` prepares independent noisy
+shots. Sampling one noisy state repeatedly would instead sample one realized
+trajectory. Density-matrix evolution sums noise branches and can reuse the
+resulting ensemble. Readout noise, mitigation, measurement bases, and per-shot
+Pauli twirling remain settings in `Options`.
+
+Routing is explicit: `routed = route(ops, layout)` inserts the needed SWAPs and
+returns another operation list. `measure`, `run`, and `shadow` also accept an
+optional `layout` keyword. Without one, the given gates are applied directly.
+Use `get_stats(ops)`, `get_layers(ops)`, and `plotq(ops)` for inspection.
+
+The former `compile`, `quantum_circuit`, and `Circuit` APIs have been removed.
+Replace `to_state(compile(ops))` with `apply(zero_state(get_N(ops)), ops)` and
+`to_rho(compile(ops))` with `apply(to_rho(zero_state(get_N(ops))), ops)`.
+Save operations and settings with
+`save_data(ops, measurement; options=options, path="results.ser")`;
+`load_data` returns their `ops`, `options`, `measurement`, and `other` fields.
+Existing serialized objects containing the old `Circuit` type must first be
+loaded and exported using the earlier package version.
+
 ## Optional packages
 
-`plotq(circuit)` prints a boxed circuit diagram without a plotting dependency.
+`plotq(ops)` prints a boxed circuit diagram without a plotting dependency.
 `plotqt` remains available as a direct text renderer. For graphical output,
 install and load PyPlot, then select it explicitly:
 
@@ -140,7 +164,7 @@ install and load PyPlot, then select it explicitly:
 using Pkg
 Pkg.add("PyPlot") # once, in the environment used for plotting
 using BlueTangle, PyPlot
-fig = plotq(circuit; backend=:pyplot)
+fig = plotq(ops; backend=:pyplot)
 savefigure(fig, "circuit.png")
 ```
 
@@ -225,10 +249,10 @@ h q[0];
 cx q[0],q[1];
 """
 ops = from_qasm(source; is_file=false)
-state = to_state(compile(ops))
+state = apply(zero_state(get_N(ops)), ops)
 to_qasm(ops, "bell.qasm")
 restored = from_qasm("bell.qasm"; is_file=true)
-@assert to_state(compile(restored)) ≈ state
+@assert apply(zero_state(get_N(restored)), restored) ≈ state
 ```
 
 The importer supports an OpenQASM 2 gate subset, indexed and whole-register

@@ -3,16 +3,15 @@
 ## 1) GHZ Circuit
 
 A Hadamard followed by two CNOTs prepares
-`(|000⟩ + |111⟩)/sqrt(2)`. Collect operations, then compile them into a circuit:
+`(|000⟩ + |111⟩)/sqrt(2)`. Apply the operations directly to the initial state:
 
 ```@example ghz
 using BlueTangle
 ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
-circuit = compile(ops)
-state = to_state(circuit)
+state = apply(zero_state(get_N(ops)), ops)
 @assert correlation(state, "Z,Z", [1, 2]) ≈ 1
 @assert correlation(state, "X,X,X", [1, 2, 3]) ≈ 1
-circuit.stats
+get_stats(ops)
 ```
 
 ## 2) Measurement and Correlations
@@ -22,8 +21,8 @@ state or density matrix can evaluate other observables directly. These examples
 continue from the GHZ circuit above.
 
 ```@example ghz
-measurement = measure(circuit, 1000)
-rho = to_rho(circuit)
+measurement = measure(ops, 1000)
+rho = apply(to_rho(zero_state(3)), ops)
 exact_measurement = measure(rho) # exact basis probabilities, no shots
 @assert correlation(measurement, [1, 2]) ≈ 1
 @assert correlation(rho, "X,X,X", [1, 2, 3]) ≈ 1
@@ -68,8 +67,8 @@ probabilities of density matrices, so it isolates gate noise from sampling error
 ```@example plotting_text
 bell_ops = [Op("H", 1), Op("CX", 1, 2)]
 rho0 = zero_state(2) * zero_state(2)'
-ideal = measure(apply(bell_ops, rho0); label="Ideal")
-noisy = measure(apply(bell_ops, rho0; noise=NoiseModel("depolarizing", 0.08));
+ideal = measure(apply(rho0, bell_ops); label="Ideal")
+noisy = measure(apply(rho0, bell_ops; noise=NoiseModel("depolarizing", 0.08));
                 label="With gate noise")
 plotq([ideal, noisy], ["Ideal", "With gate noise"])
 nothing # hide
@@ -97,8 +96,7 @@ n1 = Noise1("bit_flip", 0.001)
 n2 = Noise2("depolarizing", 0.01)
 noise = NoiseModel(n1, n2)
 ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
-noisy_circuit = compile(ops, Options(noise=noise))
-rho = to_rho(noisy_circuit)
+rho = apply(to_rho(zero_state(3)), ops; noise=noise)
 @assert isapprox(real(tr(rho)), 1; atol=1e-12)
 @assert eigmin(Hermitian(Matrix(rho))) >= -1e-12
 correlation(rho, "Z,Z", [1, 2])
@@ -154,8 +152,7 @@ Both `Op("MX", 1; if0="Z", if1="H")` and `ifOp("MX", 1, "Z", "H")` express this.
 using BlueTangle
 mid_ops = QuantumOps[Op("X", 1), Op("MX", 1; if0="Z", if1="H"),
                      Op("CX", 1, 2), Op("CX", 2, 3)]
-mid_circuit = compile(mid_ops)
-mid_rho = to_rho(mid_circuit)
+mid_rho = apply(to_rho(zero_state(3)), mid_ops)
 mid_measurement = measure(mid_rho; label="Conditional circuit")
 @assert real(mid_rho[1,1]) ≈ 0.25
 @assert real(mid_rho[8,8]) ≈ 0.75
@@ -173,7 +170,7 @@ probabilities are therefore 25% `000` and 75% `111`.
 Track a particular trajectory and its record explicitly:
 
 ```@example conditional
-trajectory, record = apply(mid_ops, zero_state(3); track_measurements=true)
+trajectory, record = apply(zero_state(3), mid_ops; track_measurements=true)
 @assert length(record) == 1
 @assert only(record) in (0, 1)
 record
@@ -187,7 +184,7 @@ preserving the original pure two-qubit state.
 
 ```@example reset
 using BlueTangle, LinearAlgebra
-bell = apply([Op("H", 1), Op("CX", 1, 2)], zero_state(2))
+bell = apply(zero_state(2), [Op("H", 1), Op("CX", 1, 2)])
 reset_rho = apply(bell*bell', Op("RES", 1))
 @assert reset_rho ≈ Diagonal([0.5, 0.5, 0, 0])
 trajectory = apply(bell, Op("RES", 1))
@@ -207,8 +204,7 @@ adjacent sites. Here is one realization with X/Z measurements:
 ```@example random_circuits
 using BlueTangle
 random_ops_example = random_clifford(5, 20; measure_prob=0.2, measure_basis=["MX", "MZ"])
-random_circuit = compile(random_ops_example)
-plotq(random_circuit)
+plotq(random_ops_example)
 nothing # hide
 ```
 
@@ -274,13 +270,13 @@ conditional, record = apply(rho, Op("MZ", 1); track_measurements=true)
 (ensemble_purity=real(tr(ensemble^2)), conditional_purity=real(tr(conditional^2)))
 ```
 
-`to_rho(circuit)` and density-matrix `apply` sum unobserved noise and measurement
+Density-matrix `apply` sums unobserved noise and measurement
 branches. With `track_measurements=true`, measurement outcomes are sampled and
 returned alongside the conditional state. Statevectors and MPS states follow a
 single trajectory through stochastic operations.
 
-Use `measure(circuit, shots; backend=:statevector)`, `:density_matrix`, or
-`:tensor` to sample final outcomes. `run(circuit, shots; backend=...)` returns
+Use `measure(ops, shots; backend=:statevector)`, `:density_matrix`, or
+`:tensor` to sample final outcomes. `run(ops, shots; backend=...)` returns
 explicit mid-circuit records. On MPS, `measure(psi)` uses 1000 shots by default;
 exact probability enumeration with `measure(psi, -1)` is limited to 16 qubits
 unless the lower-level `sample_exact` limit is explicitly changed.
@@ -301,7 +297,7 @@ expect(compact, "X")                     # one expectation per physical qubit
 correlation(compact, "X,Z", [1, 2])      # native compact Pauli calculation
 amplitude(compact, [0, 1])               # amplitude of |01⟩
 state = to_state(compact)                # explicitly materialize the sparse state
-@assert state ≈ apply(ops, zero_state(2))
+@assert state ≈ apply(zero_state(2), ops)
 ```
 
 The adapter preserves BlueTangle's physical qubit labels, statevector ordering,
@@ -311,3 +307,40 @@ noise raise errors. Leading and trailing Hadamard layers use efficient native
 paths; interior Hadamards require branching, and level-4 phases can also have
 exponential cost. Native Pauli queries avoid statevector materialization in the
 single-branch case. See `?phasepoly` for phase-angle grids and cost guards.
+
+## Operation lists and migration
+
+A circuit is represented by its operations. The `compile`, `quantum_circuit`,
+and `Circuit` APIs have been removed. For an existing state, write
+`apply(state, ops)`; the earlier `apply(ops, state)` spelling still works.
+
+| Earlier expression | Operation-list expression |
+|:--|:--|
+| `to_state(compile(ops))` | `apply(zero_state(get_N(ops)), ops)` |
+| `to_rho(compile(ops))` | `apply(to_rho(zero_state(get_N(ops))), ops)` |
+| `measure(compile(ops, options), shots)` | `measure(ops, shots; options=options)` |
+| `run(compile(ops), shots)` | `run(ops, shots)` |
+| `shadow(compile(ops), shots)` | `shadow(ops, shots)` |
+| `compile(ops; layout=layout)` | `route(ops, layout)` |
+| `circuit.stats` / `circuit.layers` | `get_stats(ops)` / `get_layers(ops)` |
+| `plotq(circuit)` / `to_qasm(circuit)` | `plotq(ops)` / `to_qasm(ops)` |
+
+No routing or rescheduling happens during ordinary execution. `route` returns
+operations with explicit SWAPs for the chosen layout; `get_layers` remains
+available for inspection and plotting. Sampling functions also accept an
+optional `layout` keyword. Use `N=...` with `measure`, `run`, or `shadow` to retain
+idle qubits beyond those mentioned by the operation list.
+
+Use `measure(ops, shots; options=Options(noise=noise))` for independent noisy
+preparations. `measure(apply(state, ops; noise=noise), shots)` instead samples
+the one resulting state: for a vector or MPS, this represents one noise
+trajectory and generally gives a different experiment. Density-matrix
+execution sums noise branches before sampling. Twirling, basis choices, readout
+noise, and readout mitigation continue to use `Options`.
+
+`save_data(ops, measurement, other; options=options, path="results.ser")` stores
+the operations, execution options, measurement, and optional additional data.
+Retrieve them from `load_data(path).ops`, `.options`, `.measurement`, and `.other`.
+To migrate an existing serialized object containing the old `Circuit` type,
+load it with the earlier package version and export its operations and settings
+before upgrading; Julia cannot deserialize that removed type in this version.

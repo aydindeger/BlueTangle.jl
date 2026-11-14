@@ -1,8 +1,8 @@
 # OpenQASM import and export
 
 `from_qasm` turns an OpenQASM 2 program into an ordinary vector of BlueTangle
-operations. You can inspect or edit that vector, compile it, and choose a
-simulation backend. `to_qasm` writes the supported operations back to text or a
+operations. You can inspect or edit that vector, apply it to a state, and choose
+a simulation backend. `to_qasm` writes the supported operations back to text or a
 file.
 
 ## Import a string
@@ -18,8 +18,7 @@ h q[0];
 cx q[0], q[1];
 """
 ops = from_qasm(source; is_file=false)
-circuit = compile(ops)
-state = to_state(circuit)
+state = apply(zero_state(get_N(ops)), ops)
 @assert correlation(state, "X,X", [1, 2]) ≈ 1
 @assert correlation(state, "Z,Z", [1, 2]) ≈ 1
 (qubits=get_N(ops), gates=length(ops))
@@ -34,10 +33,10 @@ the most significant bit.
 ```@example qasm
 restored = mktempdir() do directory
     path = joinpath(directory, "bell.qasm")
-    to_qasm(circuit, path)
+    to_qasm(ops, path)
     from_qasm(path; is_file=true)
 end
-@assert to_state(compile(restored)) ≈ state
+@assert apply(zero_state(get_N(restored)), restored) ≈ state
 println(to_qasm(restored))
 ```
 
@@ -65,7 +64,7 @@ qreg anc[2];
 h data;
 cx data, anc;
 """)
-state = to_state(compile(ops))
+state = apply(zero_state(get_N(ops)), ops)
 @assert get_N(ops) == 4
 @assert correlation(state, "Z,Z", [1, 3]) ≈ 1
 @assert correlation(state, "Z,Z", [2, 4]) ≈ 1
@@ -103,7 +102,7 @@ arbitrary classical-register assignments. Classical `if` statements are rejected
 express feed-forward directly with BlueTangle's conditional `Op` or `ifOp` when
 constructing a circuit in Julia.
 
-For final sampling, call `measure(compile(from_qasm(source)), shots;
+For final sampling, call `measure(from_qasm(source), shots;
 backend=:density_matrix)` or choose `:statevector` or `:tensor`. In the example
 above the explicit reset leaves the final state in `|00⟩`, although the earlier
 record is `[0,1]`.
