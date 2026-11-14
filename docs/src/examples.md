@@ -625,7 +625,10 @@ Consider the open-chain Ising Hamiltonian
 H=-J\sum_{i=1}^{N-1}X_iX_{i+1}-h\sum_{i=1}^{N}Z_i.
 ```
 
-`hamiltonian_exp` approximates `exp(-im*time*H)` by first-order product steps.
+`hamiltonian_exp` approximates `exp(-im*time*H)` with `order=1`, `2`, or `4`.
+The default remains first order; second order uses symmetric Strang steps, and
+fourth order composes three Strang steps using
+[Yoshida's coefficients](https://doi.org/10.1016/0375-9601(90)90092-3).
 Compare against exact evolution at the same time, using exact outcome
 probabilities so that shot noise does not obscure the Trotter error.
 
@@ -646,6 +649,27 @@ finer_state = apply(zero_state(N), hamiltonian_exp(N, time, terms; dt=0.025))
 (fidelity=abs2(dot(exact_state, trotter_state)),
  error_dt=norm(trotter_state-exact_state), error_half_dt=norm(finer_state-exact_state))
 ```
+
+Compare the error and gate count at the same step size:
+
+```@example trotter
+map((1, 2, 4)) do order
+    ops = hamiltonian_exp(N, time, terms; dt=0.05, order=order)
+    state = apply(zero_state(N), ops)
+    (order=order, gates=length(ops), error=norm(state-exact_state))
+end
+```
+
+At fixed total time, halving a sufficiently small `dt` reduces the leading error
+by approximately 2, 4, or 16 for the three orders. Fourth order uses a negative
+middle substep and more gates per step, so the cheapest choice depends on the
+Hamiltonian and desired accuracy. Consecutive commuting terms are grouped,
+repeated blocks at stage and step boundaries are merged, and zero couplings
+produce no gates. If every term commutes, one exact block suffices.
+
+The final step is shortened to reach `time` exactly, including negative times.
+Use `full=false` to request a single step of duration `dt`, with the sign of
+`time` (positive when `time == 0`), instead of the full evolution.
 
 The first 16 scheduled layers are shown below; this is only a preview of the
 full evolution circuit.
