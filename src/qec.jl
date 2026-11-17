@@ -418,6 +418,13 @@ function _qec_conjugate_gate!(v, name, q, t=-1)
         return _qec_conjugate_gate!(v, "SD", t) *
                _qec_conjugate_gate!(v, "CX", q, t) *
                _qec_conjugate_gate!(v, "S", t)
+    elseif name == "ISWAP"
+        # iSWAP = SWAP * CZ * (S ⊗ S): conjugate in that order of application.
+        sign = _qec_conjugate_gate!(v, "S", q) * _qec_conjugate_gate!(v, "S", t) *
+               _qec_conjugate_gate!(v, "CZ", q, t)
+        v[q], v[t] = v[t], v[q]
+        v[n+q], v[n+t] = v[n+t], v[n+q]
+        return sign
     elseif name in ("I", "X", "Y", "Z")
         anticommutes = name == "X" ? z : name == "Z" ? x : name == "Y" ? xor(x, z) : 0
         return anticommutes == 1 ? -1 : 1

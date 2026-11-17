@@ -14,7 +14,7 @@ package, so it takes longer than later runs.
 ## Suggested order
 
 The numbering preserves the existing examples; the learning order is
-**01 → 02 → 04 → 05 → 06 → 03**.
+**01 → 02 → 04 → 05 → 06 → 03**. Example 07 needs only 01 and 02 and can follow them directly.
 
 | Example | Question it answers | Simulation and cost |
 |:--|:--|:--|
@@ -23,6 +23,7 @@ The numbering preserves the existing examples; the learning order is
 | [04: Codes and distances](04_codes_and_distance.jl) | What distinguishes Shor, Steane, and Reed–Muller codes, and how is distance verified? | Bounded support search and statevectors up to 15 qubits |
 | [05: Noisy syndrome cycle](05_noisy_syndrome_cycle.jl) | How do verified cats and repeated syndromes protect a noisy recovery cycle? | One Steane block plus five Shor ancillas; small statevectors |
 | [06: Distillation walkthrough](06_distillation_walkthrough.jl) | Why does 15-to-1 reject one bad raw input but sometimes accept three? | Six-wire physical reference circuit and exact probability formulas |
+| [07: Fault-tolerant logical iSWAP](07_fault_tolerant_iswap.jl) | How can a two-qubit gate be fault tolerant with an error-detecting code, and why does the [[4,2,2]] code not suffice? | 12-qubit statevector, single-fault audit and fast Pauli-frame sampling; about 30 s |
 | [03: Full factory and phase estimation](03_noisy_phase_estimation.jl) | How does an algorithm obtain and consume a newly distilled resource on every trial? | Up to 42 entangled MPS wires; 47 physical wires including factory ancillas; more expensive |
 
 The first five are small standalone calculations. Example 03 simulates many
@@ -184,3 +185,25 @@ The [factory guide](../../docs/src/magic_factory.md) derives the protocol and
 resource counts and describes the single-fault checks and multi-fault
 simulations. These examples do not establish a threshold or a noisy advantage
 over an unencoded algorithm.
+
+## 7. A fault-tolerant logical iSWAP
+
+```sh
+julia --project=. examples/qec/07_fault_tolerant_iswap.jl
+```
+
+Two [[6,2,2]] blocks sit on two rows of six qubits. `c6_prepare` encodes each row with
+eight nearest-neighbour CNOTs, and `c6_iswap` applies one ISWAP to each vertical pair:
+a logical iSWAP on both logical pairs at once. On √iSWAP hardware each ISWAP is two
+native gates. The script first checks the logical outcomes in the statevector simulator.
+It then audits every single fault: none is both undetected and harmful. Finally it samples
+Pauli faults with `sample_pauli_frames`. After eight logical iSWAPs, the error of the kept
+shots falls as `p²` (slope about 2.0), while bare qubits and a [[4,2,2]] block fall as `p`.
+The last table repeats the comparison with noise on every gate, including preparation
+and readout, as an experiment would see it.
+
+The [[4,2,2]] code is the usual first choice for small demonstrations. Its logical
+operators all have even X and Z weight, so no transversal circuit gives a logical iSWAP. A physical
+iSWAP inside one block is a logical iSWAP, but the faults XX, YY and ZZ after it are
+undetectable. The [logical iSWAP guide](../../docs/src/ft_iswap.md) explains the code
+and the argument.

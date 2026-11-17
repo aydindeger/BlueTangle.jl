@@ -21,6 +21,7 @@ export steane_readout, steane_measure, steane_t
 export shor_code, reed_muller_code, code_distance
 export raw_magic_state, distill15, distillation15_supports, distillation15_statistics
 export steane_raw_magic, steane_distill15
+export c6_code, c6_logicals, c6_prepare, c6_iswap, c6_readout, c6_decode, c6_single_faults, sample_pauli_frames
 export entanglement_entropy, shadow, mag_moments
 export to_MPS, to_state, inner, amplitude
 export it, its, sa, la, sb, pr #Packages

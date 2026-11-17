@@ -37,6 +37,20 @@ function pauli_syndrome(code::StabilizerCode, errors::Union{Op,AbstractVector})
     return _qec_pauli_syndrome(code, _qec_pauli_vector(errors, code.n))
 end
 
+function _qec_check_clifford(op)
+    op isa Op || throw(ArgumentError("Pauli propagation requires unitary Clifford operations"))
+    single = op.name in ("I", "X", "Y", "Z", "H", "S", "SD")
+    pair = op.name in ("CX", "CNOT", "CY", "CZ", "SWAP", "ISWAP")
+    (single || pair) && op.q == (single ? 1 : 2) && op.control == -2 &&
+        op.mat isa AbstractMatrix &&
+        isapprox(op.mat, gates(op.name); atol=1e-12, rtol=1e-12) ||
+        throw(ArgumentError("unsupported Clifford operation: $(op.name)"))
+    op.qubit >= 1 && (single ? op.target_qubit == -1 :
+        op.target_qubit >= 1 && op.target_qubit != op.qubit) ||
+        throw(ArgumentError("Clifford operation has invalid qubit indices"))
+    return nothing
+end
+
 """
     propagate_pauli(errors, circuit; nqubits=nothing) -> Vector{Op}
 
@@ -46,10 +60,10 @@ are applied in their listed order. To inject a fault after gate `j`, propagate
 through `circuit[j+1:end]`.
 
 Supported gates are `I`, `X`, `Y`, `Z`, `H`, `S`, `SD`, `CX`/`CNOT`, `CY`, `CZ`,
-and `SWAP`, with their built-in matrices and no extra controls. Measurements,
-resets, channels, custom matrices, and non-Clifford gates are rejected. The
-`noisy` flags do not sample noise: this is exact algebra for a specified Pauli
-fault and an otherwise ideal Clifford circuit.
+`SWAP`, and `ISWAP`, with their built-in matrices and no extra controls.
+Measurements, resets, channels, custom matrices, and non-Clifford gates (such as
+√iSWAP) are rejected. The `noisy` flags do not sample noise: this is exact
+algebra for a specified Pauli fault and an otherwise ideal Clifford circuit.
 
 The returned single-qubit Pauli operations have `noisy=false`, are sorted by
 qubit, and omit identity factors. The register size is inferred from both inputs
@@ -63,16 +77,7 @@ function propagate_pauli(errors::Union{Op,AbstractVector}, circuit::AbstractVect
         largest_qubit = max(largest_qubit, op.qubit)
     end
     for op in circuit
-        op isa Op || throw(ArgumentError("Pauli propagation requires unitary Clifford operations"))
-        single = op.name in ("I", "X", "Y", "Z", "H", "S", "SD")
-        pair = op.name in ("CX", "CNOT", "CY", "CZ", "SWAP")
-        (single || pair) && op.q == (single ? 1 : 2) && op.control == -2 &&
-            op.mat isa AbstractMatrix &&
-            isapprox(op.mat, gates(op.name); atol=1e-12, rtol=1e-12) ||
-            throw(ArgumentError("unsupported Clifford operation: $(op.name)"))
-        op.qubit >= 1 && (single ? op.target_qubit == -1 :
-            op.target_qubit >= 1 && op.target_qubit != op.qubit) ||
-            throw(ArgumentError("Clifford operation has invalid qubit indices"))
+        _qec_check_clifford(op)
         largest_qubit = max(largest_qubit, op.qubit, op.target_qubit)
     end
     n = isnothing(nqubits) ? largest_qubit : nqubits

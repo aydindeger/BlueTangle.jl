@@ -310,6 +310,28 @@ fault propagation, code distances, and the distillation protocol. See the
 [QEC documentation](https://deger.xyz/BlueTangle.jl/qec/) for the derivations,
 noise assumptions, resource counts, and MPS accuracy controls.
 
+### A fault-tolerant logical iSWAP
+
+Two [[6,2,2]] blocks on two rows of six qubits give a logical iSWAP made of native
+gates. One physical iSWAP (two √iSWAPs) on each pair of corresponding qubits applies a
+logical iSWAP to both logical pairs at once. Any single fault in the encoder, the gate or
+the readout is detected or harmless:
+
+```julia
+using BlueTangle
+
+circuit = vcat(c6_prepare(:X; block=1), c6_prepare(:Z; block=2), c6_iswap(),
+               c6_readout(:Z; block=1), c6_readout(:Y; block=2))
+c6_single_faults(circuit).harmful                  # 0
+shot = c6_decode(int2bin(sample(apply(zero_state(12), circuit), 1)[1], 12), (:Z, :Y))
+```
+
+`sample_pauli_frames` samples depolarizing faults through such Clifford circuits quickly.
+[Example 07](examples/qec/07_fault_tolerant_iswap.jl) uses it to show the kept-shot error
+falling as `p²`, against `p` for bare qubits and for a single [[4,2,2]] block. The
+[logical iSWAP guide](https://deger.xyz/BlueTangle.jl/ft_iswap/) explains why the [[4,2,2]]
+code cannot do this.
+
 ## Hamiltonian evolution
 
 `hamiltonian_exp` approximates `exp(-im*time*H)`, matching `hamiltonian` and the

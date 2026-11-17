@@ -15,6 +15,7 @@ makedocs(
         "Quantum Error Correction" => [
             "Overview and encoded algorithms" => "qec.md",
             "Noisy fault-tolerant gadgets" => "fault_tolerance.md",
+            "A fault-tolerant logical iSWAP" => "ft_iswap.md",
             "Codes, distances, and magic-state factories" => "magic_factory.md"
         ],
         "OpenQASM" => "qasm.md",
