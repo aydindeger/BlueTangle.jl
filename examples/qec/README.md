@@ -14,7 +14,7 @@ package, so it takes longer than later runs.
 ## Suggested order
 
 The numbering preserves the existing examples; the learning order is
-**01 → 02 → 04 → 05 → 06 → 03**.
+**01 → 02 → 04 → 05 → 07 → 06 → 03**.
 
 | Example | Question it answers | Simulation and cost |
 |:--|:--|:--|
@@ -22,10 +22,11 @@ The numbering preserves the existing examples; the learning order is
 | [02: Fault propagation](02_fault_propagation.jl) | Why are transversal gates safe against one gate fault, while a bare syndrome ancilla can be dangerous? | Fast binary Pauli propagation; no large statevector |
 | [04: Codes and distances](04_codes_and_distance.jl) | What distinguishes Shor, Steane, and Reed–Muller codes, and how is distance verified? | Bounded support search and statevectors up to 15 qubits |
 | [05: Noisy syndrome cycle](05_noisy_syndrome_cycle.jl) | How do verified cats and repeated syndromes protect a noisy recovery cycle? | One Steane block plus five Shor ancillas; small statevectors |
+| [07: Logical teleportation](07_logical_teleportation.jl) | How do the two Bell readouts remove a physical source error while transferring a complex logical state? | Three seven-qubit blocks in the joint MPS |
 | [06: Distillation walkthrough](06_distillation_walkthrough.jl) | Why does 15-to-1 reject one bad raw input but sometimes accept three? | Six-wire physical reference circuit and exact probability formulas |
 | [03: Full factory and phase estimation](03_noisy_phase_estimation.jl) | How does an algorithm obtain and consume a newly distilled resource on every trial? | Up to 42 entangled MPS wires; 47 physical wires including factory ancillas; more expensive |
 
-The first five are small standalone calculations. Example 03 simulates many
+The examples leading up to 03 are standalone calculations. Example 03 simulates many
 physical preparations, gates, checks, retries, and readouts for each logical T.
 Its cost depends on noise, rejected attempts, and MPS entanglement. The physical
 wire count and simulation representation are different quantities: independent
@@ -119,7 +120,19 @@ initially `5e-4`. The script prints the records needed to follow the cycle.
 The detailed derivation and callback convention
 are in the [noisy-gadget guide](../../docs/src/fault_tolerance.md).
 
-## 5. Magic-state distillation
+## 5. Logical teleportation
+
+```sh
+julia --project=. examples/qec/07_logical_teleportation.jl
+```
+
+The source carries a complex logical state and a physical Y error. Its
+phase-flip and bit-flip components appear in the source X and sender Z
+readouts respectively. Vary `fault_site` to see both readouts identify
+the damaged wire. The receiver's decoded fidelity should be one to numerical
+precision in every branch.
+
+## 6. Magic-state distillation
 
 ```sh
 julia --project=. examples/qec/06_distillation_walkthrough.jl
@@ -141,7 +154,7 @@ pass a gate-noise model to `distill15`. This unencoded reference is for learning
 and verification. Example 03 uses
 `steane_distill15` to protect the distillation circuit itself.
 
-## 6. Phase estimation with a resource factory
+## 7. Phase estimation with a resource factory
 
 ```sh
 julia --project=. examples/qec/03_noisy_phase_estimation.jl

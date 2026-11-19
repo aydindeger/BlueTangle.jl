@@ -115,7 +115,7 @@ end
     trace = NamedTuple[]
     tags = (factory_attempt=1, component=:raw, block=0, resource=3)
     observed = NamedTuple[]
-    child = BlueTangle._factory_call(trace, tags, event -> (push!(observed, event); Op[])) do callback
+    child = BlueTangle._qec_call_with_trace(trace, tags, event -> (push!(observed, event); Op[])) do callback
         raw_magic_state(; phase_error=1.0, fault=callback)
     end
     @test length(trace) == length(observed) == length(child.trace) == 3
@@ -126,7 +126,7 @@ end
 
     # Record a second component before a heralded interruption. Previously
     # completed components keep their records and global indices stay unique.
-    @test_throws QECProtocolFailure BlueTangle._factory_call(trace, tags, nothing) do callback
+    @test_throws QECProtocolFailure BlueTangle._qec_call_with_trace(trace, tags, nothing) do callback
         callback((index=1, kind=:measure, stage=:test, round=0, check=0,
                   attempt=1, op=Op("MZ", 1)))
         throw(QECProtocolFailure("deliberate test interruption"))

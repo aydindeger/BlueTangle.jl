@@ -63,24 +63,6 @@ function _steane_distillation15_steps()
     return steps
 end
 
-# Child gadgets run on independent small registers where possible. Preserve
-# their local wire convention and label the component, block, and raw column.
-# Recording before each callback also retains the work of aborted attempts.
-function _factory_call(f, trace, tags, fault)
-    first = length(trace)
-    function record_fault(location)
-        event = merge(location, tags,
-                      (index=first+location.index, local_index=location.index, outcome=nothing))
-        push!(trace, event)
-        return fault === nothing ? Op[] : fault(event)
-    end
-    result = f(record_fault)
-    for (i, location) in enumerate(result.trace)
-        trace[first+i] = merge(location, tags, (index=first+i, local_index=i))
-    end
-    return result
-end
-
 """
     steane_distill15(; noise=false, prep_error=0.0, measurement_error=0.0,
                      raw_error=0.0, dagger=false, max_attempts=20,
@@ -149,7 +131,7 @@ function steane_distill15(; noise::Union{Bool,NoiseModel}=false,
             blocks = it.MPS[]
             for b in 1:5
                 tags = (factory_attempt=attempt, component=:data_prepare, block=b, resource=0)
-                prepared = _factory_call(trace, tags, fault) do callback
+                prepared = _qec_call_with_trace(trace, tags, fault) do callback
                     steane_prepare(:plus; noise=noise, prep_error=prep_error,
                         measurement_error=measurement_error, fault=callback,
                         max_rounds=max_rounds, max_attempts=max_cat_attempts)
@@ -166,7 +148,7 @@ function steane_distill15(; noise::Union{Bool,NoiseModel}=false,
                 end
                 raw_states += 1
                 tags = (factory_attempt=attempt, component=:raw, block=0, resource=column)
-                raw = _factory_call(trace, tags, fault) do callback
+                raw = _qec_call_with_trace(trace, tags, fault) do callback
                     steane_raw_magic(; noise=noise, prep_error=prep_error,
                         measurement_error=measurement_error, raw_error=raw_error,
                         dagger=dagger, fault=callback, max_rounds=max_rounds,
@@ -174,7 +156,7 @@ function steane_distill15(; noise::Union{Bool,NoiseModel}=false,
                 end
                 resource = to_MPS(raw.state, N_MPS(7); cutoff=0.0)
                 tags = (factory_attempt=attempt, component=:injection, block=5, resource=column)
-                injected = _factory_call(trace, tags, fault) do callback
+                injected = _qec_call_with_trace(trace, tags, fault) do callback
                     steane_t(code, state, resource; block=5, dagger=dagger,
                              noise=noise, measurement_error=measurement_error, fault=callback, cutoff=cutoff)
                 end
@@ -188,7 +170,7 @@ function steane_distill15(; noise::Union{Bool,NoiseModel}=false,
             bits = Int[]
             for b in 1:4
                 tags = (factory_attempt=attempt, component=:check_readout, block=b, resource=0)
-                measured = _factory_call(trace, tags, fault) do callback
+                measured = _qec_call_with_trace(trace, tags, fault) do callback
                     steane_measure(steane_code(6-b), state; block=1, basis=:X,
                                    noise=noise, measurement_error=measurement_error, fault=callback, cutoff=cutoff)
                 end
@@ -210,7 +192,7 @@ function steane_distill15(; noise::Union{Bool,NoiseModel}=false,
                 output, _ = _qec_run_location(output, op, context, trace; noise=noise, fault=fault)
             end
             tags = (factory_attempt=attempt, component=:output_correction, block=1, resource=0)
-            corrected = _factory_call(trace, tags, fault) do callback
+            corrected = _qec_call_with_trace(trace, tags, fault) do callback
                 shor_qec_round(steane_code(), output; noise=noise, prep_error=prep_error,
                     measurement_error=measurement_error, fault=callback,
                     max_rounds=max_rounds, max_attempts=max_cat_attempts)

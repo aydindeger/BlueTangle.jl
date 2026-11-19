@@ -16,16 +16,16 @@ This section develops the workflow in three parts:
 - **Overview and encoded algorithms** (this page): stabilizer codes, logical
   gates, and ideal correction rounds.
 - [Noisy fault-tolerant gadgets](fault_tolerance.md): physical preparation,
-  verified syndrome extraction, logical T consumption, and readout.
+  verified syndrome extraction, logical teleportation, logical T consumption,
+  and readout.
 - [Codes, distances, and magic-state factories](magic_factory.md): code
   comparisons, distance searches, noisy raw resources, and encoded distillation.
 
 The [QEC example learning path](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/qec/README.md)
 provides runnable steps in the order Bell pair → fault propagation → code
-distance → noisy syndrome cycle → distillation → full noisy algorithm. Its
-first five examples are small calculations; the last includes the encoded
-MPS resource factory. Each step explains what to edit and how to interpret
-its output.
+distance → noisy syndrome cycle → logical teleportation → distillation →
+full noisy algorithm. The last example includes the encoded MPS resource
+factory. Each step explains what to edit and how to interpret its output.
 
 ## Start developing encoded algorithms
 

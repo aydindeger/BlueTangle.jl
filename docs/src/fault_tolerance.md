@@ -2,8 +2,8 @@
 
 BlueTangle supplies a concrete distance-three Steane workflow: physical logical
 zero/plus preparation, verified Shor syndrome extraction, transversal Clifford
-gates, logical T/T† consumption, and destructive logical X/Z readout. These are
-small statevector or MPS simulations of physical circuits. They use the same
+gates, logical teleportation, logical T/T† consumption, and destructive logical
+X/Z readout. These small statevector or MPS simulations use the same
 `steane_code` convention as the [QEC tutorial](qec.md).
 
 `steane_t` consumes an explicitly supplied encoded magic state. The small
@@ -132,6 +132,64 @@ still grow with entanglement; these examples do not establish scalability.
 factory sets it explicitly. This numerical truncation is separate from the
 physical noise model and should be varied when checking simulation convergence.
 
+## Fault-tolerant logical teleportation
+
+`steane_teleport(code, state; block=1)` moves the selected encoded qubit
+onto a fresh seven-qubit receiver. The receiver takes the source block's
+position in the returned register, so subsequent logical gates use the same
+block number. If the source was entangled with another block, the receiver
+inherits that entanglement.
+
+The circuit uses the source and two new Steane blocks.
+
+1. Prepare the sender in logical plus and the receiver in logical zero with
+   `steane_prepare`. A transversal CNOT from sender to receiver makes the
+   logical Bell pair ``(|0_L 0_L\rangle + |1_L 1_L\rangle)/\sqrt{2}``.
+2. Apply a transversal CNOT from source to sender. Destructively measure the
+   source in X and the sender in Z. Decode each seven-bit word with
+   `steane_readout` to obtain the bits `x = result.x_readout.outcome` and
+   `z = result.z_readout.outcome`.
+3. Before feed-forward, the receiver holds ``X_L^z Z_L^x |\psi_L\rangle``.
+   Apply logical X if `z == 1`, then logical Z if `x == 1`. For example,
+   `(x, z) = (1, 0)` calls for Z alone. Every branch returns the same
+   logical state up to a global phase.
+
+```@example logical_teleportation
+using BlueTangle, LinearAlgebra
+code = steane_code()
+logical = normalize(ComplexF64[1, 0.2 + 0.7im])
+result = steane_teleport(code, code.encode(logical))
+fidelity = abs2(dot(logical, code.decode(result.state)))
+@assert get_N(result.state) == 7 && isapprox(fidelity, 1; atol=1e-9)
+(x=result.x_readout.outcome, z=result.z_readout.outcome, fidelity=fidelity)
+```
+
+Here `code.encode` supplies a known input and `code.decode` checks the
+output. The two resource preparations, Bell measurement and conditional
+corrections are physical circuits within the simulation. Vectors and MPS
+inputs retain their respective output representations. The joint circuit uses
+an MPS, with `cutoff` controlling its numerical truncation.
+
+Both CNOT layers couple matching positions across blocks. A single faulty
+CNOT in either layer can affect only one position in each block, even if
+both operands acquire a Pauli error. The Hamming decoder corrects
+one changed bit in each measured word before its parity controls a logical
+correction. Thus one incoming Pauli on the source is removed by an otherwise
+ideal transfer. With a clean input, one circuit fault can leave a correctable
+physical error on the receiver. For example, a fault on a receiver wire
+after the final correction is still present in `result.state`. Classical
+decoding and control are assumed reliable. This use of an encoded Bell
+measurement for recovery is described by [Aliferis, Gottesman and Preskill,
+§7.2.3 and Fig. 8](https://preskill.caltech.edu/pubs/preskill-2006-threshold.pdf).
+
+The single-fault example inserts Y on source wire 3. Both readouts identify
+wire 3, even as their logical outcomes vary from run to run.
+[Run the example](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/qec/07_logical_teleportation.jl).
+
+To simulate stochastic faults, pass `noise`, `prep_error` and
+`measurement_error` as in the Shor examples above. Resource preparation can
+raise `QECProtocolFailure` if its retry bounds are exhausted.
+
 ## Worked example: noisy syndrome extraction
 
 Before running the resource factory, follow one small syndrome cycle:
@@ -252,6 +310,12 @@ These recovery claims use the default Steane decoder. A custom decoder is
 checked for syndrome consistency. A recovery can match the syndrome and still
 leave a logical error, so custom decoders require separate validation.
 
+The teleportation audit starts with the Bell-pair CNOT after the two resource
+preparations. Across the four feed-forward branches, it propagates 1,176
+single-location Pauli faults. Each flips at most one bit per measured word and
+affects at most one receiver qubit. A separate trajectory test teleports one
+half of an entangled state and checks the joint output.
+
 The injection tests compare T/T† with the intended logical action, including an
 entangled input, both feed-forward branches, physical CNOT/input/resource/
 readout/correction faults, and a logical-resource-error negative control.
@@ -264,6 +328,7 @@ from the outer 15-to-1 filter, and derives its ideal-Clifford error formula.
 shor_qec_round
 shor_syndrome_circuit
 steane_prepare
+steane_teleport
 steane_t
 steane_measure
 steane_readout

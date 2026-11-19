@@ -305,6 +305,10 @@ julia --project=. examples/qec/05_noisy_syndrome_cycle.jl
 julia --project=. examples/qec/03_noisy_phase_estimation.jl
 ```
 
+`steane_teleport(code, state; block=1)` transfers an encoded qubit to a fresh
+Steane block. The [teleportation example](examples/qec/07_logical_teleportation.jl)
+shows how both Bell readouts locate a physical Y error on the source.
+
 The [QEC learning path](examples/qec/README.md) also covers logical Bell pairs,
 fault propagation, code distances, and the distillation protocol. See the
 [QEC documentation](https://deger.xyz/BlueTangle.jl/qec/) for the derivations,

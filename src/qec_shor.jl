@@ -52,6 +52,23 @@ function _qec_run_location(state, op::Op, context::NamedTuple, record::Vector;
     return state, bit
 end
 
+# Keep local wire numbers when a child gadget runs on its own register.
+# Record each location before its callback so a heralded abort retains its work.
+function _qec_call_with_trace(f, trace, tags, fault)
+    first = length(trace)
+    function record_fault(location)
+        event = merge(location, tags,
+                      (index=first+location.index, local_index=location.index, outcome=nothing))
+        push!(trace, event)
+        return fault === nothing ? Op[] : fault(event)
+    end
+    result = f(record_fault)
+    for (i, location) in enumerate(result.trace)
+        trace[first+i] = merge(location, tags, (index=first+i, local_index=i))
+    end
+    return result
+end
+
 function _qec_check_error_probabilities(prep_error, measurement_error)
     all(p -> isfinite(p) && 0 <= p <= 1, (prep_error, measurement_error)) ||
         throw(ArgumentError("preparation and measurement error probabilities must lie in [0,1]"))
