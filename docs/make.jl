@@ -11,7 +11,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Examples" => "examples.md",
-        "Clifford-Augmented MPS (CAMPS)" => "camps.md",
+        "Backends" => "backends.md",
         "Quantum Machine Learning" => "qml.md",
         "Quantum Error Correction" => [
             "Overview and encoded algorithms" => "qec.md",

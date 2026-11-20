@@ -42,7 +42,7 @@ sweeps (`disentangle=true`, `nsweeps=2`), and update `mps` with configurable
 
 Because `tableau` represents `C` up to a global phase, `to_state` and `to_MPS`
 reproduce the physical state up to a single global phase, whereas `to_rho`,
-`expect`, `correlation`, `fidelity`, `sample`, `measure`, `run`, `shadow`, and
+`expect`, `correlation`, `fidelity`, `sample`, `measure`, `shadow`, and
 `qec_round` are independent of global phase.
 """
 mutable struct CAMPSState
@@ -434,8 +434,9 @@ or a named whole-register block (`Op(name, operations_or_matrix_or_callback)`).
 These constructors return `OpQC`, `ifOp`, or `OpF` as appropriate.
 
 `Op("RESET", qubit)` and `Op("RES", qubit)` return the ideal reset channel to
-`|0⟩`. Reset adds no measurement bit to a `run` record.
-Use `run(state, ifOp("MZ", qubit, "I", "X"))` to retain the pre-reset outcome.
+`|0⟩`. Reset adds no measurement bit when tracking mid-circuit measurements.
+Use `apply(state, ifOp("MZ", qubit, "I", "X"); track_measurements=true)` (or
+`measure(...).mid_measurements`) to retain the pre-reset outcome.
 Those explicit feedback gates receive gate noise by default; use
 `Op("I", qubit; noisy=false)` and `Op("X", qubit; noisy=false)` as the branches
 when the correction should be ideal under a gate-noise model.
@@ -713,10 +714,11 @@ For example, `ifOp("MZ", 1, Op("I", 1), Op("X", 2))` flips qubit 2 only when
 qubit 1 is measured as 1. Equivalently, use the common constructor
 `Op("MZ", 1; if0=Op("I", 1), if1=Op("X", 2))`.
 
-Vector and MPS evolution sample the measurement. `apply(rho, op)` sums both
-branches; `run(rho, op)` returns a conditional state and its record.
+Vector, MPS, and CAMPS evolution sample the measurement. `apply(rho, op)` sums
+both branches; `apply(rho, op; track_measurements=true)` returns a conditional
+density matrix and its measurement record.
 Records include the outer outcome followed by measurements in the chosen
-branch. MPS `cutoff` and `maxdim` settings also apply to branch operations.
+branch. MPS and CAMPS truncation settings also apply to branch operations.
 """
 struct ifOp <: QuantumOps
     q::Int
@@ -875,8 +877,7 @@ end
 
 """
     Options(; circuit_name="circuit", measurement_basis="Z", noise=false,
-              twirl=false, readout_noise=false, measurement_mitigate=false,
-              density_matrix=false)
+              twirl=false, readout_noise=false, measurement_mitigate=false)
 
 Configure circuit execution and final measurement. `noise` accepts a `NoiseModel`;
 `readout_noise` accepts a single-qubit channel applied before final readout.
@@ -884,9 +885,7 @@ Configure circuit execution and final measurement. `noise` accepts a `NoiseModel
 signed estimates at finite shot counts. It requires an invertible response whose
 output populations do not depend on input coherences; other channels are rejected.
 These weights sum to one but may be negative; observable estimates can exceed
-their physical range due to sampling error. `density_matrix` requests storage
-of the final density matrix in measurement results; select the simulation
-backend separately with `measure(ops, shots; options, backend=:density_matrix)`.
+their physical range due to sampling error.
 
 `twirl=true` enables Pauli twirling of supported two-qubit gates. Routing swap
 noise is configured separately through `Layout(...; noisy_swap=true)`.
@@ -898,7 +897,6 @@ mutable struct Options
     twirl::Bool
     readout_noise::AbstractQuantumChannel
     measurement_mitigate::Bool
-    density_matrix::Bool
 
     # Constructor with default values
     Options(;
@@ -907,9 +905,8 @@ mutable struct Options
         noise=false,
         twirl::Bool=false,
         readout_noise=false,
-        measurement_mitigate::Bool=false,
-        density_matrix::Bool=false
-    ) = new(circuit_name, uppercase(measurement_basis), noise, twirl, readout_noise, measurement_mitigate, density_matrix)
+        measurement_mitigate::Bool=false
+    ) = new(circuit_name, uppercase(measurement_basis), noise, twirl, readout_noise, measurement_mitigate)
 end
 
 function sa.sparse(ops::Vector{<:QuantumOps})
@@ -922,8 +919,8 @@ hilbert(ops::Vector{<:QuantumOps}) = sa.sparse(ops)
 """
     Measurement
 
-Measurement statistics returned by `measure` or constructed from existing
-integer draws with `Measurement(draws, N)`.
+Device-like measurement outcomes returned by `measure` or constructed from
+existing integer draws with `Measurement(draws, N)`.
 
 - `bitstr`: Integer labels of computational-basis outcomes.
 - `sample`: Probabilities, sampled frequencies, or signed weights after readout mitigation.
@@ -933,8 +930,10 @@ integer draws with `Measurement(draws, N)`.
 - `number_of_experiment`: Shot count, or `-1` for exact probabilities.
 - `circuit_name`: Label supplied by the caller.
 - `number_of_qubits`: Register size.
-- `density_matrix`: Stored density matrix when available; otherwise a sparse zero placeholder,
-  with size 0×0 for registers above 16 qubits.
+- `mid_measurements`: Per-shot vectors of explicit mid-circuit measurement bits
+  (`MX`, `MY`, `MZ`, `MR`, `ifOp`) recorded in operation order; empty when the
+  circuit contains no explicit mid-circuit measurements or when summarizing a
+  state/draw vector directly.
 """
 struct Measurement
     bitstr::Union{Vector, UnitRange}
@@ -945,8 +944,13 @@ struct Measurement
     number_of_experiment::Int
     circuit_name::String
     number_of_qubits::Int
-    density_matrix::sa.SparseMatrixCSC
+    mid_measurements::Vector{Vector{Int}}
 end
+
+Measurement(bitstr, sample, expect, mag_moments, measurement_basis,
+            number_of_experiment, circuit_name, number_of_qubits) =
+    Measurement(bitstr, sample, expect, mag_moments, measurement_basis,
+                number_of_experiment, circuit_name, number_of_qubits, Vector{Int}[])
 
 ##========== Saved results ==========
 

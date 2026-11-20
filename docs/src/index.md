@@ -21,19 +21,19 @@ Choose the output you need:
 
 | Call | Returns |
 |:--|:--|
-| `apply(state, ops)` | Evolved state |
-| `run(state, ops)` | Named tuple with `.state` and `.record` |
-| `sample(state_or_ops, shots)` | Raw final outcomes as integers |
-| `measure(state_or_ops, shots)` | Frequencies and expectation values |
+| `apply(state, ops)` / `apply(ops; backend=...)` | Evolved state (or `(state, bits)` with `track_measurements=true`) |
+| `sample(state_or_ops, shots; backend=...)` | Raw final outcomes as integers |
+| `measure(state_or_ops, shots; backend=...)` | Device-like `Measurement` (frequencies, expectations, `.mid_measurements`) |
 
 Omit the shot count in `measure(state)` for exact probabilities, including on
-MPS up to 16 qubits. Use `Measurement(draws, N)` to summarize existing raw draws.
-Qubit indices start at 1, and qubit 1 is the most significant bit in statevectors
-and integer measurement outcomes.
+MPS and CAMPS up to 16 qubits. Use `Measurement(draws, N)` to summarize existing
+raw draws. Qubit indices start at 1, and qubit 1 is the most significant bit in
+statevectors and integer measurement outcomes.
 
 Circuit sampling starts each shot in the zero state. Gate noise is passed to
-`apply` and `run(state, ops)` as `noise=...`, and to circuit sampling functions
-as `options=Options(noise=...)`.
+`apply` as `noise=...`, and to circuit sampling functions as
+`options=Options(noise=...)`. All circuit entry points (`apply`, `sample`,
+`measure`, `shadow`) accept `backend=...`.
 Operations run in their supplied order; no layout or SWAPs are added by default.
 Use `route(ops, layout)` when connectivity matters. See the
 [operation-list examples](examples.md#Operation-lists) for execution, sampling,
@@ -47,10 +47,9 @@ and saving results.
   [reset](@ref reset-and-records) sections explain outcome records and feedback.
   Later examples cover Hamiltonian evolution, entanglement,
   [partial trace](@ref partial-trace), Pauli twirling, and noise amplification.
-- [Clifford-Augmented MPS (CAMPS)](camps.md): factorize states as `|Ψ⟩ = C |φ⟩`
-  with an exact Clifford tableau and a disentangled MPS core for `T`-doped
-  Clifford circuits, noisy trajectories, classical shadows, and low-bond-dimension
-  stabilizer QEC.
+- [Backends](backends.md): detailed guide, runnable examples, and explicit
+  limitations for `:statevector`, `:density_matrix`, `:tensor` (`:mps`),
+  `:camps`, and the optional `:phasepoly` extension.
 - [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
   classification, gradient checks, noisy training, MPS truncation, and the
   complete QML API.

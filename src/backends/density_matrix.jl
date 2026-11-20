@@ -5,8 +5,8 @@
 
 Evolve a density matrix. By default, measurements and conditional operations
 sum their unnormalized branches, and `MR` averages over X, Y and Z bases.
-Use `run(rho, op)` to sample a measurement outcome and return the conditional
-state and its record. Noise channels always apply the complete Kraus sum.
+Pass `track_measurements=true` to sample a measurement outcome and return
+`(conditional_rho, bits)`. Noise channels always apply the complete Kraus sum.
 The input matrix is not modified.
 """
 function apply(rho::AbstractMatrixS, op::QuantumOps;
@@ -80,7 +80,7 @@ _born_measure(rho::AbstractMatrixS, op::QuantumOps) = first(_measure_density(rho
 Return the unconditioned Z-measurement channel, retaining both outcomes in a
 density matrix. This overload returns only the matrix, with no sampled bit.
 To sample an outcome and return a conditional matrix with its record, use
-`run(rho, Op("MZ", qubit))`.
+`apply(rho, Op("MZ", qubit); track_measurements=true)`.
 """
 born_measure_Z(N::Int, rho::AbstractMatrixS, qubit::Int) =
     first(_measure_density(rho, "MZ", qubit))

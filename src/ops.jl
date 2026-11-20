@@ -99,11 +99,13 @@ Tracing out other qubits removes their trace-one factors. A subsystem estimate
 therefore requires only the factors associated with the retained qubits.
 
 The default `backend=:statevector` uses a `2^N` statevector. Use `backend=:tensor`
-(or `:mps`) to evolve and sample an MPS directly, or `backend=:camps` to evolve
-a Clifford-augmented MPS (`CAMPSState`), without constructing a full statevector.
+(or `:mps`) to evolve and sample an MPS directly, `backend=:camps` for a
+Clifford-augmented MPS (`CAMPSState`), or `backend=:phasepoly` (after loading
+the optional `PhasePoly` package) for supported noiseless circuits.
 The MPS backend accepts `cutoff` and `maxdim`; `:camps` also accepts
-`disentangle` and `nsweeps`. Truncation introduces simulation error in addition
-to sampling error, and cost depends on the bond dimensions. All trajectory
+`disentangle` and `nsweeps`; `:phasepoly` accepts `max_h`, `max_cccz`, `max_ccs`,
+and `max_nonzeros`. Truncation introduces simulation error in addition to
+sampling error, and cost depends on the bond dimensions. All trajectory
 backends repeat preparation for every shot, including any circuit noise or
 mid-circuit measurements.
 
@@ -132,9 +134,14 @@ function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     ops = isnothing(layout) ? ops : route(ops, layout)
     N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
-    backend_name in ("statevector", "tensor", "camps") ||
-        throw(ArgumentError("shadow supports :statevector, :tensor (:mps), or :camps backends"))
+    backend_name in ("statevector", "tensor", "camps", "phasepoly") ||
+        throw(ArgumentError("shadow supports :statevector, :tensor (:mps), :camps, or :phasepoly backends"))
     _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
+    if backend_name == "phasepoly"
+        _require_phasepoly()
+        options.noise === false ||
+            throw(ArgumentError("backend :phasepoly supports only noiseless circuits"))
+    end
     keep = isnothing(qubits) ? collect(1:N) : qubits isa Integer ? [qubits] : collect(qubits)
     all(q -> q isa Integer && 1 <= q <= N, keep) && allunique(keep) ||
         throw(ArgumentError("qubits must contain distinct integer indices between 1 and $N"))
@@ -147,18 +154,31 @@ function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     local_estimators = [sa.sparse((gate.I + 3*(1-2*b)*P)/2)
                         for P in (gate.X, gate.Y, gate.Z), b in 0:1]
     measurement_basis = Vector{Int}(undef, N)
+    sim_kw, sv_kw = backend_name == "phasepoly" ? _split_phasepoly_kwargs(kwargs) : (NamedTuple(), NamedTuple())
     for _ in 1:number_of_experiment
         # Fresh trajectory in the selected representation, including preparation noise.
-        initial = _initial_backend_state(backend_name, N)
-        state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
-        for qubit in 1:N
-            basis = rand(1:3)
-            state = apply(state, Op(("Xbasis", "Ybasis", "Zbasis")[basis], rotations[basis], qubit); kwargs...)
-            measurement_basis[qubit] = basis
+        if backend_name == "phasepoly"
+            shot_ops = QuantumOps[_execution_ops(ops, options)...]
+            for qubit in 1:N
+                basis = rand(1:3)
+                measurement_basis[qubit] = basis
+                basis == 1 && push!(shot_ops, Op("H", qubit))
+                basis == 2 && push!(shot_ops, Op("HSP", qubit))
+            end
+            pp_state = phasepoly(shot_ops; nqubits=N, sim_kw...)
+            bits = only(sample_bit(pp_state, 1; sv_kw...))
+        else
+            initial = _initial_backend_state(backend_name, N)
+            state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
+            for qubit in 1:N
+                basis = rand(1:3)
+                state = apply(state, Op(("Xbasis", "Ybasis", "Zbasis")[basis], rotations[basis], qubit); kwargs...)
+                measurement_basis[qubit] = basis
+            end
+            # MPS/CAMPS sampling contracts tensors directly; joint bits preserve
+            # correlations and also avoid packing long registers into a machine integer.
+            bits = only(sample_bit(state, 1))
         end
-        # MPS sampling contracts tensors directly; joint bits preserve correlations
-        # and also avoid packing long registers into a machine integer.
-        bits = only(sample_bit(state, 1))
 
         # Average products within each shot, not products of single-qubit averages.
         snapshot = sa.sparse(ones(ComplexF64, 1, 1))
@@ -410,34 +430,29 @@ function _mitigate_probabilities(bitstr, probabilities, N, readout_noise)
     return collect(0:length(corrected)-1), corrected
 end
 
-function _measurement_rho_placeholder(N::Int)
-    return N > 16 ? sa.spzeros(ComplexF64, 0, 0) : sa.spzeros(ComplexF64, 2^N, 2^N)
-end
-
-function _measurement_from_probs(bitstr, probabilities, N, shots, basis, label, rho)
+function _measurement_from_probs(bitstr, probabilities, N, shots, basis, label,
+                                 mid_measurements::Vector{Vector{Int}}=Vector{Int}[])
     fock = int2bin.(bitstr, N)
     expectations = [_sample_to_expectation((fock, probabilities), [i]) for i in 1:N]
     moments = [mag_moments(N, bitstr, probabilities, order) for order in 1:12]
-    return Measurement(bitstr, probabilities, expectations, moments, basis, shots, label, N, rho)
+    return Measurement(bitstr, probabilities, expectations, moments, basis, shots, label, N, mid_measurements)
 end
 
 """
     measure(state; label="state to measurement")
     measure(state, shots; label="state to measurement")
 
-Return measurement statistics for a statevector, density matrix, MPS, or
-`CAMPSState`. Omitting `shots` uses exact probabilities; a positive count uses
-sampled frequencies. Exact MPS and CAMPS enumeration is limited to 16 qubits, so
-pass a shot count for larger states. Use `sample(state, shots)` for raw
-outcomes. Large sampled MPS and CAMPS results carry an empty density-matrix
-placeholder.
+Return device-like measurement statistics for a statevector, density matrix,
+MPS, or `CAMPSState`. Omitting `shots` uses exact probabilities; a positive
+count uses sampled frequencies. Exact MPS and CAMPS enumeration is limited to
+16 qubits, so pass a shot count for larger states. Use `sample(state, shots)`
+for raw outcomes.
 """
 function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, number_of_experiment::Int=-1; label="state to measurement")
     number_of_experiment == -1 || number_of_experiment > 0 || throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
     N = get_N(state)
     bitstr, probabilities = number_of_experiment == -1 ? sample_exact(state) : sample_state(state, number_of_experiment)
-    rho = state isa AbstractMatrix ? sa.sparse(state) : _measurement_rho_placeholder(N)
-    return _measurement_from_probs(bitstr, probabilities, N, number_of_experiment, "0", label, rho)
+    return _measurement_from_probs(bitstr, probabilities, N, number_of_experiment, "0", label)
 end
 
 """
@@ -454,19 +469,19 @@ function Measurement(samples::Vector{<:Integer}, N::Int; label="sample to measur
     all(outcome -> 0 <= outcome < limit, samples) ||
         throw(ArgumentError("samples must be integer outcomes in 0:2^N-1"))
     bitstr, probabilities = get_probs_from_sample(samples, N)
-    return _measurement_from_probs(bitstr, probabilities, N, length(samples), "0", label, _measurement_rho_placeholder(N))
+    return _measurement_from_probs(bitstr, probabilities, N, length(samples), "0", label)
 end
 
 _is_cnot_like(op::QuantumOps) = op isa Op && op.q == 2 && op.control == -2 &&
     uppercase(op.name) in ("CNOT", "CX") && op.mat isa AbstractMatrix && op.mat == gate.CX
 
 function _samples_to_measurement(samples::Vector{<:Integer}, N::Int, options::Options;
-                                 rho=_measurement_rho_placeholder(N))
+                                 mid_measurements::Vector{Vector{Int}}=Vector{Int}[])
     bitstr, probabilities = get_probs_from_sample(samples, N)
     if options.measurement_mitigate && options.readout_noise isa QuantumChannel
         bitstr, probabilities = _mitigate_probabilities(bitstr, probabilities, N, options.readout_noise)
     end
-    return _measurement_from_probs(bitstr, probabilities, N, length(samples), options.measurement_basis, options.circuit_name, rho)
+    return _measurement_from_probs(bitstr, probabilities, N, length(samples), options.measurement_basis, options.circuit_name, mid_measurements)
 end
 
 function _execution_ops(ops::Vector{<:QuantumOps}, options::Options)
@@ -501,18 +516,29 @@ _has_state_callback(op::QuantumOps) = false
 _has_state_callback(op::OpF) = op.data isa Function ||
     (op.data isa Vector{<:QuantumOps} && any(_has_state_callback, op.data))
 
+_has_explicit_measurement(op::QuantumOps) = op isa ifOp || op.type == "🔬"
+_has_explicit_measurement(op::OpF) =
+    op.data isa Vector{<:QuantumOps} && any(_has_explicit_measurement, op.data)
+
 """
     measure(ops, shots; options=Options(), N=get_N(ops), layout=nothing,
             backend=:statevector, kwargs...)
+    measure(qasm_or_path::AbstractString, shots::Int=1; options=Options(),
+            layout=nothing, backend=:statevector, is_file=nothing, kwargs...)
 
-Return final-outcome statistics from fresh circuit shots. `sample(ops, shots)`
-returns the corresponding raw integer outcomes. Choose statevector, MPS
-(`:tensor`), Clifford-augmented MPS (`:camps`), or density-matrix
-(`:density_matrix`) evolution; MPS accepts `cutoff` and `maxdim`, and `:camps`
-also accepts `disentangle` and `nsweeps`. `N` can include idle qubits.
-Operations run in their listed order, with routing only when `layout` is
-supplied. Readout mitigation and optional density-matrix storage are configured
-through `Options`.
+Return device-like final-outcome statistics (and per-shot `mid_measurements`
+records when the circuit contains explicit `MX`/`MY`/`MZ`/`MR`/`ifOp`
+operations) from fresh circuit shots starting in `|0…0⟩`. `sample(ops, shots)`
+returns the corresponding raw integer outcomes.
+
+Choose statevector (`:statevector`), density-matrix (`:density_matrix`), MPS
+(`:tensor` / `:mps`), Clifford-augmented MPS (`:camps`), or optional PhasePoly
+(`:phasepoly`, requires `import PhasePoly`) evolution. MPS accepts `cutoff` and
+`maxdim`; `:camps` also accepts `disentangle` and `nsweeps`; `:phasepoly`
+accepts `max_h`, `max_cccz`, `max_ccs`, and `max_nonzeros`. `N` can include
+idle qubits. Operations run in their listed order, with routing only when
+`layout` is supplied. Readout noise, readout mitigation, basis selection, and
+twirling are configured through `Options`.
 """
 function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
                  options::Options=Options(), N::Int=get_N(ops),
@@ -520,21 +546,34 @@ function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
                  backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
     number_of_experiment > 0 || throw(ArgumentError("shots must be positive"))
     result = _sample_circuit(ops, number_of_experiment; options, N, layout, backend, kwargs...)
-    return _samples_to_measurement(result.samples, result.N, options; rho=result.rho)
+    return _samples_to_measurement(result.samples, result.N, options; mid_measurements=result.mid_measurements)
+end
+
+function measure(qasm_or_path::AbstractString, number_of_experiment::Int=1;
+                 options::Options=Options(), layout::Union{Nothing,Layout}=nothing,
+                 backend::Union{Symbol,AbstractString}=:statevector,
+                 is_file::Union{Nothing,Bool}=nothing, kwargs...)
+    qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
+    ops = from_qasm(qasm)
+    return measure(ops, number_of_experiment; options=options, layout=layout, backend=backend, kwargs...)
 end
 
 """
     sample(ops, shots; options=Options(), N=get_N(ops), layout=nothing,
            backend=:statevector, kwargs...)
+    sample(qasm_or_path::AbstractString, shots::Int=1; options=Options(),
+           layout=nothing, backend=:statevector, is_file=nothing, kwargs...)
 
 Return raw final outcomes as integers, starting each shot in `|0…0⟩`.
-Qubit 1 is the most significant bit. Noisy statevector and MPS circuits use
-independent trajectories; density-matrix evolution sums unobserved branches.
-The circuit's explicit measurement records are available through `run`.
+Qubit 1 is the most significant bit. Noisy statevector, MPS, and CAMPS circuits
+use independent trajectories; density-matrix evolution sums unobserved noise
+branches. Per-shot explicit mid-circuit measurement records are available via
+`measure(ops, shots).mid_measurements`, or for a single evolved state via
+`apply(state, ops; track_measurements=true)`.
 
 The backend, routing, measurement basis, readout noise, and twirling options
-match `measure`. Use `measure` for summary statistics, readout mitigation, or
-stored density matrices: raw outcomes cannot include those additional results.
+match `measure`. Use `measure` for summary statistics or readout mitigation:
+raw outcomes cannot include mitigated signed weights.
 """
 function sample(ops::Vector{<:QuantumOps}, shots::Int;
                 options::Options=Options(), N::Int=get_N(ops),
@@ -542,9 +581,16 @@ function sample(ops::Vector{<:QuantumOps}, shots::Int;
                 backend::Union{Symbol,AbstractString}=:statevector, kwargs...)
     options.measurement_mitigate &&
         throw(ArgumentError("raw samples cannot contain readout-mitigated weights; use measure(ops, shots; options=...)"))
-    options.density_matrix &&
-        throw(ArgumentError("raw samples cannot store a density matrix; use measure(ops, shots; options=...)"))
     return _sample_circuit(ops, shots; options, N, layout, backend, kwargs...).samples
+end
+
+function sample(qasm_or_path::AbstractString, shots::Int=1;
+                options::Options=Options(), layout::Union{Nothing,Layout}=nothing,
+                backend::Union{Symbol,AbstractString}=:statevector,
+                is_file::Union{Nothing,Bool}=nothing, kwargs...)
+    qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
+    ops = from_qasm(qasm)
+    return sample(ops, shots; options=options, layout=layout, backend=backend, kwargs...)
 end
 
 function _sample_circuit(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
@@ -559,28 +605,71 @@ function _sample_circuit(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
     T = N < 8sizeof(Int) ? Int : BigInt
     all_sample = T[]
-    rho = _measurement_rho_placeholder(N)
-    if options.density_matrix
-        N <= 16 || throw(ArgumentError("density_matrix=true explicitly materializes 4^N entries; disable it for large MPS circuits"))
+    mid_measurements = Vector{Int}[]
+
+    if backend_name == "phasepoly"
+        _require_phasepoly()
+        options.noise === false ||
+            throw(ArgumentError("backend :phasepoly supports only noiseless circuits"))
+        options.readout_noise === false ||
+            throw(ArgumentError("backend :phasepoly does not support readout noise"))
+        basis = options.measurement_basis
+        basis in ("X", "Y", "Z", "R") || throw(ArgumentError("measurement_basis must be X, Y, Z, or R"))
+        sim_kw, sv_kw = _split_phasepoly_kwargs(kwargs)
+        reuse_state = !options.twirl && basis != "R"
+        repetitions = reuse_state ? min(1, number_of_experiment) : number_of_experiment
+        for _ in 1:repetitions
+            exec_ops = QuantumOps[_execution_ops(ops, options)...]
+            for qubit in 1:N
+                name = basis == "R" ? rand(("H", "HSP", "I")) : basis == "X" ? "H" : basis == "Y" ? "HSP" : "I"
+                name != "I" && push!(exec_ops, Op(name, qubit))
+            end
+            pp_state = phasepoly(exec_ops; nqubits=N, sim_kw...)
+            vec = to_state(pp_state; sv_kw...)
+            append!(all_sample, sample(vec, reuse_state ? number_of_experiment : 1))
+        end
+        return (samples=all_sample, N=N, mid_measurements=mid_measurements)
     end
 
+    has_mid = any(_has_explicit_measurement, ops)
     stochastic = options.noise != false || options.readout_noise != false ||
-                 any(op -> op isa OpQC || op isa ifOp || op isa OpF || op.type == "🔬", ops)
-    # Density evolution already sums noise and measurement branches exactly.
-    reuse_state = (backend_name == "density_matrix" || !stochastic) &&
+                 has_mid || any(op -> op isa OpQC || op isa OpF, ops)
+    # Density evolution sums noise and reset branches deterministically; when
+    # explicit mid-circuit measurements are present, sample per-shot records.
+    reuse_state = ((backend_name == "density_matrix" && !has_mid) || !stochastic) &&
                   !any(_has_state_callback, ops) && !options.twirl && options.measurement_basis != "R"
     repetitions = reuse_state ? min(1, number_of_experiment) : number_of_experiment
     for _ in 1:repetitions
         initial = _initial_backend_state(backend_name, N)
-        state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
+        if has_mid
+            state, bits = apply(initial, _execution_ops(ops, options);
+                                noise=options.noise, track_measurements=true, kwargs...)
+            push!(mid_measurements, bits)
+        else
+            state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
+        end
         state = _final_measurement(state, options; kwargs...)
         append!(all_sample, sample(state, reuse_state ? number_of_experiment : 1))
-        if options.density_matrix
-            vector = (state isa it.MPS || state isa CAMPSState) ? to_state(state) : state
-            rho += (vector isa AbstractMatrix ? vector : vector * vector') / repetitions
+    end
+    return (samples=all_sample, N=N, mid_measurements=mid_measurements)
+end
+
+function _require_phasepoly()
+    isempty(methods(phasepoly)) &&
+        throw(ArgumentError("backend :phasepoly requires the optional PhasePoly package; install it and run `import PhasePoly` first"))
+end
+
+function _split_phasepoly_kwargs(kwargs)
+    sim_d = Dict{Symbol,Any}()
+    sv_d = Dict{Symbol,Any}()
+    for (k, v) in pairs(kwargs)
+        if k === :max_nonzeros
+            sv_d[k] = v
+        else
+            sim_d[k] = v
         end
     end
-    return (samples=all_sample, N=N, rho=sa.sparse(rho))
+    return (; sim_d...), (; sv_d...)
 end
 
 function _backend_keywords(backend_name::String)
@@ -588,6 +677,8 @@ function _backend_keywords(backend_name::String)
         return [:cutoff, :maxdim]
     elseif backend_name == "camps"
         return [:cutoff, :maxdim, :disentangle, :nsweeps]
+    elseif backend_name == "phasepoly"
+        return [:max_h, :max_cccz, :max_ccs, :max_nonzeros]
     end
     return Symbol[]
 end
@@ -614,74 +705,57 @@ function _resolve_backend(backend::Union{Symbol,AbstractString})
         return "tensor"
     elseif backend_s in ["camps","clifford_mps","clifford-mps"]
         return "camps"
+    elseif backend_s in ["phasepoly","phase_poly","phase-poly"]
+        return "phasepoly"
     else
-        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector`, `:tensor`, `:camps`, or `:density_matrix`."))
+        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector`, `:tensor`, `:camps`, `:density_matrix`, or `:phasepoly`."))
     end
 end
 
-"""
-    run(state, ops; noise=false, kwargs...)
-
-Execute operations once and return `(state=final_state, record=bits)`.
-The input state selects the backend. Operations run in their listed order;
-`record` contains each explicit measurement outcome, including measurements
-inside the selected feedback branch. Outcomes 0 and 1 denote the +1 and −1
-Pauli eigenvalues. Reset adds no bit, and no final measurement is appended.
-
-Density matrices are conditioned on the recorded measurement outcomes, while
-noise and reset still use their complete Kraus sums. Statevectors, MPS, and
-`CAMPSState` follow one stochastic trajectory. MPS accepts `cutoff` and
-`maxdim`; `CAMPSState` also accepts `disentangle` and `nsweeps`.
-Use `apply(state, ops)` when only the evolved state is needed; density-matrix
-`apply` averages over unobserved measurement outcomes.
-"""
-function run(state::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS,CAMPSState},
-             ops::Union{QuantumOps,Vector{<:QuantumOps},AbstractVector{<:Tuple}};
-             noise::Union{NoiseModel,Bool}=false, kwargs...)
-    haskey(kwargs, :track_measurements) &&
-        throw(ArgumentError("run always returns the measurement record; omit track_measurements"))
-    final_state, bits = apply(state, ops; noise, track_measurements=true, kwargs...)
-    return (state=final_state, record=bits)
-end
-
-"""
-    run(ops, shots=1; options=Options(), N=get_N(ops), layout=nothing,
-        backend=:statevector, kwargs...)
-    run(qasm_or_path::AbstractString, shots::Int=1; backend=:statevector, kwargs...)
-
-Return a batch of measurement records, starting each shot in `|0…0⟩`.
-This existing convenience form returns only records; `run(initial, ops)` returns
-both the final state and record for one execution. Records follow operation-list
-order and include measurements inside the chosen conditional branch. Reset adds
-no bit, and no final measurement is appended; use `sample` for raw final outcomes
-or `measure` for their statistics.
-
-Choose `:statevector`, `:density_matrix`, `:tensor` (`:mps`), or `:camps`. MPS
-accepts `cutoff` and `maxdim`, and `:camps` also accepts `disentangle` and
-`nsweeps`, including for conditional branch operations. Density-matrix execution
-conditions on the recorded measurements but still sums noise and reset Kraus
-branches. `N` can include idle qubits. Routing is performed only when `layout`
-is supplied. Final-readout options do not affect these explicit records.
-"""
-function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
-             options::Options=Options(), N::Int=get_N(ops),
-             layout::Union{Nothing,Layout}=nothing,
-             backend::Union{Symbol,AbstractString}=:statevector,kwargs...)
-    number_of_experiment > 0 || throw(ArgumentError("`number_of_experiment` must be positive."))
+function apply(ops::Union{QuantumOps,Vector{<:QuantumOps},AbstractVector{<:Tuple}};
+               N::Int=-1,
+               backend::Union{Symbol,AbstractString}=:statevector,
+               noise::Union{NoiseModel,Bool}=false,
+               track_measurements::Bool=false,
+               layout::Union{Nothing,Layout}=nothing,
+               kwargs...)
+    op_list = ops isa QuantumOps ? QuantumOps[ops] :
+              ops isa Vector{<:QuantumOps} ? ops :
+              QuantumOps[Op(t...) for t in ops]
+    inferred_N = get_N(op_list)
+    N = N == -1 ? inferred_N : N
     N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
-    N >= get_N(ops) || throw(ArgumentError("N must include every operated qubit"))
-    ops = isnothing(layout) ? ops : route(ops, layout)
-    N = max(N, get_N(ops))
+    N >= inferred_N || throw(ArgumentError("N must include every operated qubit"))
+    op_list = isnothing(layout) ? op_list : route(op_list, layout)
+    N = max(N, get_N(op_list))
     backend_name = _resolve_backend(backend)
-    _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
-    measurements = Vector{Vector{Int}}(undef,number_of_experiment)
-    for shot=1:number_of_experiment
-        initial = _initial_backend_state(backend_name, N)
-        measurements[shot] = run(initial, _execution_ops(ops, options);
-                                 noise=options.noise, kwargs...).record
+    allowed = vcat(_backend_keywords(backend_name), [:pars])
+    _unsupported_keyword_check(kwargs, allowed)
+
+    if backend_name == "phasepoly"
+        _require_phasepoly()
+        noise === false || throw(ArgumentError("backend :phasepoly supports only noiseless circuits"))
+        haskey(kwargs, :pars) && throw(ArgumentError("backend :phasepoly accepts only bound unitary operations"))
+        sim_kw, _ = _split_phasepoly_kwargs(kwargs)
+        pp_state = phasepoly(op_list; nqubits=N, sim_kw...)
+        return track_measurements ? (pp_state, Int[]) : pp_state
     end
 
-    return measurements
+    initial = _initial_backend_state(backend_name, N)
+    return apply(initial, op_list; noise=noise, track_measurements=track_measurements, kwargs...)
+end
+
+function apply(qasm_or_path::AbstractString;
+               backend::Union{Symbol,AbstractString}=:statevector,
+               noise::Union{NoiseModel,Bool}=false,
+               track_measurements::Bool=false,
+               layout::Union{Nothing,Layout}=nothing,
+               is_file::Union{Nothing,Bool}=nothing,
+               kwargs...)
+    qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
+    ops = from_qasm(qasm)
+    return apply(ops; backend=backend, noise=noise, track_measurements=track_measurements,
+                 layout=layout, kwargs...)
 end
 
 function _qasm_to_source(qasm_or_path::AbstractString; is_file::Union{Nothing,Bool}=nothing)
@@ -701,15 +775,6 @@ function _qasm_to_source(qasm_or_path::AbstractString; is_file::Union{Nothing,Bo
     end
 
     throw(ArgumentError("Input is neither an existing file nor recognizable OpenQASM text: `$qasm_or_path`"))
-end
-
-function run(qasm_or_path::AbstractString,number_of_experiment::Int=1;
-             options::Options=Options(),layout::Union{Nothing,Layout}=nothing,
-             backend::Union{Symbol,AbstractString}=:statevector,
-             is_file::Union{Nothing,Bool}=nothing,kwargs...)
-    qasm = _qasm_to_source(qasm_or_path; is_file=is_file)
-    ops = from_qasm(qasm)
-    return run(ops,number_of_experiment;options=options,layout=layout,backend=backend,kwargs...)
 end
 
 

@@ -11,7 +11,7 @@ import PRIMA as pr
 const AbstractVectorS = Union{AbstractVector,sa.SparseVector}
 const AbstractMatrixS = Union{AbstractMatrix,sa.SparseMatrixCSC}
 
-import Base: *, run
+import Base: *
 
 include("struct.jl")
 include("decompose.jl")

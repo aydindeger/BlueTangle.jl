@@ -18,8 +18,6 @@ correlation
 ```@docs
 apply
 route
-run(::AbstractVector{<:Number}, ::Vector{<:QuantumOps})
-run(::Vector{<:QuantumOps}, ::Int)
 to_state
 to_rho
 to_MPS
@@ -106,9 +104,9 @@ evolve
 
 ## Clifford-Augmented MPS (CAMPS)
 
-The [CAMPS guide and API reference](camps.md#CAMPS-API-reference) documents
+The [Backends guide (`:camps`)](backends.md#CAMPS-API-reference) documents
 `CAMPSState`, `CliffordTableau`, `camps`, and `clifford_ops` alongside
-executable examples.
+executable examples and limitations.
 
 ## Quantum Machine Learning
 

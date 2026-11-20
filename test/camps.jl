@@ -237,7 +237,7 @@ end
     m_large = measure(st_large, 4)
     @test m_large.bitstr == [big(2)^72 - 1]
     @test m_large.expect == -ones(72)
-    @test size(m_large.density_matrix) == (0, 0)
+    @test isempty(m_large.mid_measurements)
     @test_throws ArgumentError sample_exact(st_large)
     @test_throws ArgumentError measure(st_large)
 
@@ -247,16 +247,17 @@ end
     @test maxlinkdim(collapsed) == 1
     @test expect(collapsed, "Z") ≈ fill(1 - 2 * b1, 2) atol=1e-12
 
-    res_reset = run(CAMPSState(1), [Op("X", 1), Op("MZ", 1), Op("RES", 1), Op("MZ", 1)])
-    @test res_reset.record == [1, 0]
-    @test expect(res_reset.state, "Z", 1) ≈ 1.0 atol=1e-12
+    st_reset, rec_reset = apply(CAMPSState(1), [Op("X", 1), Op("MZ", 1), Op("RES", 1), Op("MZ", 1)];
+                                track_measurements=true)
+    @test rec_reset == [1, 0]
+    @test expect(st_reset, "Z", 1) ≈ 1.0 atol=1e-12
 
     cond = ifOp("MZ", 1, [Op("MX", 2), Op("MZ", 1)], [Op("X", 2), Op("MZ", 2)])
-    res0 = run(CAMPSState(2), [cond])
-    @test length(res0.record) == 3 && res0.record[1] == 0 && res0.record[3] == 0
-    res1 = run(CAMPSState(2), [Op("X", 1), cond])
-    @test res1.record == [1, 1]
-    @test expect(res1.state, "Z") ≈ [-1.0, -1.0] atol=1e-12
+    _, rec0 = apply(CAMPSState(2), [cond]; track_measurements=true)
+    @test length(rec0) == 3 && rec0[1] == 0 && rec0[3] == 0
+    st1, rec1 = apply(CAMPSState(2), [Op("X", 1), cond]; track_measurements=true)
+    @test rec1 == [1, 1]
+    @test expect(st1, "Z") ≈ [-1.0, -1.0] atol=1e-12
 
     # OpF variants (block, callback, 1q/2q matrix, unsupported 3q dense matrix)
     block = Op("block", [Op("H", 1), Op("CX", 1, 2)])
@@ -280,22 +281,26 @@ end
     @test m_camps.expect ≈ expect(rho_exact, "Z") atol=0.08
 end
 
-@testset "CAMPS unified backend API (measure, sample, run, shadow)" begin
+@testset "CAMPS unified backend API (apply, measure, sample, shadow)" begin
     ops = [Op("H", 1), Op("T", 1), Op("CX", 1, 3)]
     sv = apply(zero_state(3), ops)
 
-    # measure & sample with backend=:camps and alias :clifford_mps
+    # apply, measure, and sample with backend=:camps and alias :clifford_mps
     for bk in (:camps, :clifford_mps)
+        st_bk = apply(ops; backend=bk, cutoff=1e-12, maxdim=16, disentangle=true, nsweeps=2)
+        @test st_bk isa CAMPSState
+        @test fidelity(st_bk, sv) ≈ 1.0 atol=1e-11
         m = measure(ops, 1500; backend=bk, cutoff=1e-12, maxdim=16, disentangle=true, nsweeps=2)
         @test m.expect ≈ expect(sv, "Z") atol=0.10
+        @test isempty(m.mid_measurements)
         draws = sample(ops, 50; backend=bk)
         @test length(draws) == 50
     end
 
-    # density_matrix=true, layout routing, idle qubits, readout noise, twirling, measurement_basis
+    # layout routing, idle qubits, readout noise, twirling, measurement_basis
     layout = Layout(ones(Int, 1, 3))
-    m_dm = measure(ops, 1; backend=:camps, layout=layout, options=Options(density_matrix=true))
-    @test m_dm.density_matrix ≈ sv * sv' atol=1e-11
+    st_routed = apply(ops; backend=:camps, layout=layout)
+    @test to_rho(st_routed) ≈ sv * sv' atol=1e-11
 
     @test measure([Op("X", 1)], 10; N=3, backend=:camps).bitstr == [4]
     @test measure(Op[], 10; N=2, backend=:camps).bitstr == [0]
@@ -306,8 +311,10 @@ end
     @test measure([Op("H", 1), Op("CX", 1, 2)], 20; backend=:camps,
                   options=Options(twirl=true)).expect ≈ [0.0, 0.0] atol=0.6
 
-    # run(ops, shots; backend=:camps)
-    @test run([Op("X", 1), Op("MZ", 1), Op("RES", 1), Op("MZ", 1)], 3; backend=:camps) == fill([1, 0], 3)
+    # Mid-circuit measurement records via measure(...).mid_measurements
+    m_mid = measure([Op("X", 1), Op("MZ", 1), Op("RES", 1), Op("MZ", 1)], 3; backend=:camps)
+    @test m_mid.mid_measurements == fill([1, 0], 3)
+    @test m_mid.bitstr == [0]
 
     # Classical shadows on :camps (full and subsystem)
     ghz = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]

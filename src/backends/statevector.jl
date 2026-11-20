@@ -4,7 +4,7 @@
 `apply(state::AbstractVectorS, op::QuantumOps)`
 
 Return the state after applying an operation. Measurements and noise sample one
-trajectory. Use `run(state, op)` to return the state and measurement record.
+trajectory. Pass `track_measurements=true` to return `(state, bits)`.
 """
 function apply(
     state::AbstractVectorS,
@@ -80,7 +80,7 @@ Sample a Z measurement of one qubit in a normalized `N`-qubit statevector.
 Return `(collapsed_state, bit)`, with bit 0 for `|0⟩` and 1 for `|1⟩`.
 The returned state is normalized and retains all qubits. Qubit 1 is the most
 significant tensor factor. For other bases or automatic record collection, use
-`run(state, Op("MZ", qubit))` and its MX/MY variants.
+`apply(state, Op("MZ", qubit); track_measurements=true)` and its MX/MY variants.
 """
 function born_measure_Z(N::Int,state::AbstractVectorS,qubit::Int)
 
@@ -172,11 +172,27 @@ neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
 random_product_state(N::Int)=product_state(rand([0,1],N))
 
 """
-    zero_state(N::Int)
+    zero_state(N::Int; backend=:statevector)
 
-Return the normalized sparse statevector |0…0⟩ for `N` qubits.
+Return the `N`-qubit `|0…0⟩` state for the chosen backend:
+`:statevector` (default, sparse vector), `:density_matrix` (sparse density
+matrix), `:tensor` / `:mps` (`ITensorMPS.MPS`), or `:camps` (`CAMPSState`).
 """
-zero_state(N::Int)=sa.SparseVector(2^N, [1], [1.0+0im])
+function zero_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector)
+    backend_name = _resolve_backend(backend)
+    if backend_name == "statevector"
+        return sa.SparseVector(2^N, [1], [1.0+0im])
+    elseif backend_name == "density_matrix"
+        s = sa.SparseVector(2^N, [1], [1.0+0im])
+        return s * s'
+    elseif backend_name == "tensor"
+        return zero_state(N_MPS(N))
+    elseif backend_name == "camps"
+        return CAMPSState(N)
+    elseif backend_name == "phasepoly"
+        throw(ArgumentError("PhasePoly represents circuits directly; use `apply(ops; backend=:phasepoly)` or `phasepoly(ops)`"))
+    end
+end
 one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
 
 plus_state(N::Int)=sa.SparseVector(fill((1.0+0im) / sqrt(2^N),2^N))

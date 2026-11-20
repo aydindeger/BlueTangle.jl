@@ -31,9 +31,10 @@
     # The common sampling path must also leave Toffoli gates intact.
     operations = [Op("H", 1), Op("X", 2), controlled]
     expected = apply(zero_state(3), operations)
-    result = measure(operations, 1; options=Options(twirl=true, density_matrix=true),
-                     backend=:density_matrix)
-    @test result.density_matrix ≈ expected * expected'
+    twirled_ops = BlueTangle._execution_ops(operations, Options(twirl=true))
+    @test apply(twirled_ops; backend=:density_matrix) ≈ expected * expected'
+    result = measure(operations, 400; options=Options(twirl=true), backend=:density_matrix)
+    @test result.expect ≈ expect(expected, "Z") atol=0.15
 end
 
 @testset "Conservative ideal gate cancellation" begin

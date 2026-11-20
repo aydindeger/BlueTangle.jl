@@ -7,6 +7,8 @@
     @test inner(psi, im*vector) ≈ im
     @test inner(im*vector, psi) ≈ -im
     @test fidelity(psi,psi) ≈ 1
+    @test fidelity(psi, vector) ≈ 1
+    @test fidelity(vector, psi) ≈ 1
     @test correlation(psi,"X,Y",[1,4]) ≈ correlation(vector,"X,Y",[1,4])
     @test expect(psi,Op("Z",2)) ≈ expect(vector,Op("Z",2))
     before = to_state(psi)
@@ -21,20 +23,20 @@
     measurement = measure(large, 3)
     @test measurement.bitstr == [big(2)^72-1]
     @test measurement.expect == -ones(72)
-    @test size(measurement.density_matrix) == (0,0)
+    @test isempty(measurement.mid_measurements)
     @test_throws ArgumentError sample_exact(large)
     @test_throws ArgumentError measure(large)
     @test int2bin(bin2int(ones(Int,72)),72) == ones(Int,72)
 
-    for backend in (:statevector, :tensor, :density_matrix)
+    for backend in (:statevector, :tensor, :density_matrix, :camps)
         @test measure([Op("I",1)], 20; backend=backend,
                       options=Options(readout_noise=Noise1("bit_flip",1.0))).bitstr == [1]
-        @test run([Op("X",1),Op("MZ",1),Op("RES",1),Op("MZ",1)],2;backend=backend) == [[1,0],[1,0]]
+        @test measure([Op("X",1),Op("MZ",1),Op("RES",1),Op("MZ",1)],2;backend=backend).mid_measurements == [[1,0],[1,0]]
         reset = [Op("H",1),Op("CX",1,2),Op("RES",1)]
-        result = measure(reset, 1000; backend=backend, options=Options(density_matrix=true))
+        result = measure(reset, 1000; backend=backend)
         @test result.expect[1] ≈ 1
         @test abs(result.expect[2]) < 0.15
-        @test tr(result.density_matrix) ≈ 1
+        @test isempty(result.mid_measurements)
     end
     # A Kraus channel must be sampled afresh on each trajectory, even when no
     # NoiseModel option or measurement gate is present in the circuit.
@@ -72,6 +74,13 @@
     ops = [Op("H",3),conditional]
     @test apply(zero_state(3), ops) ≈ kron(zero_state(2), plus_state(1))
     @test isempty([name for name in names(BlueTangle) if !isdefined(BlueTangle,name)])
+    @test :run ∉ names(BlueTangle)
+    if isempty(methods(phasepoly))
+        @test_throws ArgumentError apply([Op("H", 1)]; backend=:phasepoly)
+        @test_throws ArgumentError measure([Op("H", 1)], 10; backend=:phasepoly)
+        @test_throws ArgumentError sample([Op("H", 1)], 10; backend=:phasepoly)
+        @test_throws ArgumentError shadow([Op("H", 1)], 10; backend=:phasepoly)
+    end
 end
 
 @testset "Classical readout mitigation requirements" begin
@@ -126,27 +135,29 @@ end
     @test get_N(operations) == 3
     @test length(operations) == 2
 
-    # Routing is an explicit transformation; sampling accepts it as an option.
+    # Routing is an explicit transformation; apply and sampling accept it as an option.
     layout = Layout(ones(Int, 1, 3))
     routed = route(operations, layout)
     @test length(routed) > length(operations)
     @test apply(initial, routed) ≈ expected
-    options = Options(density_matrix=true)
-    direct = measure(operations, 1; options=options, backend=:density_matrix)
-    routed_result = measure(operations, 1; options=options, layout=layout, backend=:density_matrix)
-    @test direct.density_matrix ≈ expected * expected'
-    @test routed_result.density_matrix ≈ direct.density_matrix
+    @test apply(operations; backend=:statevector, layout=layout) ≈ expected
+    @test apply(operations; backend=:density_matrix, layout=layout) ≈ expected * expected'
+    @test to_state(apply(operations; backend=:tensor, layout=layout, cutoff=0.0)) ≈ expected
+    @test fidelity(apply(operations; backend=:camps, layout=layout), expected) ≈ 1
     @test length(operations) == 2
 
     # Literal list order matters: layer scheduling could move MZ(2) before
     # MZ(1), reversing the recorded bits for this program.
     measured = [Op("X", 1), Op("MZ", 1), Op("MZ", 2)]
-    for backend in (:statevector, :density_matrix, :mps)
-        @test run(measured, 3; backend=backend) == fill([1, 0], 3)
+    for backend in (:statevector, :density_matrix, :mps, :camps)
+        @test measure(measured, 3; backend=backend).mid_measurements == fill([1, 0], 3)
         @test measure([Op("X", 1)], 2; N=3, backend=backend).bitstr == [4]
         @test measure(Op[], 2; N=2, backend=backend).bitstr == [0]
+        _, bits = apply(measured; backend=backend, track_measurements=true)
+        @test bits == [1, 0]
     end
-    for state in (zero_state(2), zero_state(2) * zero_state(2)', zero_state(N_MPS(2)))
+    for state in (zero_state(2), zero_state(2; backend=:density_matrix),
+                  zero_state(2; backend=:mps), zero_state(2; backend=:camps))
         _, bits = apply(state, measured; track_measurements=true)
         @test bits == [1, 0]
     end

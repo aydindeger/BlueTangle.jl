@@ -78,7 +78,9 @@ register slices are unsupported. Register sizes and indices are checked.
 ## Measurement records and reset
 
 An imported `measure` becomes an explicit mid-circuit `MZ`.
-`run(state, ops)` returns the final state and those outcomes in operation order:
+`apply(state, ops; track_measurements=true)` returns `(final_state, bits)` in
+operation order, and `measure(source, shots)` records per-shot mid-circuit
+outcomes in `.mid_measurements`:
 
 ```@example qasm_measurements
 using BlueTangle
@@ -91,26 +93,28 @@ measure q -> c;
 reset q;
 """
 ops = from_qasm(source)
-result = run(zero_state(2), ops)
-@assert result.record == [0, 1]
-@assert result.state ≈ zero_state(2)
+final_state, bits = apply(zero_state(2), ops; track_measurements=true)
+@assert bits == [0, 1]
+@assert final_state ≈ zero_state(2)
 
-# The batch form returns one record per shot, starting from the zero state.
-records = run(source, 3)
-@assert records == [[0,1],[0,1],[0,1]]
-records
+# measure accepts OpenQASM strings or file paths directly and stores mid-circuit records per shot.
+m = measure(source, 3)
+@assert m.mid_measurements == [[0,1],[0,1],[0,1]]
+@assert m.bitstr == [0] # reset leaves the final state in |00⟩
+m.mid_measurements
 ```
 
 The destination classical bits are validated during import. Their assignments
-are not retained in the operation list; `run` reports measurement outcomes in
-operation order. Classical `if` statements are unsupported.
-To construct feed-forward circuits in Julia, use BlueTangle's conditional `Op`
-or `ifOp`.
+are not retained in the operation list; `apply(...; track_measurements=true)`
+and `measure(...).mid_measurements` report outcomes in operation order.
+Classical `if` statements are unsupported. To construct feed-forward circuits
+in Julia, use BlueTangle's conditional `Op` or `ifOp`.
 
-Use `sample(ops, shots)` for raw final outcomes or `measure(ops, shots)` for their
-statistics. Both accept `backend=:statevector`, `:density_matrix`, or `:tensor`.
+Use `sample(ops, shots)` for raw final outcomes or `measure(ops, shots)` for
+statistics and `.mid_measurements`. Both (and `apply(ops; backend=...)`) accept
+`backend=:statevector`, `:density_matrix`, `:tensor`, `:camps`, or `:phasepoly`.
 In the example above, `sample(ops, 3)` returns `[0, 0, 0]`: reset leaves the final
-state in `|00⟩`, although the earlier record is `[0,1]`.
+state in `|00⟩`, although the earlier mid-circuit record is `[0, 1]`.
 
 ## Numeric parameters and diagnostics
 

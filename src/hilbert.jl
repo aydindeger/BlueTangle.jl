@@ -271,13 +271,21 @@ end
 
 
 """
-    apply(state, ops; noise=false, kwargs...)
+    apply(state, ops; noise=false, track_measurements=false, kwargs...)
+    apply(ops; N=get_N(ops), backend=:statevector, noise=false,
+          track_measurements=false, layout=nothing, kwargs...)
 
-Apply operations in their listed order to a statevector, density matrix, or MPS.
-Return the evolved state. Density matrices sum measurement and noise branches;
-statevectors and MPS follow one sampled trajectory. Use `run(state, ops)` to
-obtain a conditional state and its measurement record. No routing or scheduling
-is performed. The older `track_measurements=true` keyword remains supported.
+Apply operations in their listed order to an existing state (`:statevector`,
+`:density_matrix`, `:tensor`/`:mps`, or `CAMPSState`), or starting from `|0…0⟩`
+in the requested `backend` (`:statevector`, `:density_matrix`, `:tensor`,
+`:camps`, or `:phasepoly`).
+
+By default, density matrices sum measurement and noise branches, while
+statevectors, MPS, and CAMPS follow one sampled trajectory. Pass
+`track_measurements=true` to return `(final_state, bits)`, conditioning density
+matrices on the sampled measurement outcomes and recording each explicit
+mid-circuit measurement bit (`MX`, `MY`, `MZ`, `MR`, `ifOp`) in operation
+order. No routing or scheduling is performed unless `layout` is supplied.
 """
 function apply(
     psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},

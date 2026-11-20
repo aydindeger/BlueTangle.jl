@@ -176,7 +176,7 @@ Use normalized input states for trajectory simulation.
 ```@example pauli_measurement
 using BlueTangle
 plus_y = ComplexF64[1, im] / sqrt(2)
-after, bits = run(plus_y, Op("MY", 1))
+after, bits = apply(plus_y, Op("MY", 1); track_measurements=true)
 @assert bits == [0]
 @assert after * after' ≈ plus_y * plus_y'
 (record=bits, state=after)
@@ -212,10 +212,10 @@ probabilities are therefore 25% `000` and 75% `111`.
 
 ![Exact outcome probabilities for the conditional circuit](assets/figs/measure_mid.png)
 
-Use `run` for a particular trajectory and its record:
+Pass `track_measurements=true` to `apply` for a single trajectory and its mid-circuit record:
 
 ```@example conditional
-trajectory, record = run(zero_state(3), mid_ops)
+trajectory, record = apply(zero_state(3), mid_ops; track_measurements=true)
 @assert length(record) == 1
 @assert only(record) in (0, 1)
 record
@@ -242,17 +242,17 @@ weight. It applies feedback separately in each branch before summing them.
 
 ### Measurements inside a branch
 
-The record returned by `run` contains the outer outcome followed by outcomes
-from the selected branch. Its length therefore depends on which branch runs.
-Measurements within that branch also
-condition the returned density matrix:
+The record returned by `apply(...; track_measurements=true)` (and stored per
+shot in `measure(...).mid_measurements`) contains the outer outcome followed by
+outcomes from the selected branch. Its length therefore depends on which branch
+runs. Measurements within that branch also condition the returned density matrix:
 
 ```@example branch_records
 using BlueTangle
 feedback = ifOp("MZ", 1, Op("I", 2),
                 [Op("H", 2), Op("MZ", 2), Op("MZ", 2)])
 initial = product_state([1, 0])
-conditional_rho, bits = run(initial * initial', feedback)
+conditional_rho, bits = apply(initial * initial', feedback; track_measurements=true)
 @assert length(bits) == 3
 @assert bits[1] == 1 && bits[2] == bits[3]
 expected = product_state([1, bits[2]])
@@ -301,16 +301,16 @@ trajectory selects one of those two states.
 
 ### Reset with or without a measurement record
 
-Standalone reset discards its internal outcome. In a `run` record,
-`Op("RESET", q)` adds no bit. To retain the pre-reset outcome, explicitly measure
-Z and apply conditional X:
+Standalone reset discards its internal outcome. When tracking mid-circuit
+measurements, `Op("RESET", q)` adds no bit. To retain the pre-reset outcome,
+explicitly measure Z and apply conditional X:
 
 ```@example recorded_reset
 using BlueTangle
 initial = one_state(1)
-silent_state, silent_bits = run(initial, Op("RESET", 1))
+silent_state, silent_bits = apply(initial, Op("RESET", 1); track_measurements=true)
 recorded_reset = ifOp("MZ", 1, "I", "X")
-recorded_state, reset_bits = run(initial, recorded_reset)
+recorded_state, reset_bits = apply(initial, recorded_reset; track_measurements=true)
 @assert silent_state ≈ recorded_state ≈ zero_state(1)
 @assert isempty(silent_bits)
 @assert reset_bits == [1]
@@ -1068,7 +1068,7 @@ block = Op("bell block", [Op("H", 1), Op("CX", 1, 2)])
 state = apply(zero_state(2), block)
 @assert correlation(state, "Z,Z", [1, 2]) ≈ 1
 conditional_reset = Op("MZ", 1; if0="I", if1="X")
-reset_state, record = run(one_state(1), conditional_reset)
+reset_state, record = apply(one_state(1), conditional_reset; track_measurements=true)
 @assert record == [1]
 @assert reset_state ≈ zero_state(1)
 ```
@@ -1084,8 +1084,7 @@ using BlueTangle, LinearAlgebra
 state = plus_state(1)
 rho = state * state'
 ensemble = apply(rho, Op("MZ", 1))
-result = run(rho, Op("MZ", 1))
-conditional, record = result.state, result.record
+conditional, record = apply(rho, Op("MZ", 1); track_measurements=true)
 
 @assert ensemble ≈ [0.5 0; 0 0.5]
 @assert only(record) in (0, 1)
@@ -1097,47 +1096,44 @@ Choose the function by the result you need:
 
 | Call | Result |
 |:--|:--|
-| `apply(state, ops)` | Evolved state |
-| `run(state, ops)` | Named tuple with `.state` and `.record` |
-| `sample(state_or_ops, shots)` | Raw final outcomes as integers |
-| `measure(state_or_ops, shots)` | Probabilities and expectation values in a `Measurement` |
+| `apply(state, ops)` / `apply(ops; backend=...)` | Evolved state (or `(state, bits)` with `track_measurements=true`) |
+| `sample(state_or_ops, shots; backend=...)` | Raw final outcomes as integers |
+| `measure(state_or_ops, shots; backend=...)` | Device-like `Measurement` with `.bitstr`, `.sample`, `.expect`, `.mag_moments`, and `.mid_measurements` |
 
-For a density matrix, `apply` sums measurement branches and `run` selects the
-observed branch. Both sum noise and standalone-reset Kraus branches, so a
-conditional density matrix can remain mixed. Statevectors and MPS follow one
-trajectory in either case; `run` also retains its measurement record.
+For a density matrix, `apply(rho, ops)` sums measurement branches and
+`apply(rho, ops; track_measurements=true)` selects the observed branch. Both sum
+noise and standalone-reset Kraus branches, so a conditional density matrix can
+remain mixed. Statevectors, MPS, and CAMPS follow one trajectory in either case;
+`track_measurements=true` also returns its mid-circuit measurement record.
 
 `sample` and `measure` use the same final-readout calculation. Supplying operations
 starts each shot in `|0…0⟩`; supplying a state samples that already prepared state.
 `Measurement(draws, N)` summarizes an existing vector of integer draws without
 sampling again. `measure(state)` without a shot count returns exact probabilities.
 
-For repeated explicit measurement records, `run(ops, shots; backend=...)`
-returns one bit vector per shot. It appends no final measurement. For example,
-reset contributes no extra bit between two explicit measurements:
+When a circuit contains explicit mid-circuit measurements, `measure(ops, shots;
+backend=...).mid_measurements` stores one bit vector per shot in execution order.
+Reset contributes no extra bit between two explicit measurements:
 
 ```@example run_records
 using BlueTangle
 ops = [Op("X", 1), Op("MZ", 1), Op("RESET", 1), Op("MZ", 1)]
 for backend in (:statevector, :density_matrix, :tensor, :camps)
-    @assert run(ops, 3; backend=backend) == [[1, 0], [1, 0], [1, 0]]
+    @assert measure(ops, 3; backend=backend).mid_measurements == [[1, 0], [1, 0], [1, 0]]
 end
-run(ops, 3)
+measure(ops, 3).mid_measurements
 ```
 
 Records follow execution order, including any measurements inside the selected
-branch. `run(initial, ops)` follows the supplied list and lets you choose the
-initial state. The batch form `run(ops, shots)` starts each shot in `|0…0⟩` and
-preserves the operation list's execution order, including the order of
-independent operations. Records are flat bit vectors without qubit or basis labels,
-so keep the operation sequence when interpreting them.
+branch. Records are flat bit vectors without qubit or basis labels, so keep the
+operation sequence when interpreting them.
 
 For an MPS, pass truncation settings to the outer call; they also reach feedback:
 
 ```@example mps_feedback
 using BlueTangle
 feedback = ifOp("MZ", 3, [Op("H", 1), Op("CX", 1, 2)], Op("I", 1))
-psi, bits = run(zero_state(N_MPS(3)), feedback; cutoff=0.0, maxdim=2)
+psi, bits = apply(zero_state(N_MPS(3)), feedback; track_measurements=true, cutoff=0.0, maxdim=2)
 @assert bits == [0]
 @assert correlation(psi, "X,X", [1, 2]) ≈ 1
 (record=bits, bond_dimension=maxlinkdim(psi))
@@ -1168,6 +1164,10 @@ correlation(compact, "X,Z", [1, 2])      # native compact Pauli calculation
 amplitude(compact, [0, 1])               # amplitude of |01⟩
 state = to_state(compact)                # explicitly materialize the sparse state
 @assert state ≈ apply(zero_state(2), ops)
+
+# Unified backend=:phasepoly interface for sampling and shadows
+m = measure(ops, 1000; backend=:phasepoly)
+rho_12 = shadow(ops, 1000; qubits=[1, 2], backend=:phasepoly)
 ```
 
 The adapter preserves BlueTangle's physical qubit labels, statevector ordering,
@@ -1176,19 +1176,22 @@ permutations, supported diagonal phases, and Hadamards. Unsupported gates and
 noise raise errors. Leading and trailing Hadamard layers use efficient native
 paths; interior Hadamards require branching, and level-4 phases can also have
 exponential cost. Native Pauli queries avoid statevector materialization in the
-single-branch case. See `?phasepoly` for supported phase angles and computational
-limits.
+single-branch case. See `?phasepoly` and [Backends → PhasePoly](@ref backend-phasepoly)
+for supported phase angles and computational limits.
 
 ## [23) Operation lists](@id Operation-lists)
 
 `apply(state, ops)` executes operations in list order. The state type selects
-statevector, density-matrix, MPS, or CAMPS evolution. Use `get_stats(ops)` and
-`get_layers(ops)` to inspect the operations, `plotq(ops)` to draw them, and
+statevector, density-matrix, MPS, or CAMPS evolution (see the
+[Backends](backends.md) section for a full guide to `:statevector`,
+`:density_matrix`, `:tensor`, `:camps`, and `:phasepoly`). Use `get_stats(ops)`
+and `get_layers(ops)` to inspect the operations, `plotq(ops)` to draw them, and
 `to_qasm(ops)` to export them.
 
 Use `route(ops, layout)` to insert SWAPs for a chosen connectivity layout.
-Sampling functions also accept a `layout` keyword. Use `N=...` with `measure`,
-`run`, or `shadow` to include idle qubits beyond those mentioned by the operations.
+Sampling and evolution functions (`apply`, `measure`, `sample`, `shadow`) also
+accept `layout` and `backend` keywords, plus `N=...` to include idle qubits
+beyond those mentioned by the operations.
 
 Use `measure(ops, shots; options=Options(noise=noise))` for independent noisy
 preparations. `measure(apply(state, ops; noise=noise), shots)` samples the
@@ -1200,118 +1203,3 @@ noise, and readout mitigation use `Options`.
 `save_data(ops, measurement, other; options=options, path="results.ser")` stores
 the operations, execution options, measurement, and optional additional data.
 Retrieve them from `load_data(path).ops`, `.options`, `.measurement`, and `.other`.
-
-## [24) Clifford-Augmented MPS (CAMPS)](@id Clifford-Augmented-MPS)
-
-Standard MPS (`:tensor` / `:mps`) bond dimensions grow exponentially under deep
-or nonlocal Clifford circuits and stabilizer error-correcting codes.
-**Clifford-Augmented MPS (`CAMPSState`, `backend=:camps`)** separates stabilizer
-entanglement from non-Clifford ("magic") entanglement by storing a state as
-`|Ψ⟩ = C |φ⟩`, where `C` is tracked exactly (up to global phase) in `O(N²)`
-bits by a `CliffordTableau` and `|φ⟩` is a disentangled `ITensorMPS.MPS` core.
-
-Clifford gates, Pauli noise, and stabilizer encoders update `C` in `O(N)` time
-with zero MPS bond-dimension growth. Non-Clifford gates pull their Pauli
-generators through `C`, collapse them onto untouched `|0⟩` sites when possible,
-and run two-qubit Clifford disentangling sweeps (`disentangle=true`, `nsweeps=2`)
-to push stabilizer entanglement back into `C`.
-
-### Compressing a nonlocal Clifford+T circuit
-
-On a 10-qubit nonlocal Clifford circuit doped with 10 `T` gates, a plain MPS
-reaches the volume-law ceiling `χ = 32`, while `camps` stays at `χ = 1` with
-unit fidelity:
-
-```@example examples_camps
-using BlueTangle, Random
-
-rng = MersenneTwister(7)
-N = 10
-ops = Op[]
-for layer in 1:10
-    for q in 1:N
-        push!(ops, Op(rand(rng, ("H", "S")), q))
-    end
-    perm = randperm(rng, N)
-    for k in 1:2:(N - 1)
-        push!(ops, Op("CX", perm[k], perm[k + 1]))
-    end
-    push!(ops, Op("T", rand(rng, 1:N)))
-end
-
-sv = apply(zero_state(N), ops)
-mps_plain = apply(zero_state(N_MPS(N)), ops; cutoff=1e-12)
-st_camps = camps(ops; N=N, cutoff=1e-12, disentangle=true, nsweeps=2)
-
-@assert fidelity(st_camps, sv) ≈ 1
-@assert isapprox(expect(st_camps, "Z"), expect(sv, "Z"); atol=1e-12)
-@assert maxlinkdim(st_camps) < maxlinkdim(mps_plain)
-(
-    plain_mps_chi = maxlinkdim(mps_plain),
-    camps_chi = maxlinkdim(st_camps),
-    fidelity = fidelity(st_camps, sv),
-)
-```
-
-### Sampling, noise, and classical shadows with `backend=:camps`
-
-`backend=:camps` (alias `:clifford_mps`) works directly with `measure`,
-`sample`, `run`, and `shadow`, accepting `cutoff`, `maxdim`, `disentangle`, and
-`nsweeps`:
-
-```@example examples_camps
-small_ops = [Op("H", 1), Op("T", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
-nm = NoiseModel(Noise1("amplitude_damping", 0.25), Noise2("depolarizing", 0.1))
-
-rho_exact = apply(to_rho(zero_state(3)), small_ops; noise=nm)
-m_camps = measure(small_ops, 3000; backend=:camps, options=Options(noise=nm),
-                  cutoff=1e-12, maxdim=16)
-rho_13 = shadow(small_ops, 3000; qubits=[1, 3], backend=:camps, cutoff=1e-12)
-
-@assert isapprox(m_camps.expect, expect(rho_exact, "Z"); atol=0.08)
-@assert size(rho_13) == (4, 4)
-(camps_noisy_Z = round.(m_camps.expect; digits=3),
- exact_noisy_Z = round.(expect(rho_exact, "Z"); digits=3))
-```
-
-### Stabilizer QEC at bond dimension 1
-
-Because stabilizer encoding, transversal Clifford gates, Pauli errors, and ideal
-stabilizer projections live in the Clifford group, multi-block QEC simulations
-remain at `maxlinkdim == 1` on `CAMPSState`:
-
-```@example examples_camps
-code = steane_code(3) # 21 physical qubits, 3 logical qubits
-decoder = steane_decoder(code)
-
-enc = code.encode(CAMPSState(3))
-enc = code.apply(enc, "H", 1)
-enc = code.apply(enc, "CX", 1, 2)
-enc = code.apply(enc, "CX", 2, 3)
-
-damaged = apply(enc, [Op("X", 3), Op("Y", 11), Op("Z", 19)])
-recovered = qec_round(code, damaged; decoder=decoder)
-logical = code.decode(recovered.state)
-
-@assert maxlinkdim(recovered.state) == 1
-@assert fidelity(recovered.state, enc) ≈ 1
-@assert correlation(logical, "X,X,X", [1, 2, 3]) ≈ 1
-(physical_qubits = get_N(enc), bond_dim = maxlinkdim(recovered.state),
- logical_XXX = correlation(logical, "X,X,X", [1, 2, 3]))
-```
-
-For full details on free-zero reduction, two-qubit disentangling, truncation
-controls, supported gates, global-phase conventions, and limitations when
-non-Clifford gate count exceeds `N`, see the dedicated
-[Clifford-Augmented MPS (CAMPS)](camps.md) guide and the runnable script
-[`examples/camps_clifford_t.jl`](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/camps_clifford_t.jl).
-
-**References:** X. Qian, J. Huang, and M. Qin, *Phys. Rev. Lett.* **133**,
-190402 (2024), [arXiv:2405.09217](https://arxiv.org/abs/2405.09217);
-S. Masot-Llima and A. García-Sáez, *Phys. Rev. Lett.* **133**, 230601 (2024),
-[arXiv:2403.08724](https://arxiv.org/abs/2403.08724); G. Lami, T. Haug, and
-J. De Nardis, *PRX Quantum* **6**, 010345 (2025),
-[arXiv:2404.18751](https://arxiv.org/abs/2404.18751); G. E. Fux, B. Béri,
-R. Fazio, and E. Tirrito, [arXiv:2410.09001](https://arxiv.org/abs/2410.09001)
-(2024); Z. Liu and B. K. Clark,
-[arXiv:2412.17209](https://arxiv.org/abs/2412.17209) (2024).

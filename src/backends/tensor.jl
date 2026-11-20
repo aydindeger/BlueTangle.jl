@@ -257,9 +257,12 @@ function fidelity(rho::AbstractMatrix, sigma::AbstractMatrix)
 end
 
 """
-    fidelity(ψ::it.MPS,ψ::AbstractVectorS)=abs2(inner(ψ,MPS))
+    fidelity(ψ::it.MPS, ψ2::it.MPS)
+    fidelity(ψ::it.MPS, vec::AbstractVectorS)
 """
-fidelity(ψ::it.MPS,ψ2::it.MPS)=abs2(inner(ψ,ψ2))
+fidelity(ψ::it.MPS, ψ2::it.MPS) = abs2(inner(ψ, ψ2))
+fidelity(ψ::it.MPS, vec::AbstractVectorS) = abs2(inner(ψ, vec))
+fidelity(vec::AbstractVectorS, ψ::it.MPS) = abs2(inner(vec, ψ))
 
 function entanglement_entropy(psi::it.MPS, b::Int; spectrum_bool::Bool=false)
     ψ = copy(psi)
@@ -474,8 +477,8 @@ end
 
 Sample a Z measurement of one qubit in a normalized MPS. Return the normalized
 `(collapsed_mps, bit)`, with bit 0 for `|0⟩` and 1 for `|1⟩`.
-All sites remain in the MPS. Use `run(psi, Op("MZ", qubit))` for the common
-measurement-record interface.
+All sites remain in the MPS. Use `apply(psi, Op("MZ", qubit); track_measurements=true)`
+for the common measurement-record interface.
 """
 function born_measure_Z(psi::it.MPS,qubit::Int)#;cutoff=1e-10,maxdim=500)
 

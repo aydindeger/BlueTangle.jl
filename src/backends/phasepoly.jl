@@ -34,7 +34,9 @@ require exponential branching. Other PhasePoly cost guards pass through `kwargs`
 Pauli expectations use the native evaluator; `to_state` explicitly materializes
 a sparse vector subject to PhasePoly's `max_nonzeros` limit.
 """
-function BlueTangle.phasepoly(ops::Vector{<:QuantumOps}; nqubits::Int=get_N(ops), kwargs...)
+function BlueTangle.phasepoly(ops::Vector{<:QuantumOps}; N::Int=get_N(ops),
+                              nqubits::Union{Nothing,Int}=nothing, kwargs...)
+    nqubits = isnothing(nqubits) ? N : nqubits
     nqubits > 0 && nqubits >= get_N(ops) || throw(ArgumentError("nqubits must cover the circuit."))
     program = Tuple{String,Vector{Int}}[]
     global_phase = 1.0 + 0.0im
@@ -77,6 +79,10 @@ function BlueTangle.phasepoly(ops::Vector{<:QuantumOps}; nqubits::Int=get_N(ops)
             continue
         elseif name == "CY"
             append!(program, [("Sdg",[t]), ("CX",[q,t]), ("S",[t])])
+        elseif name == "HSP"
+            append!(program, [("Sdg",[q]), ("H",[q])])
+        elseif name == "HY"
+            append!(program, [("S",[q]), ("H",[q])])
         elseif name in ("H", "X", "Y", "Z", "S", "SD", "T", "TD", "CX", "CNOT", "SWAP", "CZ", "CS", "CSD", "CT", "CTD")
             push!(program, (get(aliases,name,name), op.q == 1 ? [q] : [q,t]))
         else
@@ -131,3 +137,35 @@ function BlueTangle.amplitude(state::PhasePolyState, index::Integer; kwargs...)
 end
 BlueTangle.amplitude(state::PhasePolyState, bits::Union{AbstractVector,AbstractString}; kwargs...) =
     state.phase * PhasePoly.amplitude(state.sim,bits; kwargs...)
+
+function BlueTangle.to_rho(state::PhasePolyState; kwargs...)
+    vec = BlueTangle.to_state(state; kwargs...)
+    return vec * vec'
+end
+
+BlueTangle.sample_exact(state::PhasePolyState; kwargs...) =
+    BlueTangle.sample_exact(BlueTangle.to_state(state; kwargs...))
+BlueTangle.sample(state::PhasePolyState, shots::Int=1; kwargs...) =
+    BlueTangle.sample(BlueTangle.to_state(state; kwargs...), shots)
+BlueTangle.sample_bit(state::PhasePolyState, shots::Int=1; basis="Z", kwargs...) =
+    BlueTangle.sample_bit(BlueTangle.to_state(state; kwargs...), shots; basis=basis)
+BlueTangle.sample_state(state::PhasePolyState, shots::Int; kwargs...) =
+    BlueTangle.get_probs_from_sample(BlueTangle.sample(state, shots; kwargs...), BlueTangle.get_N(state))
+
+function BlueTangle.measure(state::PhasePolyState, number_of_experiment::Int=-1;
+                            label="state to measurement", kwargs...)
+    number_of_experiment == -1 || number_of_experiment > 0 ||
+        throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
+    n = BlueTangle.get_N(state)
+    bitstr, probabilities = number_of_experiment == -1 ?
+        BlueTangle.sample_exact(state; kwargs...) :
+        BlueTangle.sample_state(state, number_of_experiment; kwargs...)
+    return BlueTangle._measurement_from_probs(bitstr, probabilities, n, number_of_experiment, "0", label)
+end
+
+BlueTangle.fidelity(a::PhasePolyState, b::AbstractVector; kwargs...) =
+    BlueTangle.fidelity(BlueTangle.to_state(a; kwargs...), b)
+BlueTangle.fidelity(a::AbstractVector, b::PhasePolyState; kwargs...) =
+    BlueTangle.fidelity(a, BlueTangle.to_state(b; kwargs...))
+BlueTangle.fidelity(a::PhasePolyState, b::PhasePolyState; kwargs...) =
+    BlueTangle.fidelity(BlueTangle.to_state(a; kwargs...), BlueTangle.to_state(b; kwargs...))

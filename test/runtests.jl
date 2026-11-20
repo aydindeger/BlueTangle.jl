@@ -212,16 +212,16 @@ Random.seed!(1234)
         ]
 
         all_ok = true
-        for backend in (:statevector, :tensor)
-            all_ok &= (run(ops_reset, 1; backend=backend)[1] == [0])
-            all_ok &= (run(ops_ifop, 1; backend=backend)[1] == [1])
-            all_ok &= (run(ops_mid_mz, 1; backend=backend)[1] == [1])
+        for backend in (:statevector, :tensor, :density_matrix, :camps)
+            all_ok &= (measure(ops_reset, 1; backend=backend).mid_measurements[1] == [0])
+            all_ok &= (measure(ops_ifop, 1; backend=backend).mid_measurements[1] == [1])
+            all_ok &= (measure(ops_mid_mz, 1; backend=backend).mid_measurements[1] == [1])
 
-            init1 = backend==:statevector ? zero_state(1) : zero_state(N_MPS(1))
+            init1 = zero_state(1; backend=backend)
             _,m_reset_apply = apply(init1, ops_reset; track_measurements=true)
             _,m_ifop_apply = apply(init1, ops_ifop; track_measurements=true)
 
-            init3 = backend==:statevector ? zero_state(3) : zero_state(N_MPS(3))
+            init3 = zero_state(3; backend=backend)
             _,m_mid_apply = apply(init3, ops_mid_mz; track_measurements=true)
 
             all_ok &= (m_reset_apply == [0])

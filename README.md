@@ -106,43 +106,51 @@ Choose the result you need:
 
 | Call | Returns |
 |:--|:--|
-| `apply(state, ops)` | The evolved state |
-| `run(state, ops)` | The evolved state and its explicit measurement record |
-| `sample(state_or_ops, shots)` | Raw final outcomes, as integers |
-| `measure(state_or_ops, shots)` | Outcome frequencies and expectation values in a `Measurement` |
+| `apply(state, ops)` / `apply(ops; backend=...)` | Evolved state (or `(state, bits)` with `track_measurements=true`) |
+| `sample(state_or_ops, shots; backend=...)` | Raw final outcomes, as integers |
+| `measure(state_or_ops, shots; backend=...)` | Device-like `Measurement` with frequencies, expectations, and `.mid_measurements` |
 
 ```julia
 ops = [Op("H", 1), Op("CX", 1, 2)]
-draws = sample(ops, 1000)       # e.g. [0, 3, 3, 0, ...]
+draws = sample(ops, 1000)           # e.g. [0, 3, 3, 0, ...]
 measurement = Measurement(draws, 2) # summarize these draws on two qubits
-measurement.bitstr             # observed outcomes: [0, 3]
-measurement.sample             # their frequencies, approximately [0.5, 0.5]
+measurement.bitstr                  # observed outcomes: [0, 3]
+measurement.sample                  # their frequencies, approximately [0.5, 0.5]
 
 measured_ops = [ops; Op("MZ", 1)]
-result = run(zero_state(2), measured_ops)
-result.record                  # one observed bit: [0] or [1]
-result.state                   # the state conditioned on that bit
+state, bits = apply(zero_state(2), measured_ops; track_measurements=true)
+# Or collect per-shot mid-circuit records alongside final statistics:
+m = measure(measured_ops, 100)
+m.mid_measurements                  # 100 recorded mid-circuit bit vectors
 ```
 
 Use `measure(state)` without a shot count for exact probabilities. This has the
 same meaning for statevectors, density matrices, and MPS; exact MPS enumeration
 is limited to 16 qubits. For a larger MPS, supply a shot count explicitly.
 
-For density matrices, `apply` averages over measurement outcomes, while `run`
-selects outcomes and returns their record. Noise remains averaged in either
-case. Statevectors and MPS represent a single trajectory.
+For density matrices, `apply(rho, ops)` averages over measurement outcomes,
+while `apply(rho, ops; track_measurements=true)` selects outcomes and returns
+their record. Noise remains averaged in either case. Statevectors, MPS, and
+CAMPS represent a single trajectory.
 
 ### Backends
 
-Julia 1.10 or later is required. The same operation list works across backends:
+Julia 1.10 or later is required. The same operation list works across all
+backends with `apply`, `measure`, `sample`, and `shadow`:
 
 ```julia
 ops = [Op("H", 1), Op("CX", 1, 2)]
+apply(ops; backend=:camps, cutoff=1e-12)
 measure(ops, 1000; backend=:statevector)
 measure(ops, 1000; backend=:tensor, cutoff=1e-12)
 measure(ops, 1000; backend=:camps, cutoff=1e-12, maxdim=64)
 measure(ops, 1000; backend=:density_matrix)
+# After `import PhasePoly` (optional extension, noiseless supported gates):
+measure(ops, 1000; backend=:phasepoly)
 ```
+
+See the [Backends guide](docs/src/backends.md) for a side-by-side comparison,
+examples, and limitations of every backend.
 
 For circuits dominated by Clifford gates, stabilizer QEC, or moderate `T`-gate
 counts, the native **Clifford-Augmented MPS (`:camps` / `CAMPSState`)** backend
@@ -155,7 +163,7 @@ expect(st, "Z")                  # exact Pauli expectations via Clifford pullbac
 correlation(st, "X,Z", [1, 3])
 ```
 
-See the [CAMPS documentation](docs/src/camps.md) and
+See the [Backends guide](docs/src/backends.md) (`:camps` subsection) and
 [`examples/camps_clifford_t.jl`](examples/camps_clifford_t.jl) for details on
 free-zero Pauli reduction, two-qubit Clifford disentangling, truncation
 controls (`cutoff`, `maxdim`, `disentangle`, `nsweeps`), noisy trajectories,
@@ -164,18 +172,19 @@ and multi-block Steane QEC at bond dimension 1.
 The [measurement and reset examples](docs/src/examples.md) explain Pauli outcome
 bits, conditional branches, records from measurements inside a branch, and MPS
 truncation. `Op("RESET", q)` resets without recording its internal outcome;
-`run(state, Op("MZ", q; if0="I", if1="X"))` retains the pre-reset bit. The examples
-also explain why explicit feedback gates can receive gate noise while standalone
-reset is ideal. See [reduced states and partial trace](docs/src/examples.md) for
-the distinction between keeping qubits in the vector API and discarding
-subsystems in the density-matrix API.
+`apply(state, Op("MZ", q; if0="I", if1="X"); track_measurements=true)` retains
+the pre-reset bit. The examples also explain why explicit feedback gates can
+receive gate noise while standalone reset is ideal. See
+[reduced states and partial trace](docs/src/examples.md) for the distinction
+between keeping qubits in the vector API and discarding subsystems in the
+density-matrix API.
 
 Readout mitigation is available through `measure`; its corrected weights can be
 negative at finite shot counts. `sample` returns raw outcomes.
 
-Sampled results above 16 qubits carry an empty `density_matrix` placeholder.
-MPS conversion and integer outcomes follow BlueTangle's convention: qubit 1 is
-the most significant bit. Outcomes wider than a machine integer use `BigInt`.
+MPS and CAMPS conversions and integer outcomes follow BlueTangle's convention:
+qubit 1 is the most significant bit. Outcomes wider than a machine integer use
+`BigInt`.
 
 Classical shadows can reconstruct a selected subsystem directly with MPS:
 
@@ -196,20 +205,23 @@ _RX(theta), 1)`.
 
 ## Operation lists and optional routing
 
-`apply(state, ops)` and `run(state, ops)` execute the supplied list in order.
-The state type selects the backend; pass `noise=...` for gate noise.
+`apply(state, ops)` and `apply(ops; backend=...)` execute the supplied list in
+order. Pass `noise=...` for gate noise and `track_measurements=true` to also
+return the mid-circuit measurement record.
 
-`measure(ops, shots; options=Options(noise=noise))` prepares independent noisy
-shots. Repeated sampling of a single noisy state gives statistics conditioned
-on that trajectory. Density-matrix evolution sums noise branches and can reuse the
-resulting ensemble. Readout noise, mitigation, measurement bases, and per-shot
-Pauli twirling are configured through `Options`.
+`measure(ops, shots; options=Options(noise=noise), backend=...)` prepares
+independent noisy shots and records per-shot mid-circuit outcomes in
+`.mid_measurements`. Repeated sampling of a single noisy state gives statistics
+conditioned on that trajectory. Density-matrix evolution sums noise branches
+and can reuse the resulting ensemble when no explicit mid-circuit measurements
+are present. Readout noise, mitigation, measurement bases, and per-shot Pauli
+twirling are configured through `Options`.
 
 Routing is explicit: `routed = route(ops, layout)` inserts the needed SWAPs and
-returns another operation list. Circuit calls to `sample`, `measure`,
-`run(ops, shots)`, and `shadow` also accept an optional `layout` keyword.
-Without one, the given gates are applied directly.
-Use `get_stats(ops)`, `get_layers(ops)`, and `plotq(ops)` for inspection.
+returns another operation list. `apply(ops; layout=...)`, `sample`, `measure`,
+and `shadow` also accept an optional `layout` keyword. Without one, the given
+gates are applied directly. Use `get_stats(ops)`, `get_layers(ops)`, and
+`plotq(ops)` for inspection.
 
 Save operations and settings with
 `save_data(ops, measurement; options=options, path="results.ser")`;

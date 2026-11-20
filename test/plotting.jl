@@ -37,7 +37,7 @@
     reference = measure(zero_state(1))
     signed = Measurement([0,1], [1.1,-0.1], reference.expect, reference.mag_moments,
                          reference.measurement_basis, reference.number_of_experiment,
-                         "Signed estimate", 1, reference.density_matrix)
+                         "Signed estimate", 1)
     @test occursin("Measurement estimates (quasiprobabilities)", rendered(signed))
 
     if isnothing(Base.get_extension(BlueTangle, :BlueTanglePyPlotExt))
@@ -76,7 +76,7 @@ if !isnothing(Base.get_extension(BlueTangle, :BlueTanglePyPlotExt))
             reference = measure(zero_state(1))
             signed = Measurement([0,1], [1.1,-0.1], reference.expect, reference.mag_moments,
                                  reference.measurement_basis, reference.number_of_experiment,
-                                 "Signed estimate", 1, reference.density_matrix)
+                                 "Signed estimate", 1)
             figure = plotq(signed; backend=:pyplot, show=false)
             @test figure.axes[1].get_ylim()[1] < -0.1
             @test [bar.get_height() for bar in figure.axes[1].patches] ≈ [1.1,-0.1]
