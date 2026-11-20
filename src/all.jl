@@ -37,6 +37,7 @@ include("noise.jl")
 include("backends/statevector.jl")
 include("backends/density_matrix.jl")
 include("backends/tensor.jl")
+include("backends/camps.jl")
 include("trotter.jl")
 include("variational_state.jl")
 include("vqa.jl")
@@ -55,6 +56,7 @@ end
 *(o::QuantumOps, state::AbstractVectorS) = apply(state, o)
 *(o::QuantumOps, rho::AbstractMatrixS) = apply(rho, o)
 *(o::QuantumOps, psi::it.MPS) = apply(psi, o)
+*(o::QuantumOps, state::CAMPSState) = apply(state, o)
 *(tensor::its.ITensor, psi::it.MPS) = it.apply(tensor, psi) #exact
 
 *(str::Tuple, state::AbstractVectorS) = apply(state, Op(str...))
@@ -62,6 +64,9 @@ end
 
 *(str::Tuple, psi::it.MPS) = apply(psi, Op(str...))
 *(vector_str::AbstractVector{<:Tuple}, psi::it.MPS) = apply(psi, vector_str)
+
+*(str::Tuple, state::CAMPSState) = apply(state, Op(str...))
+*(vector_str::AbstractVector{<:Tuple}, state::CAMPSState) = apply(state, vector_str)
 
 """
     ⊗(x::AbstractMatrixS,y::AbstractMatrixS)=kron

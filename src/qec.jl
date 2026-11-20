@@ -643,6 +643,12 @@ struct StabilizerCode #alpha version
             return apply(state, isempty(encoding) ? ops_encoding : encoding; noise=noise)
         end
 
+        function new_encode(logical_state::CAMPSState; noise::Union{Bool,NoiseModel}=false, encoding::Vector=[], kwargs...)
+            get_N(logical_state) == k || throw(DimensionMismatch("encoding requires a $k-qubit logical CAMPSState"))
+            state = _qec_embed_logical_camps(logical_state, n, logical_indices)
+            return apply(state, isempty(encoding) ? ops_encoding : encoding; noise=noise, kwargs...)
+        end
+
         function new_decode(state::AbstractVectorS; noise::Union{Bool,NoiseModel}=false, decoding::Vector=[])
 
             get_N(state) in (n, n+m) || throw(DimensionMismatch("decoding requires $n data qubits, optionally followed by $m reset ancillas"))
@@ -673,7 +679,13 @@ struct StabilizerCode #alpha version
             return reduce_and_relabel_qubits(psi, logical_indices)
         end
 
-        function new_syndrome(state_encoded::Union{AbstractVectorS,AbstractMatrixS,it.MPS}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
+        function new_decode(state::CAMPSState; noise::Union{Bool,NoiseModel}=false, decoding::Vector=[], kwargs...)
+            get_N(state) in (n, n+m) || throw(DimensionMismatch("decoding requires $n data qubits, optionally followed by $m ancillas"))
+            state = apply(state, isempty(decoding) ? ops_encoding' : decoding; noise=noise, kwargs...)
+            return reduce_and_relabel_qubits(state, logical_indices)
+        end
+
+        function new_syndrome(state_encoded::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
             if get_N(state_encoded) != n
                 throw(DimensionMismatch("syndrome extraction requires $n data qubits"))
             end
@@ -691,7 +703,7 @@ struct StabilizerCode #alpha version
             return state_encoded_ancillas, syndrome_vec, op_error
         end
 
-        function new_correct(state_encoded_ancillas::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, syndrome_vec::AbstractVector; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
+        function new_correct(state_encoded_ancillas::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, syndrome_vec::AbstractVector; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
             if decoder === nothing && 0 < d <= 2
                 throw(ArgumentError("a code of distance $d cannot correct an arbitrary single-qubit error"))
             end
@@ -707,7 +719,7 @@ struct StabilizerCode #alpha version
 
         end
 
-        function new_correct(state_encoded::Union{AbstractVectorS,it.MPS}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
+        function new_correct(state_encoded::Union{AbstractVectorS,it.MPS,CAMPSState}; noise::Union{Bool,NoiseModel}=false, decoder=nothing)
 
             state_encoded_ancillas, syndrome_vec, _ = new_syndrome(state_encoded; noise=noise)
             return new_correct(state_encoded_ancillas, syndrome_vec; noise=noise, decoder=decoder)
@@ -751,7 +763,7 @@ struct StabilizerCode #alpha version
         end
 
         #one qubit
-        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, name::String, qubit::Int; noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, name::String, qubit::Int; noise::Union{Bool,NoiseModel}=false)
             1 <= qubit <= k || throw(ArgumentError("logical qubit must be between 1 and $k"))
             ops = physical_ops(name, qubit, logicals)
             N = get_N(state)
@@ -765,7 +777,7 @@ struct StabilizerCode #alpha version
         end
 
         #two qubit
-        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, name::String, logical_qubit::Int, target_qubit::Int; noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, name::String, logical_qubit::Int, target_qubit::Int; noise::Union{Bool,NoiseModel}=false)
             N = get_N(state)
             max_qt = max(logical_qubit, target_qubit)
             min_qt = min(logical_qubit, target_qubit)
@@ -793,7 +805,7 @@ struct StabilizerCode #alpha version
             return state
         end
 
-        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, op::Op; noise::Union{Bool,NoiseModel}=false)
+        function new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, op::Op; noise::Union{Bool,NoiseModel}=false)
             _qec_validate_logical_op(op)
             return op.q == 1 ? new_apply(state, op.name, op.qubit; noise=noise) : new_apply(state, op.name, op.qubit, op.target_qubit; noise=noise)
         end

@@ -11,7 +11,8 @@
 
 BlueTangle is a Julia toolkit for quantum circuits with unitary gates, noise,
 mid-circuit measurements, and classical feed-forward. The same operations work
-with statevectors, density matrices, and matrix product states. It also includes
+with statevectors, density matrices, matrix product states, and
+Clifford-augmented matrix product states (CAMPS). It also includes
 stabilizer-code encoding and recovery, Hamiltonian evolution, variational
 circuits, and an optional PhasePoly backend for structured noiseless circuits.
 
@@ -139,8 +140,26 @@ Julia 1.10 or later is required. The same operation list works across backends:
 ops = [Op("H", 1), Op("CX", 1, 2)]
 measure(ops, 1000; backend=:statevector)
 measure(ops, 1000; backend=:tensor, cutoff=1e-12)
+measure(ops, 1000; backend=:camps, cutoff=1e-12, maxdim=64)
 measure(ops, 1000; backend=:density_matrix)
 ```
+
+For circuits dominated by Clifford gates, stabilizer QEC, or moderate `T`-gate
+counts, the native **Clifford-Augmented MPS (`:camps` / `CAMPSState`)** backend
+separates stabilizer entanglement (`CliffordTableau`) from the MPS core:
+
+```julia
+ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3), Op("T", 2), Op("CZ", 1, 3)]
+st = camps(ops; N=3)             # |Ψ⟩ = C |φ⟩ with maxlinkdim(st) == 1
+expect(st, "Z")                  # exact Pauli expectations via Clifford pullback
+correlation(st, "X,Z", [1, 3])
+```
+
+See the [CAMPS documentation](docs/src/camps.md) and
+[`examples/camps_clifford_t.jl`](examples/camps_clifford_t.jl) for details on
+free-zero Pauli reduction, two-qubit Clifford disentangling, truncation
+controls (`cutoff`, `maxdim`, `disentangle`, `nsweeps`), noisy trajectories,
+and multi-block Steane QEC at bond dimension 1.
 
 The [measurement and reset examples](docs/src/examples.md) explain Pauli outcome
 bits, conditional branches, records from measurements inside a branch, and MPS

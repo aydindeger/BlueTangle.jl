@@ -1,8 +1,9 @@
 # BlueTangle.jl
 
 BlueTangle simulates quantum circuits with gates, noise, mid-circuit measurements,
-and classical feed-forward. Statevectors, density matrices, and matrix product
-states share the same circuit description. Stabilizer-code tools add encoding,
+and classical feed-forward. Statevectors, density matrices, matrix product
+states, and Clifford-augmented matrix product states (`CAMPSState` / `:camps`)
+share the same circuit description. Stabilizer-code tools add encoding,
 logical operations, syndrome extraction, and recovery.
 
 ## Start with a Bell pair
@@ -46,6 +47,10 @@ and saving results.
   [reset](@ref reset-and-records) sections explain outcome records and feedback.
   Later examples cover Hamiltonian evolution, entanglement,
   [partial trace](@ref partial-trace), Pauli twirling, and noise amplification.
+- [Clifford-Augmented MPS (CAMPS)](camps.md): factorize states as `|Ψ⟩ = C |φ⟩`
+  with an exact Clifford tableau and a disentangled MPS core for `T`-doped
+  Clifford circuits, noisy trajectories, classical shadows, and low-bond-dimension
+  stabilizer QEC.
 - [Quantum Machine Learning](qml.md): VQE, held-out regression and XOR
   classification, gradient checks, noisy training, MPS truncation, and the
   complete QML API.

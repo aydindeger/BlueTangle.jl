@@ -10,6 +10,7 @@ get_N(rho::AbstractMatrixS)=Int(log(2,size(rho,1)))
 
 get_M(state::it.MPS)=it.siteinds(state)
 get_N(psi::it.MPS)=length(get_M(psi))
+get_N(state::CAMPSState)=state.tableau.n
 
 # Scheduling must reserve every qubit a conditional operation can touch.
 function _operated_qubits(op::QuantumOps)
@@ -80,6 +81,7 @@ end
 
 sample_state(state::Union{AbstractVectorS,AbstractMatrixS}, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
 sample_state(psi::it.MPS, shots::Int)=get_probs_from_sample(sample(psi, shots),get_N(psi))
+sample_state(state::CAMPSState, shots::Int)=get_probs_from_sample(sample(state, shots),get_N(state))
 
 """
     shadow(ops, number_of_experiment::Int; options=Options(), N=get_N(ops),
@@ -97,11 +99,13 @@ Tracing out other qubits removes their trace-one factors. A subsystem estimate
 therefore requires only the factors associated with the retained qubits.
 
 The default `backend=:statevector` uses a `2^N` statevector. Use `backend=:tensor`
-(or `:mps`) to evolve and sample an MPS directly, without constructing a full
-statevector. The MPS backend accepts `cutoff` and `maxdim`; truncation introduces
-simulation error in addition to sampling error, and cost depends on the bond
-dimensions. Both backends repeat preparation for every shot, including any
-circuit noise or mid-circuit measurements.
+(or `:mps`) to evolve and sample an MPS directly, or `backend=:camps` to evolve
+a Clifford-augmented MPS (`CAMPSState`), without constructing a full statevector.
+The MPS backend accepts `cutoff` and `maxdim`; `:camps` also accepts
+`disentangle` and `nsweeps`. Truncation introduces simulation error in addition
+to sampling error, and cost depends on the bond dimensions. All trajectory
+backends repeat preparation for every shot, including any circuit noise or
+mid-circuit measurements.
 
 With ideal readout, the estimator is unbiased for the simulated state, Hermitian
 and trace one, but need not be positive at finite shot counts. Its eigenvalues
@@ -128,9 +132,9 @@ function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     ops = isnothing(layout) ? ops : route(ops, layout)
     N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
-    backend_name in ("statevector", "tensor") ||
-        throw(ArgumentError("shadow supports :statevector or :tensor (:mps) backends"))
-    _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
+    backend_name in ("statevector", "tensor", "camps") ||
+        throw(ArgumentError("shadow supports :statevector, :tensor (:mps), or :camps backends"))
+    _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
     keep = isnothing(qubits) ? collect(1:N) : qubits isa Integer ? [qubits] : collect(qubits)
     all(q -> q isa Integer && 1 <= q <= N, keep) && allunique(keep) ||
         throw(ArgumentError("qubits must contain distinct integer indices between 1 and $N"))
@@ -145,7 +149,7 @@ function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     measurement_basis = Vector{Int}(undef, N)
     for _ in 1:number_of_experiment
         # Fresh trajectory in the selected representation, including preparation noise.
-        initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
+        initial = _initial_backend_state(backend_name, N)
         state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
         for qubit in 1:N
             basis = rand(1:3)
@@ -421,13 +425,14 @@ end
     measure(state; label="state to measurement")
     measure(state, shots; label="state to measurement")
 
-Return measurement statistics for a statevector, density matrix, or MPS.
-Omitting `shots` uses exact probabilities; a positive count
-uses sampled frequencies. Exact MPS enumeration is limited to 16 qubits, so
-pass a shot count for larger states. Use `sample(state, shots)` for raw outcomes.
-Large sampled MPS results carry an empty density-matrix placeholder.
+Return measurement statistics for a statevector, density matrix, MPS, or
+`CAMPSState`. Omitting `shots` uses exact probabilities; a positive count uses
+sampled frequencies. Exact MPS and CAMPS enumeration is limited to 16 qubits, so
+pass a shot count for larger states. Use `sample(state, shots)` for raw
+outcomes. Large sampled MPS and CAMPS results carry an empty density-matrix
+placeholder.
 """
-function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, number_of_experiment::Int=-1; label="state to measurement")
+function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, number_of_experiment::Int=-1; label="state to measurement")
     number_of_experiment == -1 || number_of_experiment > 0 || throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
     N = get_N(state)
     bitstr, probabilities = number_of_experiment == -1 ? sample_exact(state) : sample_state(state, number_of_experiment)
@@ -477,7 +482,7 @@ function _execution_ops(ops::Vector{<:QuantumOps}, options::Options)
     return operations
 end
 
-function _final_measurement(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS}, options::Options; kwargs...)
+function _final_measurement(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, options::Options; kwargs...)
     basis = options.measurement_basis
     basis in ("X", "Y", "Z", "R") || throw(ArgumentError("measurement_basis must be X, Y, Z, or R"))
     for qubit in 1:get_N(state)
@@ -502,10 +507,12 @@ _has_state_callback(op::OpF) = op.data isa Function ||
 
 Return final-outcome statistics from fresh circuit shots. `sample(ops, shots)`
 returns the corresponding raw integer outcomes. Choose statevector, MPS
-(`:tensor`), or density-matrix (`:density_matrix`) evolution; MPS accepts `cutoff`
-and `maxdim`. `N` can include idle qubits. Operations run in their listed order,
-with routing only when `layout` is supplied. Readout mitigation and optional
-density-matrix storage are configured through `Options`.
+(`:tensor`), Clifford-augmented MPS (`:camps`), or density-matrix
+(`:density_matrix`) evolution; MPS accepts `cutoff` and `maxdim`, and `:camps`
+also accepts `disentangle` and `nsweeps`. `N` can include idle qubits.
+Operations run in their listed order, with routing only when `layout` is
+supplied. Readout mitigation and optional density-matrix storage are configured
+through `Options`.
 """
 function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
                  options::Options=Options(), N::Int=get_N(ops),
@@ -549,7 +556,7 @@ function _sample_circuit(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     ops = isnothing(layout) ? ops : route(ops, layout)
     N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
-    _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
+    _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
     T = N < 8sizeof(Int) ? Int : BigInt
     all_sample = T[]
     rho = _measurement_rho_placeholder(N)
@@ -564,17 +571,37 @@ function _sample_circuit(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
                   !any(_has_state_callback, ops) && !options.twirl && options.measurement_basis != "R"
     repetitions = reuse_state ? min(1, number_of_experiment) : number_of_experiment
     for _ in 1:repetitions
-        initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
-        backend_name == "density_matrix" && (initial = initial * initial')
+        initial = _initial_backend_state(backend_name, N)
         state = apply(initial, _execution_ops(ops, options); noise=options.noise, kwargs...)
         state = _final_measurement(state, options; kwargs...)
         append!(all_sample, sample(state, reuse_state ? number_of_experiment : 1))
         if options.density_matrix
-            vector = state isa it.MPS ? to_state(state) : state
+            vector = (state isa it.MPS || state isa CAMPSState) ? to_state(state) : state
             rho += (vector isa AbstractMatrix ? vector : vector * vector') / repetitions
         end
     end
     return (samples=all_sample, N=N, rho=sa.sparse(rho))
+end
+
+function _backend_keywords(backend_name::String)
+    if backend_name == "tensor"
+        return [:cutoff, :maxdim]
+    elseif backend_name == "camps"
+        return [:cutoff, :maxdim, :disentangle, :nsweeps]
+    end
+    return Symbol[]
+end
+
+function _initial_backend_state(backend_name::String, N::Int)
+    if backend_name == "tensor"
+        return zero_state(N_MPS(N))
+    elseif backend_name == "camps"
+        return CAMPSState(N)
+    elseif backend_name == "density_matrix"
+        s = zero_state(N)
+        return s * s'
+    end
+    return zero_state(N)
 end
 
 function _resolve_backend(backend::Union{Symbol,AbstractString})
@@ -585,8 +612,10 @@ function _resolve_backend(backend::Union{Symbol,AbstractString})
         return "density_matrix"
     elseif backend_s in ["tensor","tensor_network","tn","mps"]
         return "tensor"
+    elseif backend_s in ["camps","clifford_mps","clifford-mps"]
+        return "camps"
     else
-        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector`, `:tensor`, or `:density_matrix`."))
+        throw(ArgumentError("Unsupported backend `$backend`. Use `:statevector`, `:tensor`, `:camps`, or `:density_matrix`."))
     end
 end
 
@@ -600,12 +629,13 @@ inside the selected feedback branch. Outcomes 0 and 1 denote the +1 and −1
 Pauli eigenvalues. Reset adds no bit, and no final measurement is appended.
 
 Density matrices are conditioned on the recorded measurement outcomes, while
-noise and reset still use their complete Kraus sums. Statevectors and MPS states
-follow one stochastic trajectory. MPS accepts `cutoff` and `maxdim`.
+noise and reset still use their complete Kraus sums. Statevectors, MPS, and
+`CAMPSState` follow one stochastic trajectory. MPS accepts `cutoff` and
+`maxdim`; `CAMPSState` also accepts `disentangle` and `nsweeps`.
 Use `apply(state, ops)` when only the evolved state is needed; density-matrix
 `apply` averages over unobserved measurement outcomes.
 """
-function run(state::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},
+function run(state::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS,CAMPSState},
              ops::Union{QuantumOps,Vector{<:QuantumOps},AbstractVector{<:Tuple}};
              noise::Union{NoiseModel,Bool}=false, kwargs...)
     haskey(kwargs, :track_measurements) &&
@@ -626,11 +656,12 @@ order and include measurements inside the chosen conditional branch. Reset adds
 no bit, and no final measurement is appended; use `sample` for raw final outcomes
 or `measure` for their statistics.
 
-Choose `:statevector`, `:density_matrix`, or `:tensor` (`:mps`). MPS accepts
-`cutoff` and `maxdim`, including for conditional branch operations. Density-matrix
-execution conditions on the recorded measurements but still sums noise and
-reset Kraus branches. `N` can include idle qubits. Routing is performed only when
-`layout` is supplied. Final-readout options do not affect these explicit records.
+Choose `:statevector`, `:density_matrix`, `:tensor` (`:mps`), or `:camps`. MPS
+accepts `cutoff` and `maxdim`, and `:camps` also accepts `disentangle` and
+`nsweeps`, including for conditional branch operations. Density-matrix execution
+conditions on the recorded measurements but still sums noise and reset Kraus
+branches. `N` can include idle qubits. Routing is performed only when `layout`
+is supplied. Final-readout options do not affect these explicit records.
 """
 function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
              options::Options=Options(), N::Int=get_N(ops),
@@ -642,11 +673,10 @@ function run(ops::Vector{<:QuantumOps},number_of_experiment::Int=1;
     ops = isnothing(layout) ? ops : route(ops, layout)
     N = max(N, get_N(ops))
     backend_name = _resolve_backend(backend)
-    _unsupported_keyword_check(kwargs, backend_name == "tensor" ? [:cutoff, :maxdim] : Symbol[])
+    _unsupported_keyword_check(kwargs, _backend_keywords(backend_name))
     measurements = Vector{Vector{Int}}(undef,number_of_experiment)
     for shot=1:number_of_experiment
-        initial = backend_name == "tensor" ? zero_state(N_MPS(N)) : zero_state(N)
-        backend_name == "density_matrix" && (initial = initial * initial')
+        initial = _initial_backend_state(backend_name, N)
         measurements[shot] = run(initial, _execution_ops(ops, options);
                                  noise=options.noise, kwargs...).record
     end

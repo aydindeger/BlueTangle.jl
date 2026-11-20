@@ -27,6 +27,7 @@ export it, its, sa, la, sb, pr #Packages
 export hamiltonian, evolve, hamiltonian_exp, variational_apply, EfficientSU2, generate_ansatz_circuit, get_stats, get_layers, fidelity, get_optimized_layers, optimize_simple
 export to_qasm, from_qasm, @docVSC, plotqt
 export phasepoly
+export CliffordTableau, CAMPSState, camps, clifford_ops
 export train
 export save_data, load_data
 

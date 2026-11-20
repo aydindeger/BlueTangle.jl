@@ -104,6 +104,12 @@ hamiltonian_exp
 evolve
 ```
 
+## Clifford-Augmented MPS (CAMPS)
+
+The [CAMPS guide and API reference](camps.md#CAMPS-API-reference) documents
+`CAMPSState`, `CliffordTableau`, `camps`, and `clifford_ops` alongside
+executable examples.
+
 ## Quantum Machine Learning
 
 The [QML API reference](qml.md#API-reference) documents ansatz generators,

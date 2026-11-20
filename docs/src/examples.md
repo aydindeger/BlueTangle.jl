@@ -1119,7 +1119,7 @@ reset contributes no extra bit between two explicit measurements:
 ```@example run_records
 using BlueTangle
 ops = [Op("X", 1), Op("MZ", 1), Op("RESET", 1), Op("MZ", 1)]
-for backend in (:statevector, :density_matrix, :tensor)
+for backend in (:statevector, :density_matrix, :tensor, :camps)
     @assert run(ops, 3; backend=backend) == [[1, 0], [1, 0], [1, 0]]
 end
 run(ops, 3)
@@ -1182,7 +1182,7 @@ limits.
 ## [23) Operation lists](@id Operation-lists)
 
 `apply(state, ops)` executes operations in list order. The state type selects
-statevector, density-matrix, or MPS evolution. Use `get_stats(ops)` and
+statevector, density-matrix, MPS, or CAMPS evolution. Use `get_stats(ops)` and
 `get_layers(ops)` to inspect the operations, `plotq(ops)` to draw them, and
 `to_qasm(ops)` to export them.
 
@@ -1192,11 +1192,116 @@ Sampling functions also accept a `layout` keyword. Use `N=...` with `measure`,
 
 Use `measure(ops, shots; options=Options(noise=noise))` for independent noisy
 preparations. `measure(apply(state, ops; noise=noise), shots)` samples the
-resulting state. For a vector or MPS, those shots are conditioned on one
-sampled noise trajectory. Density-matrix
+resulting state. For a vector, MPS, or CAMPS state, those shots are conditioned
+on one sampled noise trajectory. Density-matrix
 execution sums noise branches before sampling. Twirling, basis choices, readout
 noise, and readout mitigation use `Options`.
 
 `save_data(ops, measurement, other; options=options, path="results.ser")` stores
 the operations, execution options, measurement, and optional additional data.
 Retrieve them from `load_data(path).ops`, `.options`, `.measurement`, and `.other`.
+
+## [24) Clifford-Augmented MPS (CAMPS)](@id Clifford-Augmented-MPS)
+
+Standard MPS (`:tensor` / `:mps`) bond dimensions grow exponentially under deep
+or nonlocal Clifford circuits and stabilizer error-correcting codes.
+**Clifford-Augmented MPS (`CAMPSState`, `backend=:camps`)** separates stabilizer
+entanglement from non-Clifford ("magic") entanglement by storing a state as
+`|Ψ⟩ = C |φ⟩`, where `C` is tracked exactly (up to global phase) in `O(N²)`
+bits by a `CliffordTableau` and `|φ⟩` is a disentangled `ITensorMPS.MPS` core.
+
+Clifford gates, Pauli noise, and stabilizer encoders update `C` in `O(N)` time
+with zero MPS bond-dimension growth. Non-Clifford gates pull their Pauli
+generators through `C`, collapse them onto untouched `|0⟩` sites when possible,
+and run two-qubit Clifford disentangling sweeps (`disentangle=true`, `nsweeps=2`)
+to push stabilizer entanglement back into `C`.
+
+### Compressing a nonlocal Clifford+T circuit
+
+On a 10-qubit nonlocal Clifford circuit doped with 10 `T` gates, a plain MPS
+reaches the volume-law ceiling `χ = 32`, while `camps` stays at `χ = 1` with
+unit fidelity:
+
+```@example examples_camps
+using BlueTangle, Random
+
+rng = MersenneTwister(7)
+N = 10
+ops = Op[]
+for layer in 1:10
+    for q in 1:N
+        push!(ops, Op(rand(rng, ("H", "S")), q))
+    end
+    perm = randperm(rng, N)
+    for k in 1:2:(N - 1)
+        push!(ops, Op("CX", perm[k], perm[k + 1]))
+    end
+    push!(ops, Op("T", rand(rng, 1:N)))
+end
+
+sv = apply(zero_state(N), ops)
+mps_plain = apply(zero_state(N_MPS(N)), ops; cutoff=1e-12)
+st_camps = camps(ops; N=N, cutoff=1e-12, disentangle=true, nsweeps=2)
+
+@assert fidelity(st_camps, sv) ≈ 1
+@assert isapprox(expect(st_camps, "Z"), expect(sv, "Z"); atol=1e-12)
+@assert maxlinkdim(st_camps) < maxlinkdim(mps_plain)
+(
+    plain_mps_chi = maxlinkdim(mps_plain),
+    camps_chi = maxlinkdim(st_camps),
+    fidelity = fidelity(st_camps, sv),
+)
+```
+
+### Sampling, noise, and classical shadows with `backend=:camps`
+
+`backend=:camps` (alias `:clifford_mps`) works directly with `measure`,
+`sample`, `run`, and `shadow`, accepting `cutoff`, `maxdim`, `disentangle`, and
+`nsweeps`:
+
+```@example examples_camps
+small_ops = [Op("H", 1), Op("T", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
+nm = NoiseModel(Noise1("amplitude_damping", 0.25), Noise2("depolarizing", 0.1))
+
+rho_exact = apply(to_rho(zero_state(3)), small_ops; noise=nm)
+m_camps = measure(small_ops, 3000; backend=:camps, options=Options(noise=nm),
+                  cutoff=1e-12, maxdim=16)
+rho_13 = shadow(small_ops, 3000; qubits=[1, 3], backend=:camps, cutoff=1e-12)
+
+@assert isapprox(m_camps.expect, expect(rho_exact, "Z"); atol=0.08)
+@assert size(rho_13) == (4, 4)
+(camps_noisy_Z = round.(m_camps.expect; digits=3),
+ exact_noisy_Z = round.(expect(rho_exact, "Z"); digits=3))
+```
+
+### Stabilizer QEC at bond dimension 1
+
+Because stabilizer encoding, transversal Clifford gates, Pauli errors, and ideal
+stabilizer projections live in the Clifford group, multi-block QEC simulations
+remain at `maxlinkdim == 1` on `CAMPSState`:
+
+```@example examples_camps
+code = steane_code(3) # 21 physical qubits, 3 logical qubits
+decoder = steane_decoder(code)
+
+enc = code.encode(CAMPSState(3))
+enc = code.apply(enc, "H", 1)
+enc = code.apply(enc, "CX", 1, 2)
+enc = code.apply(enc, "CX", 2, 3)
+
+damaged = apply(enc, [Op("X", 3), Op("Y", 11), Op("Z", 19)])
+recovered = qec_round(code, damaged; decoder=decoder)
+logical = code.decode(recovered.state)
+
+@assert maxlinkdim(recovered.state) == 1
+@assert fidelity(recovered.state, enc) ≈ 1
+@assert correlation(logical, "X,X,X", [1, 2, 3]) ≈ 1
+(physical_qubits = get_N(enc), bond_dim = maxlinkdim(recovered.state),
+ logical_XXX = correlation(logical, "X,X,X", [1, 2, 3]))
+```
+
+For full details on free-zero reduction, two-qubit disentangling, truncation
+controls, supported gates, global-phase conventions, and limitations when
+non-Clifford gate count exceeds `N`, see the dedicated
+[Clifford-Augmented MPS (CAMPS)](camps.md) guide and the runnable script
+[`examples/camps_clifford_t.jl`](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/camps_clifford_t.jl).

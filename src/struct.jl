@@ -5,6 +5,57 @@ Abstract type representing quantum operations.
 """
 abstract type QuantumOps end
 
+mutable struct _PauliString
+    phase::Int8
+    x::BitVector
+    z::BitVector
+end
+
+"""
+    CliffordTableau(N::Int)
+
+Represent an `N`-qubit Clifford unitary `C` (up to global phase) by tracking
+its inverse-conjugated Pauli basis: `px[j] = C† Xⱼ C` and `pz[j] = C† Zⱼ C`
+for `j = 1:N`. Use `clifford_ops(tableau)` to synthesize an equivalent
+`Vector{Op}` of elementary Clifford gates in `O(N²)` gates.
+"""
+mutable struct CliffordTableau
+    n::Int
+    px::Vector{_PauliString}
+    pz::Vector{_PauliString}
+end
+
+"""
+    CAMPSState(N::Int)
+    CAMPSState(psi::it.MPS)
+    CAMPSState(tableau::CliffordTableau, mps::it.MPS)
+
+Clifford-Augmented Matrix Product State representing `|Ψ⟩ = C |φ⟩`, where
+`tableau::CliffordTableau` tracks an `N`-qubit Clifford frame `C` in `O(N²)`
+space and `mps::it.MPS` stores the disentangled non-Clifford MPS core `|φ⟩`.
+
+Clifford gates update `tableau` in `O(N)` time without changing `mps` or its
+bond dimension. Non-Clifford gates pull their Pauli generators through `C`,
+apply free-zero Pauli reduction and optional two-qubit Clifford disentangling
+sweeps (`disentangle=true`, `nsweeps=2`), and update `mps` with configurable
+`cutoff` (default `1e-12`) and `maxdim` (default `nothing`).
+
+Because `tableau` represents `C` up to a global phase, `to_state` and `to_MPS`
+reproduce the physical state up to a single global phase, whereas `to_rho`,
+`expect`, `correlation`, `fidelity`, `sample`, `measure`, `run`, `shadow`, and
+`qec_round` are independent of global phase.
+"""
+mutable struct CAMPSState
+    tableau::CliffordTableau
+    mps::it.MPS
+
+    function CAMPSState(tableau::CliffordTableau, mps::it.MPS)
+        tableau.n == length(mps) ||
+            throw(DimensionMismatch("tableau size ($(tableau.n)) must match MPS length ($(length(mps)))"))
+        return new(tableau, mps)
+    end
+end
+
 
 function __calc_prob(state::AbstractVectorS,kraus_vec::Vector,qubit::Int)
 
@@ -682,6 +733,7 @@ struct ifOp <: QuantumOps
         new_expand(N::Int)=__measurement_hilbert(N,name,qubit)
         new_born_apply(state::AbstractVectorS,noise=false;kwargs...)=__ifOp_apply(state,name,qubit,if0,if1,noise;kwargs...)
         new_born_apply(psi::it.MPS,noise=false;kwargs...)=__ifOp_apply(psi,name,qubit,if0,if1,noise;kwargs...)
+        new_born_apply(state::CAMPSState,noise=false;kwargs...)=__ifOp_apply(state,name,qubit,if0,if1,noise;kwargs...)
         new_born_apply(rho::AbstractMatrixS,noise=false;kwargs...)=__ifOp_apply(rho,name,qubit,if0,if1,noise;kwargs...)
 
         new_expand(sites::Vector) = _mat_to_tensor(sites, _measurement_mat(_resolve_measurement_name(name)), qubit)
@@ -709,7 +761,7 @@ struct OpF <: QuantumOps
 
     function OpF(name::String,f::Function)
 
-        new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS};kwargs...)=f(state;kwargs...)
+        new_apply(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState};kwargs...)=f(state;kwargs...)
 
         return new(1,name,new_apply,f)
     end
@@ -725,7 +777,7 @@ struct OpF <: QuantumOps
     
     function OpF(name::String,ops::Vector{T}) where T <: QuantumOps
 
-        function new_apply_mat2(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS};kwargs...)
+        function new_apply_mat2(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState};kwargs...)
             return apply(state, ops; kwargs...)
         end
 

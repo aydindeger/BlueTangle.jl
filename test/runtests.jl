@@ -315,6 +315,7 @@ include("qec_factory_audit.jl")
 include("qec_mps_noise.jl")
 include("qec_factory.jl")
 include("backends.jl")
+include("camps.jl")
 include("trotter.jl")
 
 include("numerical.jl")
