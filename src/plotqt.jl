@@ -1,9 +1,9 @@
 # Shared circuit layout for the text and optional graphical renderers.
 function _circuit_plot_data(input::AbstractVector; nqubits::Union{Nothing,Int}=nothing)
-    groups = if all(op -> op isa QuantumOps, input)
-        get_layers(QuantumOps[input...])
-    elseif all(group -> group isa AbstractVector && all(op -> op isa QuantumOps, group), input)
-        [QuantumOps[group...] for group in input]
+    groups = if all(op -> op isa _OpInput, input)
+        get_layers(_as_ops(input))
+    elseif all(group -> group isa AbstractVector && all(op -> op isa _OpInput, group), input)
+        [_as_ops(group) for group in input]
     else
         throw(ArgumentError("provide quantum operations or layers of quantum operations"))
     end
@@ -176,6 +176,7 @@ function plotqt(input::AbstractVector; fold::Int=80, labels::Vector{String}=[""]
 end
 
 plotqt(op::QuantumOps; kwargs...) = plotqt([op]; kwargs...)
+plotqt(op::Tuple; kwargs...) = plotqt([Op(op...)]; kwargs...)
 
 # Optional graphics extend this function; the public default remains text even
 # after PyPlot is loaded.

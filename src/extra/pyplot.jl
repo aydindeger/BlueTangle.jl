@@ -209,6 +209,7 @@ function _plotq_pyplot(input::AbstractVector;
 end
 
 _plotq_pyplot(op::QuantumOps; kwargs...) = _plotq_pyplot([op]; kwargs...)
+_plotq_pyplot(op::Tuple; kwargs...) = _plotq_pyplot([Op(op...)]; kwargs...)
 
 """
     savefigure(path; kwargs...)

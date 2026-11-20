@@ -62,6 +62,8 @@ end
 *(str::Tuple, state::AbstractVectorS) = apply(state, Op(str...))
 *(vector_str::AbstractVector{<:Tuple}, state::AbstractVectorS) = apply(state, vector_str)
 
+*(str::Tuple, rho::AbstractMatrixS) = apply(rho, Op(str...))
+
 *(str::Tuple, psi::it.MPS) = apply(psi, Op(str...))
 *(vector_str::AbstractVector{<:Tuple}, psi::it.MPS) = apply(psi, vector_str)
 

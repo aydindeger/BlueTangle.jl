@@ -281,3 +281,89 @@ end
         track && @test last(result) == [0]
     end
 end
+
+@testset "Tuple shorthand operations" begin
+    bell_ops = [Op("H", 1), Op("CX", 1, 2)]
+    bell_tup = [("H", 1), ("CX", 1, 2)]
+    bell_mix = [("H", 1), Op("CX", 1, 2)] # Vector{Any}
+    bell_ref = apply(bell_ops)
+
+    @test get_N(bell_tup) == 2
+    @test get_N(bell_mix) == 2
+    @test get_N(Tuple[]) == 0
+    @test get_stats(bell_tup) == get_stats(bell_ops)
+    @test get_stats(bell_mix) == get_stats(bell_ops)
+    @test length(get_layers(bell_tup)) == length(get_layers(bell_ops))
+    @test isempty(get_optimized_layers([("X", 1), ("X", 1)]))
+    @test to_qasm(bell_tup) == to_qasm(bell_ops)
+    @test to_qasm(bell_mix) == to_qasm(bell_ops)
+    @test hilbert(bell_tup) ≈ hilbert(bell_ops)
+    @test hilbert(bell_mix) ≈ hilbert(bell_ops)
+
+    layout = Layout(ones(Int, 1, 3))
+    @test apply(zero_state(3), route([("CX", 1, 3)], layout)) ≈ apply(zero_state(3), Op("CX", 1, 3))
+
+    # Block OpF, single-tuple apply, and * operator across backends
+    block = Op("bell_block", bell_tup)
+    @test block isa OpF
+    @test apply(zero_state(2), block) ≈ bell_ref
+    @test apply(("X", 2)) ≈ apply(Op("X", 2))
+    @test apply(zero_state(2), ("X", 2)) ≈ apply(zero_state(2), Op("X", 2))
+    @test (("X", 2) * zero_state(2; backend=:density)) ≈ (Op("X", 2) * zero_state(2; backend=:density))
+    @test to_state(apply(zero_state(2; backend=:camps), ("X", 2))) ≈ apply(Op("X", 2))
+
+    # Mid-circuit measurements & reset via tuple shorthand and mixed lists
+    mid_tup = [("X", 1), ("MZ", 1), ("RESET", 1), ("MZ", 1)]
+    cond_mix = [("X", 1), ifOp("MZ", 1, "I", "X")]
+    for backend in (:statevector, :density_matrix, :tensor, :camps)
+        st = apply(bell_tup; backend=backend)
+        st_m = apply(bell_mix; backend=backend)
+        @test expect(st, "Z") ≈ expect(bell_ref, "Z") atol=1e-12
+        @test expect(st_m, "Z") ≈ expect(bell_ref, "Z") atol=1e-12
+
+        m = measure(bell_tup, 60; backend=backend)
+        @test all(b -> b in (0, 3), m.bitstr)
+        @test isempty(m.mid_measurements)
+        @test all(b -> b in (0, 3), measure(bell_mix, 40; backend=backend).bitstr)
+        @test all(b -> b in (0, 3), sample(bell_tup, 25; backend=backend))
+        @test all(b -> b in (0, 3), sample(bell_mix, 25; backend=backend))
+
+        m_mid = measure(mid_tup, 3; backend=backend)
+        @test m_mid.mid_measurements == fill([1, 0], 3)
+        @test m_mid.bitstr == [0]
+
+        m_cond = measure(cond_mix, 3; backend=backend)
+        @test m_cond.mid_measurements == fill([1], 3)
+        @test m_cond.bitstr == [0]
+
+        @test measure(Tuple[], 4; N=2, backend=backend).bitstr == [0]
+        @test sample(Tuple[], 4; N=2, backend=backend) == fill(0, 4)
+    end
+
+    # CAMPS helper with RESET tuple (returns OpQC, not Op)
+    @test to_state(camps([("X", 1), ("RESET", 1)])) ≈ zero_state(1)
+
+    # Shadow with tuple shorthand
+    for backend in (:statevector, :tensor, :camps)
+        snap = shadow([("I", 1)], 1; backend=backend)
+        @test snap isa sa.SparseMatrixCSC
+        @test eigvals(Hermitian(Matrix(snap))) ≈ [-1, 2]
+    end
+
+    # Text plotting and variational_apply with tuple shorthands
+    io = IOBuffer()
+    plotqt(bell_tup; io=io)
+    @test occursin("H", String(take!(io)))
+    plotqt(("X", 1); io=io)
+    @test occursin("X", String(take!(io)))
+    @test variational_apply([0.4], [("RX", _RX, 1), ("CX", 1, 2)]) ≈
+          apply(zero_state(2), [Op("RX(0.4)", 1), Op("CX", 1, 2)])
+
+    # Untyped numeric statevectors still work; invalid Vector{Any} errors cleanly
+    @test get_N(Any[1.0, 0.0]) == 1
+    @test measure(Any[1.0, 0.0], 5).bitstr == [0]
+    @test sample(Any[1.0, 0.0], 5) == fill(0, 5)
+    @test_throws ArgumentError apply(Any[1, 2])
+    @test_throws ArgumentError measure(Any["not_an_op"], 5)
+    @test_throws MethodError measure(bell_tup)
+end

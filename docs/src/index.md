@@ -17,6 +17,30 @@ state = apply(zero_state(get_N(ops)), ops)
 (state=state, ZZ=correlation(state, "Z,Z", [1, 2]))
 ```
 
+### Tuple shorthand for circuits
+
+Anywhere BlueTangle expects an operation list—`apply`, `measure`, `sample`,
+`shadow`, `camps`, `phasepoly`, `route`, `plotq`, `to_qasm`, `get_N`,
+`get_stats`, `get_layers`, `hilbert`, and `variational_apply`—you can omit
+`Op(...)` and write tuples directly (each tuple `t` is expanded via `Op(t...)`):
+
+```@example home
+# Equivalent tuple shorthand (single-qubit, two-qubit, parameterized, 3-qubit, reset/measure)
+bell = [("H", 1), ("CX", 1, 2)]
+@assert apply(bell) ≈ state
+m = measure(bell, 1000; backend=:camps)
+
+# Tuples can also be mixed freely with Op(...), ifOp(...), and OpQC(...)
+mixed = [("H", 1), ("CX", 1, 2), Op("Z", 2; control=1), ifOp("MZ", 1, "I", "X")]
+get_stats(mixed)
+```
+
+Use explicit `Op(...)` whenever you need keyword arguments such as `control=...`
+or `noisy=false`, or specialized constructors like `ifOp`, `OpQC`, and `OpF`.
+Single tuples also work directly in `apply(state, ("X", 2))`, `apply(("X", 2))`,
+and `("X", 2) * state`. See [Operation lists](examples.md#Operation-lists) for
+more examples.
+
 Choose the output you need:
 
 | Call | Returns |

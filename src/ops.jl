@@ -5,7 +5,7 @@
 Return the number of qubits from the statevector length or density-matrix
 dimension, which must be a power of two. For an MPS, return the number of sites.
 """
-get_N(state::AbstractVectorS)=Int(log(2,length(state)))
+get_N(state::AbstractVector{<:Number})=Int(log(2,length(state)))
 get_N(rho::AbstractMatrixS)=Int(log(2,size(rho,1)))
 
 get_M(state::it.MPS)=it.siteinds(state)
@@ -38,11 +38,12 @@ function _operated_qubits(op::ifOp)
 end
 
 """
-    get_N(ops::Vector{<:QuantumOps})
+    get_N(ops)
 
 Return the largest qubit index used by the operations, including conditional
-branches and explicit operation blocks. Empty lists return zero. An opaque
-whole-state callback does not specify a register size.
+branches, explicit operation blocks, and tuple shorthands such as
+`[("H", 1), ("CX", 1, 2)]`. Empty lists return zero. An opaque whole-state
+callback does not specify a register size.
 """
 function get_N(ops::Vector{<:QuantumOps})
     max_index = 0
@@ -50,6 +51,14 @@ function get_N(ops::Vector{<:QuantumOps})
         max_index = max(max_index, qubit)
     end
     return max_index
+end
+
+get_N(ops::_OpList) = get_N(_as_ops(ops))
+function get_N(v::AbstractVector{Any})
+    if !isempty(v) && all(x -> x isa Number, v)
+        return Int(log(2, length(v)))
+    end
+    return get_N(_as_ops(v))
 end
 
 """
@@ -88,10 +97,11 @@ sample_state(state::CAMPSState, shots::Int)=get_probs_from_sample(sample(state, 
            layout=nothing, qubits=nothing, backend=:statevector, kwargs...)
 
 Estimate a reduced density matrix using uniformly random local X, Y, Z
-measurements. `qubits` selects the retained qubits (an integer or a collection
-of distinct indices). The returned sparse matrix has size `2^k × 2^k` for
-`k` selected qubits, in ascending qubit order, as in `partial_trace`.
-Omitting `qubits` preserves the full-system estimate.
+measurements. `ops` may be a vector of `QuantumOps`, tuple shorthands such as
+`[("H", 1), ("CX", 1, 2)]`, or a mix of both. `qubits` selects the retained
+qubits (an integer or a collection of distinct indices). The returned sparse
+matrix has size `2^k × 2^k` for `k` selected qubits, in ascending qubit order,
+as in `partial_trace`. Omitting `qubits` preserves the full-system estimate.
 
 Each shot contributes the tensor product, over the selected qubits only, of
 `(I + 3*(-1)^b*P)/2`, where `P` is the measured Pauli and `b` is its outcome.
@@ -190,6 +200,9 @@ function shadow(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     return rho_construct / number_of_experiment
 end
 
+shadow(ops::Union{_OpList,AbstractVector{Any}}, number_of_experiment::Int; kwargs...) =
+    shadow(_as_ops(ops), number_of_experiment; kwargs...)
+
 
 """
     get_stats(ops::Vector{<:QuantumOps})
@@ -233,6 +246,8 @@ function get_stats(ops::Vector{<:QuantumOps})
 
     return (N=max_index,len=len,depth=_calculate_circuit_depth(ops),cx_count=cx_count,swap_count=swap_count,two_qubit_count=two_qubit_count,mid_measurement_count=mid_measurement_count)
 end
+
+get_stats(ops::Union{_OpList,AbstractVector{Any}}) = get_stats(_as_ops(ops))
 
 """
 `_calculate_circuit_depth(ops::Vector{<:QuantumOps}) -> Int`
@@ -311,6 +326,8 @@ function get_layers(ops::Vector{<:QuantumOps})
     return layers
 end
 
+get_layers(ops::Union{_OpList,AbstractVector{Any}}) = get_layers(_as_ops(ops))
+
 
 """
 optimize_simple(layers::Vector{Vector{QuantumOps}})
@@ -383,9 +400,10 @@ function _remove_two_qubit_duplicate(layers, l, i)
 end
 
 """
-    get_optimized_layers(ops::Vector{<:QuantumOps})
+    get_optimized_layers(ops)
 """
 get_optimized_layers(ops::Vector{<:QuantumOps})=optimize_simple(get_layers(ops))
+get_optimized_layers(ops::Union{_OpList,AbstractVector{Any}})=get_optimized_layers(_as_ops(ops))
 
 function _readout_response_inverse(readout_noise::QuantumChannel)
     readout_noise.q == 1 || throw(ArgumentError("readout noise must be a single-qubit channel"))
@@ -448,7 +466,7 @@ count uses sampled frequencies. Exact MPS and CAMPS enumeration is limited to
 16 qubits, so pass a shot count for larger states. Use `sample(state, shots)`
 for raw outcomes.
 """
-function measure(state::Union{AbstractVectorS,AbstractMatrixS,it.MPS,CAMPSState}, number_of_experiment::Int=-1; label="state to measurement")
+function measure(state::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS,CAMPSState}, number_of_experiment::Int=-1; label="state to measurement")
     number_of_experiment == -1 || number_of_experiment > 0 || throw(ArgumentError("shots must be positive, or -1 for exact probabilities"))
     N = get_N(state)
     bitstr, probabilities = number_of_experiment == -1 ? sample_exact(state) : sample_state(state, number_of_experiment)
@@ -528,8 +546,10 @@ _has_explicit_measurement(op::OpF) =
 
 Return device-like final-outcome statistics (and per-shot `mid_measurements`
 records when the circuit contains explicit `MX`/`MY`/`MZ`/`MR`/`ifOp`
-operations) from fresh circuit shots starting in `|0…0⟩`. `sample(ops, shots)`
-returns the corresponding raw integer outcomes.
+operations) from fresh circuit shots starting in `|0…0⟩`. `ops` may be a
+vector of `QuantumOps`, tuple shorthands such as `[("H", 1), ("CX", 1, 2)]`,
+or a mix of both. `sample(ops, shots)` returns the corresponding raw integer
+outcomes.
 
 Choose statevector (`:statevector`), density-matrix (`:density_matrix`), MPS
 (`:tensor` / `:mps`), Clifford-augmented MPS (`:camps`), or optional PhasePoly
@@ -549,6 +569,16 @@ function measure(ops::Vector{<:QuantumOps}, number_of_experiment::Int;
     return _samples_to_measurement(result.samples, result.N, options; mid_measurements=result.mid_measurements)
 end
 
+measure(ops::_OpList, number_of_experiment::Int; kwargs...) =
+    measure(_as_ops(ops), number_of_experiment; kwargs...)
+
+function measure(v::AbstractVector{Any}, number_of_experiment::Int; kwargs...)
+    if !isempty(v) && all(x -> x isa Number, v)
+        return measure(Number[x for x in v], number_of_experiment; kwargs...)
+    end
+    return measure(_as_ops(v), number_of_experiment; kwargs...)
+end
+
 function measure(qasm_or_path::AbstractString, number_of_experiment::Int=1;
                  options::Options=Options(), layout::Union{Nothing,Layout}=nothing,
                  backend::Union{Symbol,AbstractString}=:statevector,
@@ -564,12 +594,13 @@ end
     sample(qasm_or_path::AbstractString, shots::Int=1; options=Options(),
            layout=nothing, backend=:statevector, is_file=nothing, kwargs...)
 
-Return raw final outcomes as integers, starting each shot in `|0…0⟩`.
-Qubit 1 is the most significant bit. Noisy statevector, MPS, and CAMPS circuits
-use independent trajectories; density-matrix evolution sums unobserved noise
-branches. Per-shot explicit mid-circuit measurement records are available via
-`measure(ops, shots).mid_measurements`, or for a single evolved state via
-`apply(state, ops; track_measurements=true)`.
+Return raw final outcomes as integers, starting each shot in `|0…0⟩`. `ops` may
+be a vector of `QuantumOps`, tuple shorthands such as `[("H", 1), ("CX", 1, 2)]`,
+or a mix of both. Qubit 1 is the most significant bit. Noisy statevector, MPS,
+and CAMPS circuits use independent trajectories; density-matrix evolution sums
+unobserved noise branches. Per-shot explicit mid-circuit measurement records are
+available via `measure(ops, shots).mid_measurements`, or for a single evolved
+state via `apply(state, ops; track_measurements=true)`.
 
 The backend, routing, measurement basis, readout noise, and twirling options
 match `measure`. Use `measure` for summary statistics or readout mitigation:
@@ -582,6 +613,17 @@ function sample(ops::Vector{<:QuantumOps}, shots::Int;
     options.measurement_mitigate &&
         throw(ArgumentError("raw samples cannot contain readout-mitigated weights; use measure(ops, shots; options=...)"))
     return _sample_circuit(ops, shots; options, N, layout, backend, kwargs...).samples
+end
+
+sample(ops::_OpList, shots::Int; kwargs...) =
+    sample(_as_ops(ops), shots; kwargs...)
+
+function sample(v::AbstractVector{Any}, shots::Int; kwargs...)
+    if !isempty(v) && all(x -> x isa Number, v)
+        isempty(kwargs) || throw(ArgumentError("unexpected keyword arguments for statevector sampling"))
+        return sample(Number[x for x in v], shots)
+    end
+    return sample(_as_ops(v), shots; kwargs...)
 end
 
 function sample(qasm_or_path::AbstractString, shots::Int=1;
@@ -712,16 +754,14 @@ function _resolve_backend(backend::Union{Symbol,AbstractString})
     end
 end
 
-function apply(ops::Union{QuantumOps,Vector{<:QuantumOps},AbstractVector{<:Tuple}};
+function apply(ops::Union{QuantumOps,Tuple,_OpList,AbstractVector{Any}};
                N::Int=-1,
                backend::Union{Symbol,AbstractString}=:statevector,
                noise::Union{NoiseModel,Bool}=false,
                track_measurements::Bool=false,
                layout::Union{Nothing,Layout}=nothing,
                kwargs...)
-    op_list = ops isa QuantumOps ? QuantumOps[ops] :
-              ops isa Vector{<:QuantumOps} ? ops :
-              QuantumOps[Op(t...) for t in ops]
+    op_list = ops isa _OpInput ? QuantumOps[_as_op(ops)] : _as_ops(ops)
     inferred_N = get_N(op_list)
     N = N == -1 ? inferred_N : N
     N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))

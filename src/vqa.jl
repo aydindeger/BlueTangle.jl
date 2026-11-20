@@ -267,6 +267,9 @@ function variational_apply(parameters::AbstractVector, ops::Vector{<:QuantumOps}
     return state
 end
 
+variational_apply(parameters::AbstractVector, ops::Union{_OpList,AbstractVector{Any}}; kwargs...) =
+    variational_apply(parameters, _as_ops(ops); kwargs...)
+
 # One derivative implementation is shared by all gradient optimizers. Reuse
 # ForwardDiff's setup and obtain value + gradient in the same evaluation.
 function _value_gradient(loss, parameters, gradient)

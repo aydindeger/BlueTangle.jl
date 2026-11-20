@@ -18,6 +18,8 @@ function route(ops::Vector{<:QuantumOps}, layout::Layout)
     return routed
 end
 
+route(ops::Union{_OpList,AbstractVector{Any}}, layout::Layout) = route(_as_ops(ops), layout)
+
 function illustrate_physical_qubits(qubit_grid::sa.SparseMatrixCSC{Int, Int}, qubit_num_to_pos)
     num_rows, num_cols = size(qubit_grid)
     illustrated_grid = zeros(Int, num_rows, num_cols) # Initialize a grid for illustration

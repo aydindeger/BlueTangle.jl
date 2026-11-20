@@ -1,6 +1,7 @@
 # Backends
 
-BlueTangle separates **circuit description** (`Vector{QuantumOps}`) from
+BlueTangle separates **circuit description** (`Vector{QuantumOps}`, tuple
+shorthands such as `[("H", 1), ("CX", 1, 2)]`, or a mix of both) from
 **simulation representation**. The same operation list can be executed on five
 backends—either by passing an initial state (`zero_state(N; backend=...)`) to
 `apply(state, ops)`, or by passing `backend=...` directly to `apply(ops; backend=...)`,
@@ -25,15 +26,18 @@ backends—either by passing an initial state (`zero_state(N; backend=...)`) to
 All built-in backends share BlueTangle's conventions: qubit indices start at `1`,
 qubit `1` is the most significant bit (MSB) in statevectors and integer outcomes,
 and operations execute in their exact listed order unless `route(ops, layout)` or
-`layout=...` is requested.
+`layout=...` is requested. Operation lists can be written either with explicit
+`Op(...)` constructors, with tuple shorthands such as `[("H", 1), ("CX", 1, 2)]`
+(where each tuple `t` expands via `Op(t...)`), or as a mix of both (e.g.
+combining tuples with `ifOp(...)` or `Op("X", 2; control=1)`).
 
 The example below executes the same 3-qubit circuit on all four built-in
-backends and verifies that their observables agree:
+backends—using tuple shorthand directly—and verifies that their observables agree:
 
 ```@example backends_overview
 using BlueTangle
 
-ops = [Op("H", 1), Op("T", 1), Op("CX", 1, 2), Op("RY(0.7)", 3), Op("CZ", 2, 3)]
+ops = [("H", 1), ("T", 1), ("CX", 1, 2), ("RY(0.7)", 3), ("CZ", 2, 3)]
 
 sv   = apply(zero_state(3), ops)
 rho  = apply(to_rho(zero_state(3)), ops)

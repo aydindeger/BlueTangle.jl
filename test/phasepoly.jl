@@ -67,4 +67,16 @@ import PhasePoly
     @test_throws ArgumentError measure(ops_pp, 10; backend=:phasepoly, options=Options(noise=NoiseModel("depolarizing", 0.1)))
     @test_throws ArgumentError measure(ops_pp, 10; backend=:phasepoly, options=Options(readout_noise=Noise1("bit_flip", 0.1)))
     @test_throws ArgumentError measure([Op("MZ", 1)], 1; backend=:phasepoly)
+
+    # Tuple shorthand and mixed lists with phasepoly and backend=:phasepoly
+    tup_pp = [("H", 1), ("CX", 1, 2), ("T", 1)]
+    mix_pp = [("H", 1), Op("CX", 1, 2), ("T", 1)]
+    sv_tup = apply(tup_pp)
+    @test to_state(phasepoly(tup_pp)) ≈ sv_tup atol=1e-9
+    @test to_state(phasepoly(mix_pp)) ≈ sv_tup atol=1e-9
+    @test to_state(apply(tup_pp; backend=:phasepoly)) ≈ sv_tup atol=1e-9
+    @test to_state(apply(mix_pp; backend=:phasepoly)) ≈ sv_tup atol=1e-9
+    @test all(b -> b in (0, 3), measure(tup_pp, 50; backend=:phasepoly).bitstr)
+    @test all(b -> b in (0, 3), sample(tup_pp, 25; backend=:phasepoly))
+    @test size(shadow(tup_pp, 20; qubits=1, backend=:phasepoly)) == (2, 2)
 end

@@ -1372,9 +1372,11 @@ function apply(
     return track_measurements ? (st, mid_measurements) : st
 end
 
+apply(state::CAMPSState, op::Tuple; kwargs...) = apply(state, Op(op...); kwargs...)
+
 function apply(
     state::CAMPSState,
-    vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}};
+    vector_of_ops::Union{_OpList,AbstractVector{Any}};
     noise::Union{NoiseModel,Bool}=false,
     track_measurements::Bool=false,
     kwargs...
@@ -1385,20 +1387,11 @@ function apply(
     st = copy(state)
     mid_measurements = Int[]
 
-    if vector_of_ops isa Vector{<:QuantumOps}
-        for op in vector_of_ops
-            st, new_vals = _camps_apply_op!(st, op; noise=noise,
-                                            track_measurements=track_measurements,
-                                            pars=pars, ckw...)
-            track_measurements && append!(mid_measurements, new_vals)
-        end
-    else
-        for tup in vector_of_ops
-            st, new_vals = _camps_apply_op!(st, Op(tup...); noise=noise,
-                                            track_measurements=track_measurements,
-                                            pars=pars, ckw...)
-            track_measurements && append!(mid_measurements, new_vals)
-        end
+    for item in vector_of_ops
+        st, new_vals = _camps_apply_op!(st, _as_op(item); noise=noise,
+                                        track_measurements=track_measurements,
+                                        pars=pars, ckw...)
+        track_measurements && append!(mid_measurements, new_vals)
     end
 
     return track_measurements ? (st, mid_measurements) : st
@@ -1409,7 +1402,8 @@ end
           disentangle=true, nsweeps=2) -> CAMPSState
 
 Evolve the `N`-qubit zero state `|0…0⟩` through `ops` using the
-Clifford-Augmented Matrix Product State (`CAMPSState`) backend.
+Clifford-Augmented Matrix Product State (`CAMPSState`) backend. `ops` may be a
+vector of `QuantumOps` or tuple shorthands such as `[("H", 1), ("CX", 1, 2)]`.
 
 Clifford gates are absorbed into the `CliffordTableau` in `O(N)` time with zero
 MPS bond-dimension growth. Non-Clifford gates pull their Pauli generators
@@ -1417,14 +1411,16 @@ through the Clifford frame, apply free-zero reduction and two-qubit Clifford
 disentangling sweeps (`disentangle=true`, `nsweeps=2`), and truncate the MPS
 core using `cutoff` and optional `maxdim`.
 """
-function camps(ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}};
-               N::Int=(ops isa Vector{<:QuantumOps} ? get_N(ops) : get_N(Op[Op(t...) for t in ops])),
+function camps(ops::Union{_OpList,AbstractVector{Any}};
+               N::Int=-1,
                noise::Union{NoiseModel,Bool}=false,
                kwargs...)
+    op_list = _as_ops(ops)
+    ops_n = get_N(op_list)
+    N = N == -1 ? ops_n : N
     N > 0 || throw(ArgumentError("N must be positive; supply N explicitly for an empty operation list"))
-    ops_n = ops isa Vector{<:QuantumOps} ? get_N(ops) : get_N(Op[Op(t...) for t in ops])
     N >= ops_n || throw(ArgumentError("N must include every operated qubit"))
-    return apply(CAMPSState(N), ops; noise=noise, kwargs...)
+    return apply(CAMPSState(N), op_list; noise=noise, kwargs...)
 end
 
 # =============================================================================

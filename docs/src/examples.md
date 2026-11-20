@@ -9,7 +9,9 @@ samples and circuit realizations vary between runs.
 ## 1) GHZ Circuit
 
 A Hadamard followed by two CNOTs prepares
-`(|000⟩ + |111⟩)/sqrt(2)`. Apply the operations directly to the initial state:
+`(|000⟩ + |111⟩)/sqrt(2)`. Apply the operations directly to the initial state
+(tuple shorthand `[("H", 1), ("CX", 1, 2), ("CX", 2, 3)]` is equivalent to
+wrapping each gate in `Op(...)`; see [Operation lists](@ref Operation-lists)):
 
 ```@example ghz
 using BlueTangle
@@ -1187,6 +1189,49 @@ statevector, density-matrix, MPS, or CAMPS evolution (see the
 `:density_matrix`, `:tensor`, `:camps`, and `:phasepoly`). Use `get_stats(ops)`
 and `get_layers(ops)` to inspect the operations, `plotq(ops)` to draw them, and
 `to_qasm(ops)` to export them.
+
+### Tuple shorthand and mixed operation lists
+
+Every circuit entry point (`apply`, `measure`, `sample`, `shadow`, `camps`,
+`phasepoly`, `route`, `get_N`, `get_stats`, `get_layers`, `get_optimized_layers`,
+`plotq`, `plotqt`, `to_qasm`, `hilbert`, `save_data`, and `variational_apply`)
+accepts:
+
+1. **Explicit `QuantumOps` vectors:** `[Op("H", 1), Op("CX", 1, 2)]`
+2. **Tuple shorthands:** `[("H", 1), ("CX", 1, 2), ("RY(0.5)", 2), ("MZ", 1), ("RESET", 1)]`
+   — each tuple `t` is converted via `Op(t...)` (supporting 1-, 2-, and 3-qubit
+   built-in gates, parameterized gate strings like `"RY(0.5)"`, custom matrices
+   `("U", mat, 1)`, variational gates `("RX", _RX, 1)`, measurements, and
+   resets).
+3. **Mixed lists:** combine tuples with explicit `Op(...)` (e.g. when passing
+   keyword arguments like `control=...` or `noisy=false`), `ifOp(...)`,
+   `OpQC(...)`, or `OpF(...)` in the same vector.
+
+Single tuples also work directly with `apply(state, ("X", 2))`,
+`apply(("X", 2); backend=...)`, `("X", 2) * state`, and `plotq(("X", 2))`.
+
+```@example tuple_shorthand
+using BlueTangle
+
+# Pure tuple shorthand works across all backends and utilities
+ops = [("H", 1), ("CX", 1, 2), ("RY(0.5)", 2)]
+sv   = apply(ops)
+rho  = apply(ops; backend=:density_matrix)
+st_c = apply(ops; backend=:camps)
+@assert isapprox(expect(rho, "Z"), expect(sv, "Z"); atol=1e-12)
+@assert isapprox(expect(st_c, "Z"), expect(sv, "Z"); atol=1e-12)
+
+# Sampling, measurement (including mid-circuit records), and shadows
+m_bell = measure([("H", 1), ("CX", 1, 2)], 200; backend=:mps)
+m_mid  = measure([("X", 1), ("MZ", 1), ("RESET", 1), ("MZ", 1)], 4; backend=:camps)
+@assert m_mid.mid_measurements == fill([1, 0], 4)
+
+# Mixing tuples with explicit Op/ifOp when keyword arguments or feed-forward are needed
+mixed = [("X", 1), Op("H", 2; noisy=false), ifOp("MZ", 1, "I", "X")]
+final_sv, bits = apply(mixed; track_measurements=true)
+@assert bits == [1]
+(stats = get_stats(ops), qasm_lines = length(split(to_qasm(ops), '\n')), mid_records = m_mid.mid_measurements)
+```
 
 Use `route(ops, layout)` to insert SWAPs for a chosen connectivity layout.
 Sampling and evolution functions (`apply`, `measure`, `sample`, `shadow`) also

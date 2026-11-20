@@ -221,7 +221,7 @@ matrix, or MPS. Outcomes are integers starting at 0; qubit 1 is the most
 significant bit. The state is not collapsed. Use `measure(state, shots)` for
 summary statistics or `measure(state)` for exact probabilities.
 """
-function sample(state::AbstractVectorS, shots)
+function sample(state::AbstractVector{<:Number}, shots)
 
     N=get_N(state)
 
@@ -236,7 +236,7 @@ function sample(state::AbstractVectorS, shots)
     return sampled_outcomes
 end
 
-function sample(state::sa.SparseVector, shots)
+function sample(state::sa.SparseVector{<:Number}, shots)
     get_N(state) # Check the Hilbert-space dimension, as for dense states.
     indices, amplitudes = sa.findnz(state)
     # Sample only stored amplitudes, rather than scanning all 2^N basis states.
@@ -244,13 +244,13 @@ function sample(state::sa.SparseVector, shots)
 end
 
 
-function sample_exact(state::AbstractVectorS)
+function sample_exact(state::AbstractVector{<:Number})
     probs = abs2.(state)
     indices = findall(!iszero, probs)
     return indices .- 1, probs[indices]
 end
 
-function sample_exact(state::sa.SparseVector)
+function sample_exact(state::sa.SparseVector{<:Number})
     a,b=sa.findnz(abs2.(state))
     return a .- 1,b
 end

@@ -86,6 +86,10 @@ cnot1 = Op("CNOT", 1, 2)
 cnot2 = Op("CNOT", 2, 3)
 ops = [hadamard, cnot1, cnot2]
 
+# Equivalently, use tuple shorthand anywhere an operation list is accepted:
+# ops = [("H", 1), ("CNOT", 1, 2), ("CNOT", 2, 3)]
+# (Tuples expand via Op(t...) and can be mixed freely with Op(...), ifOp(...), and OpQC(...).)
+
 # Evolve a state directly, or prepare fresh shots from the operation list.
 state = apply(zero_state(3), ops)
 shots = 1000

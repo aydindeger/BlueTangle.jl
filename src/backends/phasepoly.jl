@@ -21,9 +21,11 @@ end
     phasepoly(ops; nqubits=get_N(ops), kwargs...)
 
 Convert a noiseless supported circuit to PhasePoly's compact representation.
-Load `PhasePoly` first to enable this optional extension. Physical qubit labels
-are unchanged; `to_state` and `amplitude` retain BlueTangle's basis ordering.
-The returned adapter exposes the native simulator as `.sim`.
+`ops` may be a vector of `QuantumOps`, tuple shorthands such as
+`[("H", 1), ("CX", 1, 2)]`, or a mix of both. Load `PhasePoly` first to enable
+this optional extension. Physical qubit labels are unchanged; `to_state` and
+`amplitude` retain BlueTangle's basis ordering. The returned adapter exposes the
+native simulator as `.sim`.
 
 Supported gates are H, affine permutations, Y, diagonal Clifford/T gates, and
 P/U1/RZ phases in multiples of π/8 (controlled phases in multiples of π/4).
@@ -105,6 +107,9 @@ function BlueTangle.phasepoly(ops::Vector{<:QuantumOps}; N::Int=get_N(ops),
                                 n=nqubits, final_h=sort!(collect(final_h)), kwargs...)
     return PhasePolyState(native,global_phase)
 end
+
+BlueTangle.phasepoly(ops::Union{BlueTangle._OpList,AbstractVector{Any}}; kwargs...) =
+    BlueTangle.phasepoly(BlueTangle._as_ops(ops); kwargs...)
 
 BlueTangle.get_N(state::PhasePolyState) = state.sim.n
 

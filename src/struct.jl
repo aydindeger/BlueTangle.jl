@@ -788,11 +788,29 @@ struct OpF <: QuantumOps
     
 end
 
+const _OpInput = Union{QuantumOps, Tuple}
+const _OpList = AbstractVector{<:_OpInput}
+
+_as_op(op::QuantumOps) = op
+_as_op(spec::Tuple) = Op(spec...)
+_as_op(x) = throw(ArgumentError("expected QuantumOps or Tuple operation specification, got $(typeof(x))"))
+
+_as_ops(ops::Vector{<:QuantumOps}) = ops
+function _as_ops(ops::AbstractVector)
+    out = Vector{QuantumOps}(undef, length(ops))
+    for (i, op) in enumerate(ops)
+        out[i] = _as_op(op)
+    end
+    return out
+end
+
+OpF(name::String, ops::Union{_OpList, AbstractVector{Any}}) = OpF(name, _as_ops(ops))
+
 # Keep one public constructor while retaining the execution semantics of gates,
 # Kraus channels, conditional measurements, and whole-register blocks.
 Op(channel::QuantumChannel, qubit::Int, target_qubit::Int=-1) =
     OpQC(channel.name, channel.kraus, qubit, target_qubit)
-Op(name::String, data::Union{AbstractMatrix,Vector{<:QuantumOps}}) = OpF(name, data)
+Op(name::String, data::Union{AbstractMatrix, _OpList, AbstractVector{Any}}) = OpF(name, data)
 # With no qubit argument, f transforms the whole state; with a qubit, f maps
 # gate parameters to a local matrix as before.
 Op(name::String, f::Function) = OpF(name, f)
@@ -914,7 +932,7 @@ function sa.sparse(ops::Vector{<:QuantumOps})
     return prod(o.expand(N) for o=reverse(ops))
 end
 
-hilbert(ops::Vector{<:QuantumOps}) = sa.sparse(ops)
+hilbert(ops::Union{_OpList, AbstractVector{Any}}) = sa.sparse(_as_ops(ops))
 
 """
     Measurement
@@ -992,5 +1010,8 @@ function save_data(ops::Vector{<:QuantumOps}, measurement::Measurement, other::V
     Serialization.serialize(path, Data(ops, options, measurement, other))
     return path
 end
+
+save_data(ops::Union{_OpList, AbstractVector{Any}}, measurement::Measurement, other::Vector=[]; kwargs...) =
+    save_data(_as_ops(ops), measurement, other; kwargs...)
 
 load_data(name::AbstractString) = Serialization.deserialize(isfile(name) ? name : "$(name).ser")

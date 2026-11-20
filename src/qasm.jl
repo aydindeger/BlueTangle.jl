@@ -207,6 +207,10 @@ function to_qasm(ops::Vector{<:QuantumOps}, filename::AbstractString; kwargs...)
     return qasm
 end
 
+to_qasm(ops::Union{_OpList,AbstractVector{Any}}; kwargs...) = to_qasm(_as_ops(ops); kwargs...)
+to_qasm(ops::Union{_OpList,AbstractVector{Any}}, filename::AbstractString; kwargs...) =
+    to_qasm(_as_ops(ops), filename; kwargs...)
+
 """
     from_qasm(qasm_or_path::AbstractString; is_file=nothing) -> Vector{QuantumOps}
 

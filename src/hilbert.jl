@@ -278,7 +278,9 @@ end
 Apply operations in their listed order to an existing state (`:statevector`,
 `:density_matrix`, `:tensor`/`:mps`, or `CAMPSState`), or starting from `|0…0⟩`
 in the requested `backend` (`:statevector`, `:density_matrix`, `:tensor`,
-`:camps`, or `:phasepoly`).
+`:camps`, or `:phasepoly`). `ops` may be a single `QuantumOps` or tuple
+shorthand (e.g. `("H", 1)`), or a vector of `QuantumOps`, tuple shorthands
+(e.g. `[("H", 1), ("CX", 1, 2)]`), or a mix of both.
 
 By default, density matrices sum measurement and noise branches, while
 statevectors, MPS, and CAMPS follow one sampled trajectory. Pass
@@ -287,39 +289,26 @@ matrices on the sampled measurement outcomes and recording each explicit
 mid-circuit measurement bit (`MX`, `MY`, `MZ`, `MR`, `ifOp`) in operation
 order. No routing or scheduling is performed unless `layout` is supplied.
 """
+apply(psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS}, op::Tuple; kwargs...) =
+    apply(psi, Op(op...); kwargs...)
+
 function apply(
     psi::Union{AbstractVector{<:Number},AbstractMatrixS,it.MPS},
-    vector_of_ops::Union{Vector{<:QuantumOps},AbstractVector{<:Tuple}};
+    vector_of_ops::Union{_OpList,AbstractVector{Any}};
     noise::Union{NoiseModel,Bool}=false,
     track_measurements::Bool=false,
     kwargs...
 )
     mid_measurements=Int[]
-    
-    if isa(vector_of_ops, Vector{<:QuantumOps})
 
-        for op in vector_of_ops
-            if track_measurements
-                psi,new_vals = apply(psi, op; noise=noise, track_measurements=true, kwargs...)
-                append!(mid_measurements,new_vals)
-            else
-                psi = apply(psi, op; noise=noise, kwargs...)
-            end
+    for item in vector_of_ops
+        op = _as_op(item)
+        if track_measurements
+            psi, new_vals = apply(psi, op; noise=noise, track_measurements=true, kwargs...)
+            append!(mid_measurements, new_vals)
+        else
+            psi = apply(psi, op; noise=noise, kwargs...)
         end
-
-    elseif isa(vector_of_ops, AbstractVector{<:Tuple})
-
-        for str in vector_of_ops
-            if track_measurements
-                psi,new_vals = apply(psi, Op(str...); noise=noise, track_measurements=true, kwargs...)
-                append!(mid_measurements,new_vals)
-            else
-                psi = apply(psi, Op(str...); noise=noise, kwargs...)
-            end
-        end
-
-    else
-        throw(ArgumentError("ops are not valid!"))
     end
 
     return track_measurements ? (psi,mid_measurements) : psi
