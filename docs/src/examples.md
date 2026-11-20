@@ -1305,3 +1305,13 @@ controls, supported gates, global-phase conventions, and limitations when
 non-Clifford gate count exceeds `N`, see the dedicated
 [Clifford-Augmented MPS (CAMPS)](camps.md) guide and the runnable script
 [`examples/camps_clifford_t.jl`](https://github.com/aydindeger/BlueTangle.jl/blob/main/examples/camps_clifford_t.jl).
+
+**References:** X. Qian, J. Huang, and M. Qin, *Phys. Rev. Lett.* **133**,
+190402 (2024), [arXiv:2405.09217](https://arxiv.org/abs/2405.09217);
+S. Masot-Llima and A. García-Sáez, *Phys. Rev. Lett.* **133**, 230601 (2024),
+[arXiv:2403.08724](https://arxiv.org/abs/2403.08724); G. Lami, T. Haug, and
+J. De Nardis, *PRX Quantum* **6**, 010345 (2025),
+[arXiv:2404.18751](https://arxiv.org/abs/2404.18751); G. E. Fux, B. Béri,
+R. Fazio, and E. Tirrito, [arXiv:2410.09001](https://arxiv.org/abs/2410.09001)
+(2024); Z. Liu and B. K. Clark,
+[arXiv:2412.17209](https://arxiv.org/abs/2412.17209) (2024).

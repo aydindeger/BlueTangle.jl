@@ -391,3 +391,11 @@ clifford_ops
 `born_measure_Z`, `to_state`, `to_rho`, `to_MPS` (documented in
 [Functions](functions.md)), and `StabilizerCode` / `qec_round` (documented in
 [Quantum Error Correction](qec.md)).
+
+## References
+
+- X. Qian, J. Huang, and M. Qin, *"Augmenting Density Matrix Renormalization Group with Clifford Circuits"*, Phys. Rev. Lett. **133**, 190402 (2024), [arXiv:2405.09217](https://arxiv.org/abs/2405.09217).
+- S. Masot-Llima and A. García-Sáez, *"Stabilizer Tensor Networks: Universal Quantum Simulator on a Basis of Stabilizer States"*, Phys. Rev. Lett. **133**, 230601 (2024), [arXiv:2403.08724](https://arxiv.org/abs/2403.08724).
+- G. Lami, T. Haug, and J. De Nardis, *"Quantum State Designs with Clifford Enhanced Matrix Product States"*, PRX Quantum **6**, 010345 (2025), [arXiv:2404.18751](https://arxiv.org/abs/2404.18751).
+- G. E. Fux, B. Béri, R. Fazio, and E. Tirrito, *"Disentangling unitary dynamics with classically simulable quantum circuits"*, [arXiv:2410.09001](https://arxiv.org/abs/2410.09001) (2024).
+- Z. Liu and B. K. Clark, *"Classical simulability of Clifford+T circuits with Clifford-augmented matrix product states"*, [arXiv:2412.17209](https://arxiv.org/abs/2412.17209) (2024).
