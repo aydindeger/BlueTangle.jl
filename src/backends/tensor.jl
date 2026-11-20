@@ -212,6 +212,11 @@ function sample_bit(psi::it.MPS,shots::Int=1;basis="Z")
         throw("basis must be Z or X")
     end
 
+    N = get_N(MPS)
+    if N <= 10 && shots >= max(256, 1 << N)
+        return int2bin.(sample(to_state(MPS), shots), N)
+    end
+
     # Prepare the sampling gauge once, and leave the caller's MPS untouched.
     it.orthogonalize!(MPS, 1)
     return [it.sample(MPS).-1 for i=1:shots]
@@ -508,7 +513,13 @@ function _reset_Z(psi::it.MPS,qubit::Int)
 end
 
 
-sample(psi::it.MPS, shots)=bin2int.(sample_bit(psi,shots))
+function sample(psi::it.MPS, shots)
+    N = get_N(psi)
+    if N <= 10 && shots >= max(256, 1 << N)
+        return sample(to_state(psi), shots)
+    end
+    return bin2int.(sample_bit(psi, shots))
+end
 
 
 """

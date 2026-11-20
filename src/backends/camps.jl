@@ -1623,6 +1623,11 @@ function sample_bit(state::CAMPSState, shots::Int=1; basis::AbstractString="Z", 
         return [_camps_sample_stabilizer_shot(st.tableau.pz) for _ in 1:shots]
     end
 
+    # Fast exact-distribution path for small registers with many shots.
+    if n <= 10 && shots >= max(256, 1 << n)
+        return int2bin.(sample(to_state(st), shots), n)
+    end
+
     results = Vector{Vector{Int}}(undef, shots)
     for s in 1:shots
         shot = copy(st)
@@ -1636,7 +1641,15 @@ function sample_bit(state::CAMPSState, shots::Int=1; basis::AbstractString="Z", 
     return results
 end
 
-sample(state::CAMPSState, shots::Int=1) = bin2int.(sample_bit(state, shots))
+function sample(state::CAMPSState, shots::Int=1)
+    shots >= 0 || throw(ArgumentError("shots must be nonnegative"))
+    shots == 0 && return Int[]
+    n = get_N(state)
+    if n <= 10 && shots >= max(256, 1 << n)
+        return sample(to_state(state), shots)
+    end
+    return bin2int.(sample_bit(state, shots))
+end
 
 function sample_exact(state::CAMPSState; max_qubits::Int=16)
     n = get_N(state)

@@ -139,22 +139,69 @@ end
 ##
 ##========== state preparation ==========
 
-"""
-    product_state(bits::Vector)
+function _state_from_backend(backend, sv_fn, mps_fn, camps_fn)
+    backend_name = _resolve_backend(backend)
+    if backend_name == "statevector"
+        return sv_fn()
+    elseif backend_name == "density_matrix"
+        s = sv_fn()
+        return s * s'
+    elseif backend_name == "tensor"
+        return mps_fn()
+    elseif backend_name == "camps"
+        return camps_fn()
+    elseif backend_name == "phasepoly"
+        throw(ArgumentError("PhasePoly represents circuits directly; use `apply(ops; backend=:phasepoly)` or `phasepoly(ops)`"))
+    end
+end
 
-Return a sparse computational-basis statevector from a list of 0/1 bits.
-The first entry specifies qubit 1, the most significant tensor factor.
 """
-product_state(list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(Int.(sign.(list_of_qubits)))))
-# product_state(N::Int,list_of_qubits::Vector)=sa.sparse(foldl(kron,_bin2state.(list_of_qubits)))
-neel_state01(N::Int)=product_state([isodd(i) ? 0 : 1 for i=1:N])
-neel_state10(N::Int)=product_state([isodd(i) ? 1 : 0 for i=1:N])
+    product_state(bits::Vector; backend=:statevector)
+
+Return the computational-basis product state specified by 0/1 `bits` (qubit 1
+is the first entry / most significant bit) in the requested `backend`
+(`:statevector`, `:density_matrix`, `:tensor`/`:mps`, or `:camps`).
+"""
+function product_state(list_of_qubits::Vector; backend::Union{Symbol,AbstractString}=:statevector)
+    bits = Int.(sign.(list_of_qubits))
+    return _state_from_backend(
+        backend,
+        () -> sa.sparse(foldl(kron, _bin2state.(bits))),
+        () -> product_state(N_MPS(length(bits)), bits),
+        () -> begin
+            st = CAMPSState(length(bits))
+            for (q, b) in enumerate(bits)
+                b == 1 && (st = apply(st, Op("X", q)))
+            end
+            st
+        end,
+    )
+end
+
+"""
+    neel_state01(N::Int; backend=:statevector)
+
+Return the `N`-qubit Néel state `|0101…⟩` in the requested `backend`
+(`:statevector`, `:density_matrix`, `:tensor`/`:mps`, or `:camps`).
+"""
+neel_state01(N::Int; backend::Union{Symbol,AbstractString}=:statevector) =
+    product_state([isodd(i) ? 0 : 1 for i=1:N]; backend=backend)
+
+"""
+    neel_state10(N::Int; backend=:statevector)
+
+Return the `N`-qubit Néel state `|1010…⟩` in the requested `backend`
+(`:statevector`, `:density_matrix`, `:tensor`/`:mps`, or `:camps`).
+"""
+neel_state10(N::Int; backend::Union{Symbol,AbstractString}=:statevector) =
+    product_state([isodd(i) ? 1 : 0 for i=1:N]; backend=backend)
 
 
 """
-    Z3(N::Int,j=1)
+    Z3(N::Int, j=1; backend=:statevector)
 """
-Z3(N::Int,j=1)=product_state([mod(i+2-j+1,3)==0 ? 1 : 0 for i=1:N])
+Z3(N::Int, j=1; backend::Union{Symbol,AbstractString}=:statevector) =
+    product_state([mod(i+2-j+1,3)==0 ? 1 : 0 for i=1:N]; backend=backend)
 
 """
     Z3_s(N::Int)
@@ -167,9 +214,14 @@ Z3_s(N::Int)=la.normalize(Z3(N,1)+Z3(N,2)+Z3(N,3))
 neel_state_s(N::Int)=(neel_state01(N)+neel_state10(N))/sqrt(2)
 
 """
-    random_product_state(N)
+    random_product_state(N::Int; backend=:statevector)
+
+Return a random computational-basis product state on `N` qubits in the
+requested `backend` (`:statevector`, `:density_matrix`, `:tensor`/`:mps`, or
+`:camps`).
 """
-random_product_state(N::Int)=product_state(rand([0,1],N))
+random_product_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector) =
+    product_state(rand([0,1],N); backend=backend)
 
 """
     zero_state(N::Int; backend=:statevector)
@@ -179,36 +231,87 @@ Return the `N`-qubit `|0…0⟩` state for the chosen backend:
 matrix), `:tensor` / `:mps` (`ITensorMPS.MPS`), or `:camps` (`CAMPSState`).
 """
 function zero_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector)
-    backend_name = _resolve_backend(backend)
-    if backend_name == "statevector"
-        return sa.SparseVector(2^N, [1], [1.0+0im])
-    elseif backend_name == "density_matrix"
-        s = sa.SparseVector(2^N, [1], [1.0+0im])
-        return s * s'
-    elseif backend_name == "tensor"
-        return zero_state(N_MPS(N))
-    elseif backend_name == "camps"
-        return CAMPSState(N)
-    elseif backend_name == "phasepoly"
-        throw(ArgumentError("PhasePoly represents circuits directly; use `apply(ops; backend=:phasepoly)` or `phasepoly(ops)`"))
-    end
-end
-one_state(N::Int)=sa.SparseVector(2^N, [2^N], [1.0+0im])
-
-plus_state(N::Int)=sa.SparseVector(fill((1.0+0im) / sqrt(2^N),2^N))
-
-function minus_state(N::Int)
-    state=one_state(N)
-    for i=1:N
-        state=Op("H",i)*state
-    end
-    return state
+    return _state_from_backend(
+        backend,
+        () -> sa.SparseVector(2^N, [1], [1.0+0im]),
+        () -> zero_state(N_MPS(N)),
+        () -> CAMPSState(N),
+    )
 end
 
 """
-    random_state(N::Int) -> sa.SparseVector
+    one_state(N::Int; backend=:statevector)
+
+Return the `N`-qubit `|1…1⟩` state for the chosen backend (`:statevector`,
+`:density_matrix`, `:tensor`/`:mps`, or `:camps`).
 """
-random_state(N::Int)=sa.sparse(la.normalize(rand(Complex{Float64}, 2^N)));
+function one_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector)
+    return _state_from_backend(
+        backend,
+        () -> sa.SparseVector(2^N, [2^N], [1.0+0im]),
+        () -> one_state(N_MPS(N)),
+        () -> apply(CAMPSState(N), QuantumOps[Op("X", q) for q in 1:N]),
+    )
+end
+
+"""
+    plus_state(N::Int; backend=:statevector)
+
+Return the `N`-qubit `|+…+⟩` state for the chosen backend (`:statevector`,
+`:density_matrix`, `:tensor`/`:mps`, or `:camps`).
+"""
+function plus_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector)
+    return _state_from_backend(
+        backend,
+        () -> sa.SparseVector(fill((1.0+0im) / sqrt(2^N), 2^N)),
+        () -> plus_state(N_MPS(N)),
+        () -> apply(CAMPSState(N), QuantumOps[Op("H", q) for q in 1:N]),
+    )
+end
+
+"""
+    minus_state(N::Int; backend=:statevector)
+
+Return the `N`-qubit `|-…-⟩` state for the chosen backend (`:statevector`,
+`:density_matrix`, `:tensor`/`:mps`, or `:camps`).
+"""
+function minus_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector)
+    return _state_from_backend(
+        backend,
+        () -> begin
+            state = one_state(N)
+            for i in 1:N
+                state = Op("H", i) * state
+            end
+            state
+        end,
+        () -> minus_state(N_MPS(N)),
+        () -> begin
+            st = CAMPSState(N)
+            for q in 1:N
+                st = apply(st, Op("X", q))
+                st = apply(st, Op("H", q))
+            end
+            st
+        end,
+    )
+end
+
+"""
+    random_state(N::Int; backend=:statevector, chi::Int=1)
+
+Return a random normalized `N`-qubit state for the chosen backend
+(`:statevector`, `:density_matrix`, `:tensor`/`:mps`, or `:camps`). `chi` sets
+the bond dimension for `:tensor` and `:camps`.
+"""
+function random_state(N::Int; backend::Union{Symbol,AbstractString}=:statevector, chi::Int=1)
+    return _state_from_backend(
+        backend,
+        () -> sa.sparse(la.normalize(rand(Complex{Float64}, 2^N))),
+        () -> random_state(N_MPS(N), chi),
+        () -> CAMPSState(random_state(N_MPS(N), chi)),
+    )
+end
 
 ##========== state preparation ==========
 

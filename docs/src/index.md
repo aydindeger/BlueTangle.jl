@@ -2,9 +2,9 @@
 
 BlueTangle simulates quantum circuits with gates, noise, mid-circuit measurements,
 and classical feed-forward. Statevectors, density matrices, matrix product
-states, and Clifford-augmented matrix product states (`CAMPSState` / `:camps`)
-share the same circuit description. Stabilizer-code tools add encoding,
-logical operations, syndrome extraction, and recovery.
+states, and Clifford-augmented matrix product states share the same circuit
+description. Stabilizer-code tools add encoding, logical operations, syndrome
+extraction, and recovery.
 
 ## Start with a Bell pair
 

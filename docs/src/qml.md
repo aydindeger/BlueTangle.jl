@@ -315,7 +315,7 @@ For differentiable noisy simulation, use a density matrix to sum Kraus branches:
 ```@example qml_noise
 using BlueTangle, LinearAlgebra
 ops = [Op("RY", _RY, 1)]
-rho0 = zero_state(1) * zero_state(1)'
+rho0 = zero_state(1; backend=:density_matrix)
 noise = NoiseModel(Noise1("bit_flip", 0.02), false)
 noisy_energy(parameters) = real(expect(
     variational_apply(parameters, ops; init=rho0, noise=noise), gate.Z))
@@ -341,7 +341,7 @@ by a fixed rotation and CNOT before training a final rotation.
 ```@example qml_mps
 using BlueTangle
 ops = [Op("RY(0.8)", 1), Op("CX", 1, 2), Op("RY", _RY, 1)]
-initial_state = zero_state(N_MPS(2))
+initial_state = zero_state(2; backend=:mps)
 function mps_energy(parameters; maxdim=1)
     state = variational_apply(parameters, ops; init=initial_state,
                               cutoff=0.0, maxdim=maxdim)

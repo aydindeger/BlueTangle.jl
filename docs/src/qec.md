@@ -288,7 +288,7 @@ using BlueTangle
 code = StabilizerCode([
     "X,Z,Z,X,I", "I,X,Z,Z,X", "X,I,X,Z,Z", "Z,X,I,X,Z"
 ]; d=3)
-logical_mps = plus_state(N_MPS(1))
+logical_mps = plus_state(1; backend=:mps)
 encoded_mps = code.encode(logical_mps)
 damaged_mps = apply(encoded_mps, Op("Y", 2))
 recovered_mps = code.decode(code.correct(damaged_mps))

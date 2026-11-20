@@ -367,3 +367,33 @@ end
     @test_throws ArgumentError measure(Any["not_an_op"], 5)
     @test_throws MethodError measure(bell_tup)
 end
+
+@testset "State constructors accept backend keyword" begin
+    for (fn, args) in (
+        (zero_state, (3,)),
+        (one_state, (3,)),
+        (plus_state, (3,)),
+        (minus_state, (3,)),
+        (product_state, ([1, 0, 1],)),
+        (neel_state01, (4,)),
+        (neel_state10, (4,)),
+        (Z3, (4,)),
+    )
+        sv = fn(args...; backend=:statevector)
+        rho = fn(args...; backend=:density_matrix)
+        mps = fn(args...; backend=:tensor)
+        st = fn(args...; backend=:camps)
+        @test rho ≈ sv * sv'
+        @test to_state(mps) ≈ sv
+        @test to_rho(st) ≈ sv * sv'
+        @test maxlinkdim(st) == 1
+        @test_throws ArgumentError fn(args...; backend=:phasepoly)
+    end
+    @test random_product_state(3; backend=:density_matrix) isa AbstractMatrix
+    @test random_product_state(3; backend=:mps) isa it.MPS
+    @test random_product_state(3; backend=:camps) isa CAMPSState
+    @test random_state(3; backend=:density_matrix) isa AbstractMatrix
+    @test random_state(3; backend=:tensor, chi=2) isa it.MPS
+    @test random_state(3; backend=:camps, chi=2) isa CAMPSState
+    @test_throws ArgumentError random_state(3; backend=:phasepoly)
+end

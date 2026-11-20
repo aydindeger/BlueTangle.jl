@@ -3,9 +3,12 @@
 BlueTangle separates **circuit description** (`Vector{QuantumOps}`, tuple
 shorthands such as `[("H", 1), ("CX", 1, 2)]`, or a mix of both) from
 **simulation representation**. The same operation list can be executed on five
-backends—either by passing an initial state (`zero_state(N; backend=...)`) to
-`apply(state, ops)`, or by passing `backend=...` directly to `apply(ops; backend=...)`,
-`measure`, `sample`, and `shadow`:
+backends—either by creating an initial state with `backend=...`
+(`zero_state(N; backend=...)`, `one_state`, `plus_state`, `minus_state`,
+`product_state`, `neel_state01`, `neel_state10`, `random_product_state`,
+`random_state`) and passing it to `apply(state, ops)`, or by passing
+`backend=...` directly to `apply(ops; backend=...)`, `measure`, `sample`, and
+`shadow`:
 
 - `:statevector` (aliases `:state_vector`, `:state`, `:sv`)
 - `:density_matrix` (aliases `:density`, `:dm`, `:rho`)
@@ -39,10 +42,11 @@ using BlueTangle
 
 ops = [("H", 1), ("T", 1), ("CX", 1, 2), ("RY(0.7)", 3), ("CZ", 2, 3)]
 
-sv   = apply(zero_state(3), ops)
-rho  = apply(to_rho(zero_state(3)), ops)
-mps  = apply(zero_state(N_MPS(3)), ops; cutoff=1e-12)
-st_c = apply(CAMPSState(3), ops; cutoff=1e-12)
+sv   = apply(zero_state(3; backend=:statevector), ops)
+rho  = apply(zero_state(3; backend=:density_matrix), ops)
+mps  = apply(zero_state(3; backend=:tensor), ops; cutoff=1e-12)
+st_c = apply(zero_state(3; backend=:camps), ops; cutoff=1e-12)
+# Or start directly from |0…0⟩ via `apply(ops; backend=...)`
 
 for s in (rho, mps, st_c)
     @assert isapprox(expect(s, "Z"), expect(sv, "Z"); atol=1e-12)
@@ -50,7 +54,7 @@ for s in (rho, mps, st_c)
 end
 
 results = Dict(
-    bk => round.(measure(ops, 1500; backend=bk).expect; digits=3)
+    bk => round.(measure(ops, 10_000; backend=bk).expect; digits=2)
     for bk in (:statevector, :density_matrix, :tensor, :camps)
 )
 results
@@ -102,8 +106,8 @@ final_sv, bits = apply(zero_state(2), [ops; Op("MZ", 1); Op("MZ", 2)]; track_mea
 ## [Density matrix (`:density_matrix`)](@id backend-density-matrix)
 
 The density-matrix backend evolves a `2^N × 2^N` sparse density matrix
-(`to_rho(zero_state(N))`). Unlike trajectory backends, it evolves the complete
-mixed-state ensemble deterministically:
+(`zero_state(N; backend=:density_matrix)`). Unlike trajectory backends, it
+evolves the complete mixed-state ensemble deterministically:
 
 - `apply(rho, ops; noise=nm)` applies exact Kraus sums `∑ K_m ρ K_m†` for both
   noise channels and **unobserved** mid-circuit measurements.
@@ -125,8 +129,8 @@ rho = apply(ops; backend=:density_matrix, noise=nm)
 exact_m = measure(rho) # exact mixed-state probabilities, zero shot noise
 
 # Compare deterministic apply vs conditioned apply(...; track_measurements=true)
-rho_unobs = apply(to_rho(zero_state(2)), [ops; Op("MZ", 1)])
-cond_rho, bits = apply(to_rho(zero_state(2)), [ops; Op("MZ", 1)]; track_measurements=true)
+rho_unobs = apply(zero_state(2; backend=:density_matrix), [ops; Op("MZ", 1)])
+cond_rho, bits = apply(zero_state(2; backend=:density_matrix), [ops; Op("MZ", 1)]; track_measurements=true)
 
 @assert tr(rho) ≈ 1
 @assert real(tr(rho_unobs^2)) ≈ 0.5   # maximally mixed over {00, 11}
@@ -179,7 +183,7 @@ for q in 2:2:(N - 1)
     push!(ops, Op("CZ", q, q + 1))
 end
 
-psi = apply(zero_state(N_MPS(N)), ops; cutoff=1e-12, maxdim=32)
+psi = apply(zero_state(N; backend=:mps), ops; cutoff=1e-12, maxdim=32)
 @assert get_N(psi) == 30
 @assert maxlinkdim(psi) <= 4
 
@@ -310,7 +314,7 @@ for layer in 1:10
 end
 
 sv        = apply(zero_state(N), ops)
-mps_plain = apply(zero_state(N_MPS(N)), ops; cutoff=1e-12)
+mps_plain = apply(zero_state(N; backend=:mps), ops; cutoff=1e-12)
 st_camps  = camps(ops; N=N, cutoff=1e-12, disentangle=true, nsweeps=2)
 st_nodis  = camps(ops; N=N, cutoff=1e-12, disentangle=false)
 
@@ -357,7 +361,7 @@ using BlueTangle, LinearAlgebra
 ops = [Op("H", 1), Op("T", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
 nm = NoiseModel(Noise1("amplitude_damping", 0.25), Noise2("depolarizing", 0.1))
 
-rho_exact = apply(to_rho(zero_state(3)), ops; noise=nm)
+rho_exact = apply(zero_state(3; backend=:density_matrix), ops; noise=nm)
 m_camps   = measure(ops, 3000; backend=:camps, options=Options(noise=nm), cutoff=1e-12, maxdim=16)
 rho_13    = shadow(ops, 3000; qubits=[1, 3], backend=:camps, cutoff=1e-12)
 
@@ -384,7 +388,7 @@ using BlueTangle
 code = steane_code(3) # 21 physical qubits, 3 logical qubits
 decoder = steane_decoder(code)
 
-enc = code.encode(CAMPSState(3))
+enc = code.encode(zero_state(3; backend=:camps))
 enc = code.apply(enc, "H", 1)
 enc = code.apply(enc, "CX", 1, 2)
 enc = code.apply(enc, "CX", 2, 3)

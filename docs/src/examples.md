@@ -31,7 +31,7 @@ continue from the GHZ circuit above.
 
 ```@example ghz
 measurement = measure(ops, 1000)
-rho = apply(to_rho(zero_state(3)), ops)
+rho = apply(zero_state(3; backend=:density_matrix), ops)
 exact_measurement = measure(rho) # exact basis probabilities, no shots
 @assert correlation(measurement, [1, 2]) ≈ 1
 @assert correlation(rho, "X,X,X", [1, 2, 3]) ≈ 1
@@ -75,7 +75,7 @@ probabilities of density matrices, so it isolates gate noise from sampling error
 
 ```@example plotting_text
 bell_ops = [Op("H", 1), Op("CX", 1, 2)]
-rho0 = zero_state(2) * zero_state(2)'
+rho0 = zero_state(2; backend=:density_matrix)
 ideal = measure(apply(rho0, bell_ops); label="Ideal")
 noisy = measure(apply(rho0, bell_ops; noise=NoiseModel("depolarizing", 0.08));
                 label="With gate noise")
@@ -105,7 +105,7 @@ n1 = Noise1("bit_flip", 0.001)
 n2 = Noise2("depolarizing", 0.01)
 noise = NoiseModel(n1, n2)
 ops = [Op("H", 1), Op("CX", 1, 2), Op("CX", 2, 3)]
-rho = apply(to_rho(zero_state(3)), ops; noise=noise)
+rho = apply(zero_state(3; backend=:density_matrix), ops; noise=noise)
 @assert isapprox(real(tr(rho)), 1; atol=1e-12)
 @assert eigmin(Hermitian(Matrix(rho))) >= -1e-12
 correlation(rho, "Z,Z", [1, 2])
@@ -199,7 +199,7 @@ Both `Op("MX", 1; if0="Z", if1="H")` and `ifOp("MX", 1, "Z", "H")` express this.
 using BlueTangle
 mid_ops = QuantumOps[Op("X", 1), Op("MX", 1; if0="Z", if1="H"),
                      Op("CX", 1, 2), Op("CX", 2, 3)]
-mid_rho = apply(to_rho(zero_state(3)), mid_ops)
+mid_rho = apply(zero_state(3; backend=:density_matrix), mid_ops)
 mid_measurement = measure(mid_rho; label="Conditional circuit")
 @assert real(mid_rho[1,1]) ≈ 0.25
 @assert real(mid_rho[8,8]) ≈ 0.75
@@ -510,7 +510,7 @@ state = apply(zero_state(2), ops)
 rho = state * state'
 S_vector, spectrum = entanglement_entropy(state)
 S_density = entanglement_entropy(rho; spectrum_bool=false)
-psi = apply(zero_state(N_MPS(2)), ops)
+psi = apply(zero_state(2; backend=:mps), ops)
 S_mps = entanglement_entropy(psi, 1)
 @assert isapprox(S_vector, log(2); atol=1e-12)
 @assert S_vector ≈ S_density ≈ S_mps
@@ -970,7 +970,7 @@ measurement outcomes; independent runs generally select different trajectories.
 using BlueTangle, LinearAlgebra, Statistics
 unitary_ops = random_ops(6, 4)
 dense = apply(zero_state(6), unitary_ops)
-psi = apply(zero_state(N_MPS(6)), unitary_ops; cutoff=0.0, maxdim=8)
+psi = apply(zero_state(6; backend=:mps), unitary_ops; cutoff=0.0, maxdim=8)
 @assert isapprox(abs2(dot(dense, to_state(psi))), 1; atol=1e-10)
 illustrative_ops = random_ops(6, 3; measure_prob=0.2, measure_basis=["MZ"])
 plotq(illustrative_ops)
@@ -999,7 +999,7 @@ for N in sizes, p in probabilities
     samples = Float64[]
     for repetition in 1:trajectories
         ops = random_ops(N, depth; measure_prob=p, measure_basis=["MZ"])
-        trajectory_state = apply(zero_state(N_MPS(N)), ops; cutoff=0.0, maxdim=2^(N÷2))
+        trajectory_state = apply(zero_state(N; backend=:mps), ops; cutoff=0.0, maxdim=2^(N÷2))
         push!(samples, entanglement_entropy(trajectory_state, N÷2))
     end
     @assert all(S -> -1e-10 <= S <= (N÷2)*log(2) + 1e-10, samples)
@@ -1135,7 +1135,7 @@ For an MPS, pass truncation settings to the outer call; they also reach feedback
 ```@example mps_feedback
 using BlueTangle
 feedback = ifOp("MZ", 3, [Op("H", 1), Op("CX", 1, 2)], Op("I", 1))
-psi, bits = apply(zero_state(N_MPS(3)), feedback; track_measurements=true, cutoff=0.0, maxdim=2)
+psi, bits = apply(zero_state(3; backend=:mps), feedback; track_measurements=true, cutoff=0.0, maxdim=2)
 @assert bits == [0]
 @assert correlation(psi, "X,X", [1, 2]) ≈ 1
 (record=bits, bond_dimension=maxlinkdim(psi))
